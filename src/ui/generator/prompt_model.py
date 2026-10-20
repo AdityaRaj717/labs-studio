@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPersistentModelIndex, Qt
-from PySide6.QtGui import QColor, QPixmap
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPersistentModelIndex, QPointF, Qt
+from PySide6.QtGui import QColor, QPainter, QPixmap, QPolygonF
 
 from src.gen.models import Job, JobStatus
 from src.i18n import tr
@@ -14,6 +14,7 @@ COL_INDEX, COL_PROMPT, COL_REFS, COL_STATUS, COL_PROGRESS, COL_OUTPUT = range(6)
 COLUMN_KEYS = ("gen_col_index", "gen_col_prompt", "gen_col_refs", "gen_col_status",
                "gen_col_progress", "gen_col_output")
 THUMB_HEIGHT = 56
+VIDEO_EXTS = {".mp4", ".webm", ".mov"}
 
 STATUS_COLORS = {
     JobStatus.PENDING: "#8b919c",
@@ -25,6 +26,32 @@ STATUS_COLORS = {
 }
 
 Index = QModelIndex | QPersistentModelIndex
+
+_video_pix: QPixmap | None = None
+
+
+def video_placeholder() -> QPixmap:
+    """A drawn 16:9 film tile with a play triangle (no decoding of the video)."""
+    global _video_pix
+    if _video_pix is None:
+        h = THUMB_HEIGHT
+        w = h * 16 // 9
+        pix = QPixmap(w, h)
+        pix.fill(QColor("#1f2430"))
+        p = QPainter(pix)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor("#3a4150"))
+        for x in range(4, w, 12):  # sprocket holes
+            p.drawRect(x, 3, 6, 4)
+            p.drawRect(x, h - 7, 6, 4)
+        p.setBrush(QColor("#4f8cff"))
+        cx, cy, r = w / 2, h / 2, h / 5
+        p.drawPolygon(QPolygonF([QPointF(cx - r * 0.7, cy - r), QPointF(cx - r * 0.7, cy + r),
+                                 QPointF(cx + r, cy)]))
+        p.end()
+        _video_pix = pix
+    return _video_pix
 
 
 class PromptTableModel(QAbstractTableModel):
@@ -107,6 +134,8 @@ class PromptTableModel(QAbstractTableModel):
 
     def _thumb(self, path: Path) -> QPixmap | None:
         pix = self._thumbs.get(path)
+        if pix is None and path.suffix.lower() in VIDEO_EXTS:
+            pix = self._thumbs[path] = video_placeholder()
         if pix is None:
             pix = QPixmap(str(path))
             if pix.isNull():

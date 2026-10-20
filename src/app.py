@@ -19,11 +19,14 @@ log = logging.getLogger(__name__)
 def register_pages(window) -> None:
     """Swap sidebar placeholders for real pages."""
     from src.gen.gemini_image import GeminiImageProvider
+    from src.gen.gemini_video import GeminiVideoProvider
     from src.ui.generator.page import GeneratorPage
     from src.ui.pages.settings_page import SettingsPage
 
     window.register_page("flow_image", lambda: GeneratorPage(
         "flow_image", GeminiImageProvider(), title=tr("nav_img"), banner=tr("gemini_banner")))
+    window.register_page("flow_video", lambda: GeneratorPage(
+        "flow_video", GeminiVideoProvider(), title=tr("nav_video"), banner=tr("omni_banner")))
     window.register_page("settings", SettingsPage)
 
 
