@@ -24,6 +24,7 @@ def register_pages(window) -> None:
     from src.gen.openai_image import OpenAIImageProvider
     from src.ui.generator.page import GeneratorPage
     from src.ui.pages.settings_page import SettingsPage
+    from src.ui.editor import editor_page
 
     window.register_page("flow_image", lambda: GeneratorPage(
         "flow_image", GeminiImageProvider(), title=tr("nav_img"), banner=tr("gemini_banner")))
@@ -34,6 +35,7 @@ def register_pages(window) -> None:
     window.register_page("openai_image", lambda: GeneratorPage(
         "openai_image", OpenAIImageProvider(), title=tr("nav_openai"), banner=tr("openai_banner")))
     window.register_page("settings", SettingsPage)
+    window.register_page("video_editor", editor_page)
 
     from src.ui.tools.upscaler import UpscalerPage  # Phase 7
     from src.ui.tools.video_cut import VideoCutPage  # Phase 7
