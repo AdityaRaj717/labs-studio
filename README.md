@@ -34,6 +34,19 @@ python run.py
 pytest
 ```
 
+## Build a Windows installer
+
+See `docs/phase-10-build.md` (PyInstaller + Inno Setup, output on D:).
+
+```bat
+packaginguild.bat
+```
+
+## Webhook API
+
+The **Webhook API** page runs a local HTTP server that adds jobs to the generator
+pages. Routes and examples: `docs/phase-10-webhook-stats-packaging.md`.
+
 ## Where things are stored
 
 `%APPDATA%\LabsStudio\`

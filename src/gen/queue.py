@@ -21,6 +21,22 @@ log = logging.getLogger(__name__)
 
 Saver = Callable[[Job, list[OutputFile]], list[Path]]
 
+# Called as hook(provider, job) on the worker thread each time a job ends
+# (done, failed or stopped; not when it is re-queued for a retry). Phase 10's
+# stats counter registers here.
+FinishHook = Callable[[Provider, Job], None]
+_finish_hooks: list[FinishHook] = []
+
+
+def add_finish_hook(hook: FinishHook) -> None:
+    if hook not in _finish_hooks:
+        _finish_hooks.append(hook)
+
+
+def remove_finish_hook(hook: FinishHook) -> None:
+    if hook in _finish_hooks:
+        _finish_hooks.remove(hook)
+
 
 @dataclass
 class QueueSettings:
@@ -209,4 +225,10 @@ class JobQueue:
             job.status = JobStatus.FAILED
             job.error = f"{type(exc).__name__}: {exc}"
             log.exception("Job %d crashed", job.index)
+        if job.status in (JobStatus.DONE, JobStatus.FAILED, JobStatus.STOPPED):
+            for hook in list(_finish_hooks):
+                try:
+                    hook(self.provider, job)
+                except Exception:  # noqa: BLE001 - a broken hook must not kill the worker
+                    log.exception("Finish hook failed")
         self.on_update(job)
