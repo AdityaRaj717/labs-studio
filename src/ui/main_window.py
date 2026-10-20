@@ -113,5 +113,9 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt override
         geometry = bytes(self.saveGeometry().toBase64()).decode("ascii")
         config.set("window.geometry", geometry)
+        for page in self.pages.values():
+            shutdown = getattr(page, "shutdown", None)
+            if callable(shutdown):
+                shutdown()
         log.info("Window closed; settings saved")
         super().closeEvent(event)

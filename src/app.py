@@ -10,10 +10,20 @@ from PySide6.QtWidgets import QApplication
 from src import APP_NAME, __version__
 from src import config, theme
 from src.config import APP_DIR_NAME
-from src.i18n import set_language
+from src.i18n import set_language, tr
 from src.ui.log_panel import setup_logging
 
 log = logging.getLogger(__name__)
+
+
+def register_pages(window) -> None:
+    """Swap sidebar placeholders for real pages."""
+    from src.gen.fake_provider import FakeProvider
+    from src.ui.generator.page import GeneratorPage
+
+    # Phase 2: Flow Image runs on the offline demo provider until phase 3.
+    window.register_page("flow_image", lambda: GeneratorPage(
+        "flow_image", FakeProvider(), title=tr("nav_img"), banner=tr("gen_demo_banner")))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -42,6 +52,7 @@ def main(argv: list[str] | None = None) -> int:
     from src.ui.main_window import MainWindow
 
     window = MainWindow()
+    register_pages(window)
     window.show()
     splash.finish(window)
     log.info("Main window ready")

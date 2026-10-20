@@ -1,0 +1,49 @@
+"""Job rows shared by the queue, the table model and providers."""
+
+from __future__ import annotations
+
+import enum
+import itertools
+from dataclasses import dataclass, field
+from pathlib import Path
+
+_ids = itertools.count(1)
+
+
+class JobStatus(str, enum.Enum):
+    PENDING = "pending"
+    QUEUED = "queued"
+    RUNNING = "running"
+    DONE = "done"
+    FAILED = "failed"
+    STOPPED = "stopped"
+
+
+# Statuses a job can be (re)queued from.
+RETRYABLE_STATUSES = (JobStatus.PENDING, JobStatus.FAILED, JobStatus.STOPPED)
+
+
+@dataclass
+class OutputFile:
+    """One generated file, still in memory; ``output.save_outputs`` writes it."""
+
+    data: bytes
+    ext: str = "png"
+
+
+@dataclass
+class Job:
+    prompt: str
+    index: int = 0
+    refs: list[Path] = field(default_factory=list)
+    status: JobStatus = JobStatus.PENDING
+    progress: float = 0.0
+    outputs: list[Path] = field(default_factory=list)
+    error: str = ""
+    attempts: int = 0
+    id: int = field(default_factory=lambda: next(_ids))
+
+    def reset(self) -> None:
+        self.status = JobStatus.PENDING
+        self.progress = 0.0
+        self.error = ""

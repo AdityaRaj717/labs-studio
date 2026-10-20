@@ -116,6 +116,41 @@ QPushButton {{
     padding: 6px 12px;
 }}
 QPushButton:hover {{ background-color: {c['hover']}; }}
+QPushButton:disabled {{ color: {c['text_muted']}; }}
+QPushButton#PrimaryButton {{
+    background-color: {c['accent']};
+    color: {c['accent_text']};
+    border-color: {c['accent']};
+}}
+QPushButton#PrimaryButton:disabled {{ background-color: {c['panel']}; color: {c['text_muted']}; border-color: {c['border']}; }}
+
+QLabel#StatsHeader {{ color: {c['text_muted']}; padding: 4px 2px; }}
+QLabel#DemoBanner {{
+    background-color: {c['selected']};
+    border: 1px solid {c['border']};
+    border-radius: 6px;
+    padding: 6px 10px;
+}}
+QTableView {{
+    background-color: {c['panel']};
+    border: 1px solid {c['border']};
+    gridline-color: {c['border']};
+    selection-background-color: {c['selected']};
+    selection-color: {c['text']};
+}}
+QHeaderView::section {{
+    background-color: {c['bg']};
+    color: {c['text_muted']};
+    border: none;
+    border-bottom: 1px solid {c['border']};
+    padding: 4px 6px;
+}}
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {{
+    background-color: {c['input_bg']};
+    border: 1px solid {c['border']};
+    border-radius: 4px;
+    padding: 3px 6px;
+}}
 
 QScrollBar:vertical {{ background: transparent; width: 10px; margin: 0; }}
 QScrollBar::handle:vertical {{ background: {c['scrollbar']}; border-radius: 4px; min-height: 24px; }}
