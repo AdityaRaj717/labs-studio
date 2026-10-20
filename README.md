@@ -21,14 +21,14 @@ handoff note in `docs/` describing what it does and what's still unverified.
 
 ## Install (cmd.exe)
 
-Clone the repo (or your fork):
+Clone the repo (or your fork, with your username in place of `AdityaRaj717`):
 
 ```bat
-git clone https://github.com/<owner>/<repo>.git
+git clone https://github.com/AdityaRaj717/labs-studio.git
 ```
 
 ```bat
-cd <repo>
+cd labs-studio
 ```
 
 Create a virtual environment and install the dependencies:
