@@ -11,15 +11,17 @@ from PySide6.QtWidgets import (
 from src.i18n import tr
 from src.keys import KeyStore, store as default_store
 
-# (provider id, label key, where to get a key)
+# (provider id, label key, where to get a key, link text key)
 KEY_PROVIDERS = [
-    ("gemini", "keys_gemini", "https://aistudio.google.com/apikey"),
+    ("gemini", "keys_gemini", "https://aistudio.google.com/apikey", "keys_get_key"),
+    ("openai", "keys_openai", "https://platform.openai.com/api-keys", "keys_get_key_openai"),
+    ("xai", "keys_xai", "https://console.x.ai/", "keys_get_key_xai"),
 ]
 
 
 class KeyRow(QGroupBox):
     def __init__(self, provider: str, label_key: str, url: str, keys: KeyStore,
-                 parent: QWidget | None = None):
+                 link_key: str = "keys_get_key", parent: QWidget | None = None):
         super().__init__(tr(label_key), parent)
         self.provider = provider
         self.keys = keys
@@ -36,7 +38,7 @@ class KeyRow(QGroupBox):
         self.btn_clear.clicked.connect(self.clear)
         self.status = QLabel()
         self.status.setObjectName("PageBody")
-        link = QLabel(f'<a href="{url}">{tr("keys_get_key")}</a>')
+        link = QLabel(f'<a href="{url}">{tr(link_key)}</a>')
         link.setOpenExternalLinks(True)
         link.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
 
@@ -90,7 +92,8 @@ class ApiKeysTab(QWidget):
         intro.setObjectName("PageBody")
         layout = QVBoxLayout(self)
         layout.addWidget(intro)
-        self.rows = {p: KeyRow(p, label, url, keys) for p, label, url in KEY_PROVIDERS}
+        self.rows = {p: KeyRow(p, label, url, keys, link)
+                     for p, label, url, link in KEY_PROVIDERS}
         for row in self.rows.values():
             layout.addWidget(row)
         layout.addStretch(1)

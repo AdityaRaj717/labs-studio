@@ -20,6 +20,8 @@ def register_pages(window) -> None:
     """Swap sidebar placeholders for real pages."""
     from src.gen.gemini_image import GeminiImageProvider
     from src.gen.gemini_video import GeminiVideoProvider
+    from src.gen.grok import GrokProvider
+    from src.gen.openai_image import OpenAIImageProvider
     from src.ui.generator.page import GeneratorPage
     from src.ui.pages.settings_page import SettingsPage
 
@@ -27,6 +29,10 @@ def register_pages(window) -> None:
         "flow_image", GeminiImageProvider(), title=tr("nav_img"), banner=tr("gemini_banner")))
     window.register_page("flow_video", lambda: GeneratorPage(
         "flow_video", GeminiVideoProvider(), title=tr("nav_video"), banner=tr("omni_banner")))
+    window.register_page("grok", lambda: GeneratorPage(
+        "grok", GrokProvider(), title=tr("nav_grok"), banner=tr("grok_banner")))
+    window.register_page("openai_image", lambda: GeneratorPage(
+        "openai_image", OpenAIImageProvider(), title=tr("nav_openai"), banner=tr("openai_banner")))
     window.register_page("settings", SettingsPage)
 
 
