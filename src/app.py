@@ -49,6 +49,12 @@ def register_pages(window) -> None:
     from src.ui.characters.page import CharactersPage  # Phase 6
     window.register_page("characters", CharactersPage)
 
+    from src.gen.fake_provider import FakeProvider  # Phase 10
+    from src.ui.webhook.page import WebhookPage  # Phase 10
+    window.register_page("demo", lambda: GeneratorPage(
+        "demo", FakeProvider(), title=tr("wh_demo_title"), banner=tr("wh_demo_banner")))
+    window.register_page("webhook", lambda: WebhookPage(window.page, window.switch_page))
+
 
 def main(argv: list[str] | None = None) -> int:
     app = QApplication(sys.argv if argv is None else argv)
@@ -75,8 +81,13 @@ def main(argv: list[str] | None = None) -> int:
 
     from src.ui.main_window import MainWindow
 
+    from src.stats.store import install as install_stats  # Phase 10
+    install_stats()
+
     window = MainWindow()
     register_pages(window)
+    if settings.get("webhook.autostart", False):  # Phase 10
+        window.page("webhook").start_server()
     window.show()
     splash.finish(window)
     log.info("Main window ready")
