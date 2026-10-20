@@ -43,6 +43,9 @@ def register_pages(window) -> None:
     window.register_page("video_cut", VideoCutPage)
     window.register_page("upscaler", UpscalerPage)
 
+    from src.ui.workflow.page import WorkflowPage
+    window.register_page("workflow", WorkflowPage)
+
 
 def main(argv: list[str] | None = None) -> int:
     app = QApplication(sys.argv if argv is None else argv)
