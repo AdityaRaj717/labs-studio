@@ -29,6 +29,12 @@ def register_pages(window) -> None:
         "flow_video", GeminiVideoProvider(), title=tr("nav_video"), banner=tr("omni_banner")))
     window.register_page("settings", SettingsPage)
 
+    from src.ui.tools.upscaler import UpscalerPage  # Phase 7
+    from src.ui.tools.video_cut import VideoCutPage  # Phase 7
+
+    window.register_page("video_cut", VideoCutPage)
+    window.register_page("upscaler", UpscalerPage)
+
 
 def main(argv: list[str] | None = None) -> int:
     app = QApplication(sys.argv if argv is None else argv)
