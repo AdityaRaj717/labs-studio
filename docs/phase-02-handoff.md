@@ -3,7 +3,7 @@
 ## State
 - Everything in `docs/phase-02-generator-framework.md` is built. `pytest`: 32 passed (11 from phase 1, 21 new).
 - `python run.py` opens on **Flow Image**, which is now a real `GeneratorPage` running the offline `FakeProvider` (banner says so). No network calls anywhere.
-- Offscreen screenshot of a 7-prompt batch: rows move Queued → Running → Done/Failed with coloured status, progress bars and output thumbnails; `[flaky]` row auto-retried and finished. A by-eye check of the real window (with fonts) has not been done yet.
+- Offscreen screenshot of a 7-prompt batch: rows move Queued → Running → Done/Failed with coloured status, progress bars and output thumbnails; `[flaky]` row auto-retried and finished. Real-window check on Windows 11 done by eye in dark and light mode (fonts, layout, status colours, progress bars, thumbnails).
 - New deps: `openpyxl`, `Pillow` (in `requirements.txt`, `pyproject.toml`, installed in `.venv`).
 
 ## Layout

@@ -4,34 +4,60 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QRect, QSize, Qt, Signal
+from PySide6.QtCore import QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import (
-    QAbstractItemView, QApplication, QHeaderView, QMenu, QStyle, QStyledItemDelegate,
-    QStyleOptionProgressBar, QTableView,
+    QAbstractItemView, QHeaderView, QMenu, QStyledItemDelegate, QTableView,
 )
 
 from src import theme
+from src.gen.models import JobStatus
 from src.i18n import tr
 from src.ui.generator.prompt_model import (
-    COL_INDEX, COL_OUTPUT, COL_PROGRESS, COL_PROMPT, COL_REFS, COL_STATUS, THUMB_HEIGHT,
+    COL_INDEX, COL_OUTPUT, COL_PROGRESS, COL_PROMPT, COL_REFS, COL_STATUS, STATUS_COLORS, THUMB_HEIGHT,
 )
 
 IMPORT_SUFFIXES = {".txt", ".text", ".csv", ".xlsx", ".xlsm"}
 
 
 class ProgressDelegate(QStyledItemDelegate):
+    """Draws the bar itself from theme tokens, so it reads the same in both modes
+    and on every platform style (the Windows 11 style drew a faint line and lost
+    the text colour in light mode)."""
+
+    BAR_HEIGHT = 14
+
     def paint(self, painter: QPainter, option, index) -> None:
         value = index.data()
         if value is None:
             return super().paint(painter, option, index)
-        bar = QStyleOptionProgressBar()
-        bar.rect = QRect(option.rect.adjusted(6, option.rect.height() // 2 - 8, -6, 0))
-        bar.rect.setHeight(16)
-        bar.minimum, bar.maximum, bar.progress = 0, 100, int(value)
-        bar.text = f"{int(value)}%"
-        bar.textVisible = True
-        QApplication.style().drawControl(QStyle.ControlElement.CE_ProgressBar, bar, painter)
+        colors = theme.COLORS[theme.current_mode()]
+        status = index.model().job_at(index.row()).status
+        done_or_failed = status in (JobStatus.DONE, JobStatus.FAILED, JobStatus.STOPPED)
+        fill = QColor(STATUS_COLORS[status] if done_or_failed else colors["accent"])
+
+        rect = option.rect.adjusted(8, 0, -8, 0)
+        text_w = 40
+        track = QRectF(rect.left(), rect.center().y() - self.BAR_HEIGHT / 2 + 1,
+                       max(10, rect.width() - text_w - 6), self.BAR_HEIGHT)
+        radius = self.BAR_HEIGHT / 2
+
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(colors["border"]))
+        painter.drawRoundedRect(track, radius, radius)
+        frac = max(0.0, min(1.0, int(value) / 100))
+        if frac > 0:
+            filled = QRectF(track)
+            filled.setWidth(max(track.height(), track.width() * frac))
+            painter.setBrush(fill)
+            painter.drawRoundedRect(filled, radius, radius)
+        painter.setPen(QColor(colors["text"]))
+        text_rect = QRectF(track.right() + 6, rect.top(), text_w, rect.height())
+        painter.drawText(text_rect, int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight),
+                         f"{int(value)}%")
+        painter.restore()
 
 
 class PromptTable(QTableView):
