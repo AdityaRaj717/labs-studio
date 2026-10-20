@@ -18,12 +18,13 @@ log = logging.getLogger(__name__)
 
 def register_pages(window) -> None:
     """Swap sidebar placeholders for real pages."""
-    from src.gen.fake_provider import FakeProvider
+    from src.gen.gemini_image import GeminiImageProvider
     from src.ui.generator.page import GeneratorPage
+    from src.ui.pages.settings_page import SettingsPage
 
-    # Phase 2: Flow Image runs on the offline demo provider until phase 3.
     window.register_page("flow_image", lambda: GeneratorPage(
-        "flow_image", FakeProvider(), title=tr("nav_img"), banner=tr("gen_demo_banner")))
+        "flow_image", GeminiImageProvider(), title=tr("nav_img"), banner=tr("gemini_banner")))
+    window.register_page("settings", SettingsPage)
 
 
 def main(argv: list[str] | None = None) -> int:

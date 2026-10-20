@@ -74,6 +74,8 @@ class PromptTableModel(QAbstractTableModel):
                 return int(round(job.progress * 100))
             if col == COL_OUTPUT and len(job.outputs) > 1:
                 return f"+{len(job.outputs) - 1}"
+            if col == COL_OUTPUT and not job.outputs and job.error:
+                return job.error  # failed row: show why, where the image would be
         elif role == Qt.ItemDataRole.EditRole and col == COL_PROMPT:
             return job.prompt
         elif role == Qt.ItemDataRole.ToolTipRole:
@@ -81,11 +83,11 @@ class PromptTableModel(QAbstractTableModel):
                 return job.prompt
             if col == COL_REFS and job.refs:
                 return "\n".join(p.name for p in job.refs)
-            if col == COL_STATUS and job.error:
+            if col in (COL_STATUS, COL_OUTPUT) and job.error and not job.outputs:
                 return job.error
             if col == COL_OUTPUT and job.outputs:
                 return "\n".join(str(p) for p in job.outputs)
-        elif role == Qt.ItemDataRole.ForegroundRole and col == COL_STATUS:
+        elif role == Qt.ItemDataRole.ForegroundRole and col in (COL_STATUS, COL_OUTPUT):
             return QColor(STATUS_COLORS[job.status])
         elif role == Qt.ItemDataRole.DecorationRole and col == COL_OUTPUT and job.outputs:
             return self._thumb(job.outputs[0])
