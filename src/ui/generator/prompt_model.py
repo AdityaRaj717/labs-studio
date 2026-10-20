@@ -61,6 +61,7 @@ class PromptTableModel(QAbstractTableModel):
         self._rows: dict[int, int] = {}
         self._thumbs: dict[Path, QPixmap] = {}
         self.editable = True
+        self.character_name = None  # callable(job) -> str, set by GeneratorPage (Phase 6)
 
     # ---- data access -------------------------------------------------
     def rowCount(self, parent: Index = QModelIndex()) -> int:  # noqa: N802
@@ -91,7 +92,9 @@ class PromptTableModel(QAbstractTableModel):
             if col == COL_PROMPT:
                 return job.prompt
             if col == COL_REFS:
-                return str(len(job.refs)) if job.refs else ""
+                count = str(len(job.refs)) if job.refs else ""
+                name = self.character_name(job) if self.character_name else ""
+                return f"@{name} {count}".strip() if name else count
             if col == COL_STATUS:
                 text = tr(f"status_{job.status.value}")
                 if job.status is JobStatus.RUNNING and job.attempts > 1:
@@ -109,7 +112,9 @@ class PromptTableModel(QAbstractTableModel):
             if col == COL_PROMPT:
                 return job.prompt
             if col == COL_REFS and job.refs:
-                return "\n".join(p.name for p in job.refs)
+                name = self.character_name(job) if self.character_name else ""
+                lines = [p.name for p in job.refs]
+                return "\n".join([f"@{name}"] + lines if name else lines)
             if col in (COL_STATUS, COL_OUTPUT) and job.error and not job.outputs:
                 return job.error
             if col == COL_OUTPUT and job.outputs:

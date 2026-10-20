@@ -42,6 +42,8 @@ class Job:
     error: str = ""
     attempts: int = 0
     id: int = field(default_factory=lambda: next(_ids))
+    character: str = ""  # attached character id (Phase 6), "" = none
+    character_refs: list[Path] = field(default_factory=list)  # the refs in ``refs`` it brought
 
     def reset(self) -> None:
         self.status = JobStatus.PENDING

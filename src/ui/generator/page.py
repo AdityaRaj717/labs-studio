@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
+from src.characters import attach as char_attach
 from src.gen.importer import load_prompts, parse_text
 from src.gen.models import Job, JobStatus
 from src.gen.output import default_save_dir, output_dir, save_outputs
@@ -31,9 +32,10 @@ log = logging.getLogger(__name__)
 
 class GeneratorPage(QWidget):
     def __init__(self, page_key: str, provider: Provider, title: str = "", banner: str = "",
-                 store=None, parent: QWidget | None = None):
+                 store=None, parent: QWidget | None = None, characters=None):
         super().__init__(parent)
         self.page_key = page_key
+        self._characters = characters  # CharacterStore; the app-wide one is loaded on first use
         self.provider = provider
         self._batch_folder: Path | None = None
 
@@ -69,6 +71,8 @@ class GeneratorPage(QWidget):
         self.btn_import = self._button("gen_import", self.import_dialog)
         self.btn_paste = self._button("gen_paste", self.paste_dialog)
         self.btn_match = self._button("gen_match_refs", self.match_refs)
+        self.btn_match_chars = self._button("gen_match_characters", self.match_characters)
+        self.btn_match_chars.setToolTip(tr("gen_match_characters_tip"))
         self.btn_clear = self._button("gen_clear", self.clear)
         self.btn_start = self._button("gen_start", self.start)
         self.btn_pause = self._button("gen_pause", self.toggle_pause)
@@ -78,7 +82,7 @@ class GeneratorPage(QWidget):
         self.btn_start.setObjectName("PrimaryButton")
 
         bar = QHBoxLayout()
-        for b in (self.btn_import, self.btn_paste, self.btn_match, self.btn_clear):
+        for b in (self.btn_import, self.btn_paste, self.btn_match, self.btn_match_chars, self.btn_clear):
             bar.addWidget(b)
         bar.addStretch(1)
         for b in (self.btn_start, self.btn_pause, self.btn_stop, self.btn_retry, self.btn_folder):
@@ -97,6 +101,9 @@ class GeneratorPage(QWidget):
         self.table.remove_requested.connect(self.remove_rows)
         self.table.open_output_requested.connect(self.open_output)
         self.table.open_folder_requested.connect(self.open_row_folder)
+        self.table.characters_source = lambda: [(c.id, c.name) for c in self.characters.all()]
+        self.table.character_requested.connect(self.set_character)
+        self.model.character_name = lambda job: char_attach.character_label(job, self.characters)
         self._update_controls()
 
     def _button(self, key: str, slot) -> QPushButton:
@@ -148,6 +155,39 @@ class GeneratorPage(QWidget):
         self.model.refresh_all()
         return added
 
+    # ---- characters (Phase 6) ---------------------------------------
+    @property
+    def characters(self):
+        if self._characters is None:
+            from src.characters.store import default_store
+
+            self._characters = default_store()
+        return self._characters
+
+    def set_character(self, rows: list[int], char_id: str) -> None:
+        """Attach a character to the rows (``""`` detaches)."""
+        if self._busy_guard():
+            return
+        for row in rows:
+            job = self.model.job_at(row)
+            if char_id:
+                char_attach.attach(job, char_id, self.characters)
+            else:
+                char_attach.detach(job)
+        self.model.refresh_all()
+
+    def match_characters(self) -> int:
+        """Attach characters to rows whose prompt names them."""
+        changed = char_attach.match_by_name(self.jobs, self.characters)
+        log.info(tr("gen_characters_matched", count=changed))
+        self.model.refresh_all()
+        return changed
+
+    def _sync_characters(self) -> None:
+        for job in self.jobs:
+            if job.character or job.character_refs:
+                char_attach.sync(job, self.characters)
+
     def edit_row(self, row: int) -> None:
         if self._busy_guard():
             return
@@ -198,6 +238,7 @@ class GeneratorPage(QWidget):
     def start(self) -> int:
         if self.queue.is_running():
             return 0
+        self._sync_characters()
         if self.config_panel.value("ref_dir"):
             self.match_refs()
         self._apply_config()
@@ -263,7 +304,7 @@ class GeneratorPage(QWidget):
         running = self.queue.is_running()
         stats = self.stats_header.stats
         self.model.editable = not running
-        for b in (self.btn_import, self.btn_paste, self.btn_match, self.btn_clear):
+        for b in (self.btn_import, self.btn_paste, self.btn_match, self.btn_match_chars, self.btn_clear):
             b.setEnabled(not running)
         self.btn_start.setEnabled(not running and stats.get("pending", 0) > 0)
         self.btn_pause.setEnabled(running)
