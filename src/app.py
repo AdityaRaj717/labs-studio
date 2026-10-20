@@ -46,6 +46,9 @@ def register_pages(window) -> None:
     from src.ui.workflow.page import WorkflowPage
     window.register_page("workflow", WorkflowPage)
 
+    from src.ui.characters.page import CharactersPage  # Phase 6
+    window.register_page("characters", CharactersPage)
+
 
 def main(argv: list[str] | None = None) -> int:
     app = QApplication(sys.argv if argv is None else argv)

@@ -67,6 +67,7 @@ class PromptTable(QTableView):
     remove_requested = Signal(list)       # rows
     open_output_requested = Signal(int)   # row
     open_folder_requested = Signal(int)   # row
+    character_requested = Signal(list, str)  # rows, character id ("" = detach)
 
     def __init__(self, model, parent=None):
         super().__init__(parent)
@@ -83,7 +84,7 @@ class PromptTable(QTableView):
         self.setIconSize(QSize(THUMB_HEIGHT * 2, THUMB_HEIGHT))
         header = self.horizontalHeader()
         header.setSectionResizeMode(COL_PROMPT, QHeaderView.ResizeMode.Stretch)
-        for col, width in ((COL_INDEX, 44), (COL_REFS, 50), (COL_STATUS, 100),
+        for col, width in ((COL_INDEX, 44), (COL_REFS, 90), (COL_STATUS, 100),
                            (COL_PROGRESS, 120), (COL_OUTPUT, 150)):
             header.setSectionResizeMode(col, QHeaderView.ResizeMode.Fixed)
             header.resizeSection(col, width)
@@ -93,6 +94,7 @@ class PromptTable(QTableView):
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._context_menu)
         self.doubleClicked.connect(self._double_clicked)
+        self.characters_source = None  # callable -> list[(id, name)], set by GeneratorPage
 
     # ---- empty state -------------------------------------------------
     def paintEvent(self, event) -> None:  # noqa: N802
@@ -146,12 +148,26 @@ class PromptTable(QTableView):
         menu.addAction(tr("gen_edit"), lambda: self.edit_requested.emit(index.row()))
         menu.addAction(tr("gen_retry"), lambda: self.retry_requested.emit(rows))
         menu.addAction(tr("gen_remove"), lambda: self.remove_requested.emit(rows))
+        if self.characters_source is not None:
+            self._character_menu(menu, rows, job)
         menu.addSeparator()
         out = menu.addAction(tr("gen_open_output"), lambda: self.open_output_requested.emit(index.row()))
         folder = menu.addAction(tr("gen_open_folder"), lambda: self.open_folder_requested.emit(index.row()))
         out.setEnabled(bool(job.outputs))
         folder.setEnabled(bool(job.outputs))
         menu.exec(self.viewport().mapToGlobal(pos))
+
+    def _character_menu(self, menu: QMenu, rows: list[int], job) -> None:
+        sub = menu.addMenu(tr("gen_attach_character"))
+        chars = self.characters_source()
+        for char_id, name in chars:
+            act = sub.addAction(name, lambda cid=char_id: self.character_requested.emit(rows, cid))
+            act.setCheckable(True)
+            act.setChecked(job.character == char_id)
+        if not chars:
+            sub.addAction(tr("gen_no_characters")).setEnabled(False)
+        detach = menu.addAction(tr("gen_detach_character"), lambda: self.character_requested.emit(rows, ""))
+        detach.setEnabled(any(self.model().job_at(r).character for r in rows))
 
     def _double_clicked(self, index) -> None:
         if index.column() == COL_OUTPUT:
