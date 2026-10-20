@@ -28,6 +28,8 @@ def register_pages(window) -> None:
     window.register_page("flow_video", lambda: GeneratorPage(
         "flow_video", GeminiVideoProvider(), title=tr("nav_video"), banner=tr("omni_banner")))
     window.register_page("settings", SettingsPage)
+    from src.ui.workflow.page import WorkflowPage
+    window.register_page("workflow", WorkflowPage)
 
 
 def main(argv: list[str] | None = None) -> int:
