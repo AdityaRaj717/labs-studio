@@ -22,12 +22,14 @@ def register_pages(window) -> None:
     from src.gen.gemini_video import GeminiVideoProvider
     from src.ui.generator.page import GeneratorPage
     from src.ui.pages.settings_page import SettingsPage
+    from src.ui.editor import editor_page
 
     window.register_page("flow_image", lambda: GeneratorPage(
         "flow_image", GeminiImageProvider(), title=tr("nav_img"), banner=tr("gemini_banner")))
     window.register_page("flow_video", lambda: GeneratorPage(
         "flow_video", GeminiVideoProvider(), title=tr("nav_video"), banner=tr("omni_banner")))
     window.register_page("settings", SettingsPage)
+    window.register_page("video_editor", editor_page)
 
 
 def main(argv: list[str] | None = None) -> int:
