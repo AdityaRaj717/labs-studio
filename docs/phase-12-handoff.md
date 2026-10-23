@@ -13,6 +13,7 @@
   - It sets the header title (`input[aria-label="Editable text"]`).
   - A project that is gone redirects to `/404?reason=project`, which is reported as `PROJECT_NOT_FOUND`.
   - `flow_generate_image` takes `project_url`, which wins over campaign.
+- More project tools for agents: **`flow_list_projects {query?}`** → `[{title, url}]`, **`flow_rename_project {url, name}`**, and **`flow_delete_project {url, confirm}`**. Flow deletes permanently (clips, ingredients, prompts), so delete only acts with `confirm: true`, which an agent passes only after the user agreed. Its dialog was inspected live (Cancel / Delete project) but never confirmed.
 - App: `web.flow_mcp_dir` defaults to `""`, meaning the repo copy (`BUNDLED_MCP_DIR`). A saved old `D:\Tools\…` value is also treated as the repo copy. The app passes the env (port, Chrome, profile, data dir `D:\glabs_web\flow-mcp`).
 
 ## 12.1 Project store (`src/projects/`)
@@ -40,6 +41,8 @@
   - A fake URL returned `PROJECT_NOT_FOUND`.
 - One batch (user approved): x1, Nano Banana 2 Lite, 1K, 1:1, run in "P12 Alpha renamed" through the real `GeneratorPage` + `WebFlowImageProvider`. Done in 74 s, a 1024×1024 image in that project's `outputs\flow_image\…` folder, and the image appears in Flow project `af540247…`.
 - Test project "P12 Alpha renamed" is still in the Flow account; delete it in Flow if you don't want it.
+
+- Agent test (user approved): `samples/zombie-bunker/` (script, `moodboard.md` MD_01–04, `images.md` IMG_01–08). Entirely through the repo MCP: list → create "Zombie Bunker (draft)" → rename to "Zombie Bunker Survival With A Stranger" → list query → 4 moodboard images → 8 shots with moodboard references (Nano Banana 2.1, x1, 1K). 12/12 done (IMG_04 failed once because the project page loaded without its title box; `gotoProject` now reloads once, and the rerun passed). Characters and the bunker stay consistent across shots. Log: `samples/zombie-bunker/run-log.md`. Images are gitignored.
 
 ## Known gaps
 - The switch and the two-project flows in the real window were checked through offscreen tests (`test_main_window_switch_rebuilds_project_pages`) and the launch screenshot, not by clicking.

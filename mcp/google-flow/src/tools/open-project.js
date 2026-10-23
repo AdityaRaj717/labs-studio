@@ -50,7 +50,13 @@ export async function gotoProject(page, url) {
   if (page.url().split('?')[0] !== base) {
     await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 60000 });
   }
-  const state = await landed(page);
+  let state = await landed(page);
+  if (state !== 'project' && state !== 'gone') {
+    // Seen once mid-batch: the project loaded without its header. One reload fixes it.
+    logger.warn('Project page incomplete; reloading once', { url: page.url(), state });
+    await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    state = await landed(page);
+  }
   if (state === 'gone') return false;
   if (state !== 'project') {
     await takeScreenshot(page, 'open-project-unknown');
@@ -137,4 +143,88 @@ export async function handleOpenProject(args = {}) {
     jobQueue.failJob(job.id, err);
     throw err;
   }
+}
+
+async function gotoHome(page) {
+  await page.goto(HOME, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  checkLogin(page.url());
+  try {
+    await page.getByRole('button', { name: UI.account }).first().waitFor({ state: 'visible', timeout: 15000 });
+  } catch {
+    checkLogin(page.url());
+    throw new FlowError(ErrorCodes.NOT_LOGGED_IN, 'Google Flow is not signed in. Sign in by hand in the Chrome window.');
+  }
+  await page.waitForTimeout(1500);
+}
+
+// Project cards on the home page: [{ title, url }] (newest first, as Flow lists them).
+async function readProjects(page) {
+  return page.evaluate(() => [...document.querySelectorAll('a[aria-label="Open project"][href*="/project/"]')].map((a) => {
+    let card = a.parentElement;
+    for (let i = 0; i < 4 && card && !card.querySelector('button[aria-label="Delete project"]'); i++) card = card.parentElement;
+    const title = (card ? card.innerText : '').split('\n').map(s => s.trim())
+      .filter(s => s && !['edit', 'delete'].includes(s))[0] || '';
+    return { title, url: new URL(a.getAttribute('href'), location.origin).href };
+  }));
+}
+
+async function withJob(type, params, fn) {
+  const job = jobQueue.createJob(type, params);
+  const page = getPage();
+  try {
+    jobQueue.startJob(job.id);
+    const result = await fn(page);
+    jobQueue.completeJob(job.id, result);
+    return result;
+  } catch (err) {
+    await takeScreenshot(page, `${type}-error`).catch(() => {});
+    jobQueue.failJob(job.id, err);
+    throw err;
+  }
+}
+
+/** args: { query? } -> { projects: [{ title, url }] } (query filters titles, case-insensitive). */
+export async function handleListProjects(args = {}) {
+  return withJob('list_projects', {}, async (page) => {
+    await gotoHome(page);
+    let projects = await readProjects(page);
+    if (args.query) projects = projects.filter(p => p.title.toLowerCase().includes(String(args.query).toLowerCase()));
+    return { status: 'success', count: projects.length, projects };
+  });
+}
+
+/** args: { url, name } -> { url, title }. PROJECT_NOT_FOUND when the project is gone. */
+export async function handleRenameProject(args = {}) {
+  if (!args.url || !args.name) throw new FlowError(ErrorCodes.INVALID_PARAMS, 'url and name are required');
+  return handleOpenProject({ url: args.url, name: args.name, create_if_missing: false });
+}
+
+/**
+ * args: { url, confirm }. Flow deletes a project PERMANENTLY (clips, ingredients, prompts),
+ * so nothing happens unless confirm === true.
+ */
+export async function handleDeleteProject(args = {}) {
+  const base = projectBase(args.url);
+  if (!base) throw new FlowError(ErrorCodes.INVALID_PARAMS, `Not a Flow project URL: ${args.url}`);
+  if (args.confirm !== true) {
+    throw new FlowError(ErrorCodes.INVALID_PARAMS,
+      'Deleting a Flow project is permanent. Call again with confirm: true once the user has agreed.');
+  }
+  return withJob('delete_project', { url: base }, async (page) => {
+    await gotoHome(page);
+    const href = new URL(base).pathname;
+    const link = page.locator(`a[aria-label="Open project"][href="${href}"]`).first();
+    if (!await link.count()) throw new FlowError(ErrorCodes.PROJECT_NOT_FOUND, `Flow project not found: ${base}`, { url: base });
+    let card = link.locator('xpath=..');
+    for (let i = 0; i < 4 && !(await card.getByRole('button', { name: 'Delete project' }).count()); i++) card = card.locator('xpath=..');
+    await card.hover();
+    await card.getByRole('button', { name: 'Delete project' }).first().click();
+    const dialog = page.getByRole('dialog').first();
+    await dialog.waitFor({ state: 'visible', timeout: 10000 });
+    await dialog.getByRole('button', { name: 'Delete project' }).click();
+    await page.waitForTimeout(2500);
+    const gone = !(await page.locator(`a[aria-label="Open project"][href="${href}"]`).count());
+    if (!gone) throw new FlowError(ErrorCodes.UNKNOWN_UI_CHANGE, 'Pressed Delete project but the project is still listed');
+    return { status: 'success', deleted: base };
+  });
 }

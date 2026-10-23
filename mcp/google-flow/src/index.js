@@ -14,7 +14,7 @@ import { verifyAccount as checkAccount } from './browser/account-check.js';
 import { handleFlowOpen } from './tools/flow-open.js';
 import { handleFlowStatus } from './tools/flow-status.js';
 import { handleGenerateImage } from './tools/generate-image.js';
-import { handleOpenProject } from './tools/open-project.js';
+import { handleOpenProject, handleListProjects, handleRenameProject, handleDeleteProject } from './tools/open-project.js';
 import { handleGenerateVideo } from './tools/generate-video.js';
 import { handleDownloadLatest } from './tools/download-latest.js';
 import { handleCreateCharacter } from './tools/create-character.js';
@@ -109,6 +109,21 @@ const TOOL_DEFINITIONS = [
         create_if_missing: { type: 'boolean', description: 'Create a new project when url is empty or gone.', default: true },
       },
     },
+  },
+  {
+    name: 'flow_list_projects',
+    description: 'List Flow projects from the Flow home page: [{ title, url }]. query filters titles. Free.',
+    inputSchema: { type: 'object', properties: { query: { type: 'string', description: 'Only titles containing this text.' } } },
+  },
+  {
+    name: 'flow_rename_project',
+    description: 'Set the title of a Flow project. Returns { url, title }. PROJECT_NOT_FOUND if gone. Free.',
+    inputSchema: { type: 'object', properties: { url: { type: 'string' }, name: { type: 'string' } }, required: ['url', 'name'] },
+  },
+  {
+    name: 'flow_delete_project',
+    description: '⚠️ PERMANENT. Deletes a Flow project with all its clips, ingredients and prompts. Only acts with confirm: true, which an agent must pass only after the user explicitly agreed to delete that project.',
+    inputSchema: { type: 'object', properties: { url: { type: 'string' }, confirm: { type: 'boolean', default: false } }, required: ['url'] },
   },
   {
     name: 'flow_generate_video',
@@ -309,6 +324,14 @@ async function handleToolCall(name, args) {
 
     case 'flow_open_project': {
       const result = await handleOpenProject(args || {});
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    }
+
+    case 'flow_list_projects':
+    case 'flow_rename_project':
+    case 'flow_delete_project': {
+      const fn = { flow_list_projects: handleListProjects, flow_rename_project: handleRenameProject, flow_delete_project: handleDeleteProject }[name];
+      const result = await fn(args || {});
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
 
