@@ -21,6 +21,9 @@ Goal (user): a channel (YouTube, Instagram…) reuses the same characters and pl
 ## Built in 14a (MCP)
 `flow_list_characters`, `flow_create_character`, `flow_import_character` (download the portrait at full size, then upload it with the same name and info), `flow_list_scenes` / `flow_create_scene` (places as characters), and `characters` / `scenes` on `flow_generate_image` (picker > Characters; `{name, project}` for another project). See `docs/phase-14a-handoff.md`.
 
+## Built in 14b (app)
+Scenes page, the global library with a `flow` map, sync on project switch and before each Flow job, Character and Scene columns, webhook `characters` / `scenes`, and the Flow-only switch that hides what doesn't work yet. See `docs/phase-14b-handoff.md`.
+
 ## Proposed design
 
 ### 1. One character library in the app (cross-project)
