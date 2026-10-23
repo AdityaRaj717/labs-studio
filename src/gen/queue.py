@@ -221,6 +221,9 @@ class JobQueue:
                 else:
                     job.status = JobStatus.FAILED
                     log.error("Job %d failed: %s", job.index, exc)
+            if exc.stop_queue:
+                log.error("Stopping the queue: %s", exc)
+                self.stop()
         except Exception as exc:  # noqa: BLE001 - one bad job must not kill the worker
             job.status = JobStatus.FAILED
             job.error = f"{type(exc).__name__}: {exc}"

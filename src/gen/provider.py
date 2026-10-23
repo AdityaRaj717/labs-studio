@@ -9,9 +9,13 @@ from src.gen.models import Job, OutputFile
 
 
 class ProviderError(Exception):
-    def __init__(self, message: str, retryable: bool = False):
+    """A job failed. ``stop_queue`` also stops the rest of the batch (web
+    providers raise it for sign-in walls, CAPTCHAs and spent quota)."""
+
+    def __init__(self, message: str, retryable: bool = False, stop_queue: bool = False):
         super().__init__(message)
-        self.retryable = retryable
+        self.retryable = retryable and not stop_queue
+        self.stop_queue = stop_queue
 
 
 class StopRequested(Exception):

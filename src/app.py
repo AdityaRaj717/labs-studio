@@ -26,8 +26,11 @@ def register_pages(window) -> None:
     from src.ui.pages.settings_page import SettingsPage
     from src.ui.editor import editor_page
 
+    from src.gen.web_flow_image import WebFlowImageProvider  # Phase 11a
+
     window.register_page("flow_image", lambda: GeneratorPage(
-        "flow_image", GeminiImageProvider(), title=tr("nav_img"), banner=tr("gemini_banner")))
+        "flow_image", GeminiImageProvider(), title=tr("nav_img"), banner=tr("gemini_banner"),
+        alternatives=[(WebFlowImageProvider(), tr("web_flow_banner"))]))
     window.register_page("flow_video", lambda: GeneratorPage(
         "flow_video", GeminiVideoProvider(), title=tr("nav_video"), banner=tr("omni_banner")))
     window.register_page("grok", lambda: GeneratorPage(

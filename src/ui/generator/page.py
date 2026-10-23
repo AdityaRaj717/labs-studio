@@ -9,10 +9,11 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
-    QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLabel, QMessageBox, QPushButton, QScrollArea,
+    QComboBox, QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLabel, QMessageBox, QPushButton, QScrollArea,
     QVBoxLayout, QWidget,
 )
 
+from src import config
 from src.characters import attach as char_attach
 from src.gen.importer import load_prompts, parse_text
 from src.gen.models import Job, JobStatus
@@ -32,12 +33,16 @@ log = logging.getLogger(__name__)
 
 class GeneratorPage(QWidget):
     def __init__(self, page_key: str, provider: Provider, title: str = "", banner: str = "",
-                 store=None, parent: QWidget | None = None, characters=None):
+                 store=None, parent: QWidget | None = None, characters=None,
+                 alternatives: list[tuple[Provider, str]] | None = None):
+        """``alternatives``: extra (provider, banner) pairs offered in a Provider picker."""
         super().__init__(parent)
         self.page_key = page_key
         self._characters = characters  # CharacterStore; the app-wide one is loaded on first use
         self.provider = provider
+        self._store = store
         self._batch_folder: Path | None = None
+        self.providers: list[tuple[Provider, str]] = [(provider, banner)] + list(alternatives or [])
 
         self.config_panel = ConfigPanel(page_key, provider.config_fields() + COMMON_FIELDS, store)
         self.model = PromptTableModel(self)
@@ -49,7 +54,7 @@ class GeneratorPage(QWidget):
         self.bridge.finished.connect(self._on_finished)
 
         # Left: settings in a scroll area.
-        scroll = QScrollArea()
+        self.scroll = scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setWidget(self.config_panel)
@@ -62,11 +67,21 @@ class GeneratorPage(QWidget):
             heading = QLabel(title)
             heading.setStyleSheet("font-size: 18px; font-weight: 600;")
             right.addWidget(heading)
-        if banner:
-            note = QLabel(banner)
-            note.setWordWrap(True)
-            note.setObjectName("DemoBanner")
-            right.addWidget(note)
+        self.provider_combo: QComboBox | None = None
+        if len(self.providers) > 1:
+            self.provider_combo = QComboBox()
+            for p, _ in self.providers:
+                self.provider_combo.addItem(p.name, p.key)
+            pick = QHBoxLayout()
+            pick.addWidget(QLabel(tr("gen_provider")))
+            pick.addWidget(self.provider_combo)
+            pick.addStretch(1)
+            right.addLayout(pick)
+        self.banner_label = QLabel(banner)
+        self.banner_label.setWordWrap(True)
+        self.banner_label.setObjectName("DemoBanner")
+        self.banner_label.setVisible(bool(banner))
+        right.addWidget(self.banner_label)
 
         self.btn_import = self._button("gen_import", self.import_dialog)
         self.btn_paste = self._button("gen_paste", self.paste_dialog)
@@ -104,7 +119,44 @@ class GeneratorPage(QWidget):
         self.table.characters_source = lambda: [(c.id, c.name) for c in self.characters.all()]
         self.table.character_requested.connect(self.set_character)
         self.model.character_name = lambda job: char_attach.character_label(job, self.characters)
+        if self.provider_combo is not None:
+            store_ = store if store is not None else config.settings()
+            saved = store_.get(f"pages.{page_key}.provider", provider.key)
+            self.provider_combo.setCurrentIndex(max(0, self.provider_combo.findData(saved)))
+            self.provider_combo.currentIndexChanged.connect(self._on_provider_picked)
+            self._on_provider_picked(self.provider_combo.currentIndex(), save=False)
         self._update_controls()
+
+    # ---- provider picker ----------------------------------------------
+    def set_provider(self, key: str) -> bool:
+        """Switch to the provider with ``key`` (not while a batch runs)."""
+        if self.provider_combo is None or self.queue.is_running():
+            return False
+        idx = self.provider_combo.findData(key)
+        if idx < 0:
+            return False
+        self.provider_combo.setCurrentIndex(idx)
+        return self.provider.key == key
+
+    def _on_provider_picked(self, index: int, save: bool = True) -> None:
+        provider, banner = self.providers[max(0, index)]
+        if self.queue.is_running():
+            self.provider_combo.blockSignals(True)
+            self.provider_combo.setCurrentIndex(self.provider_combo.findData(self.provider.key))
+            self.provider_combo.blockSignals(False)
+            return
+        if save:
+            (self._store if self._store is not None else config.settings()).set(
+                f"pages.{self.page_key}.provider", provider.key)
+        self.banner_label.setText(banner)
+        self.banner_label.setVisible(bool(banner))
+        if provider is self.provider:
+            return
+        self.provider = provider
+        self.queue.provider = provider
+        self.config_panel = ConfigPanel(self.page_key, provider.config_fields() + COMMON_FIELDS, self._store)
+        self.scroll.setWidget(self.config_panel)
+        log.info("%s: provider set to %s", self.page_key, provider.name)
 
     def _button(self, key: str, slot) -> QPushButton:
         b = QPushButton(tr(key))
@@ -311,6 +363,8 @@ class GeneratorPage(QWidget):
         self.btn_pause.setText(tr("gen_resume") if self.queue.paused else tr("gen_pause"))
         self.btn_stop.setEnabled(running)
         self.btn_retry.setEnabled(stats.get("failed", 0) + stats.get("stopped", 0) > 0)
+        if self.provider_combo is not None:
+            self.provider_combo.setEnabled(not running)
 
     # ---- output ------------------------------------------------------
     @staticmethod

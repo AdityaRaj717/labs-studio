@@ -22,6 +22,17 @@ DEFAULTS: dict[str, Any] = {
     "theme": "dark",
     "sidebar_collapsed": False,
     "window": {"geometry": None},
+    # Phase 11: web-session providers (real Chrome over CDP, profile kept off C:).
+    "web": {
+        "chrome_path": r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        "profile_dir": r"D:\glabs_web\chrome-profile",
+        "diag_dir": r"D:\glabs_web\diag",
+        "port": 9333,
+        "gap_min": 20.0,
+        "gap_max": 45.0,
+        "caps": {"flow": 60},
+        "usage": {},
+    },
 }
 
 _MISSING = object()

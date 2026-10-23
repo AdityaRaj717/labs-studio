@@ -34,7 +34,7 @@ a = Analysis(
     [os.path.join(ROOT, "run.py")],
     pathex=[ROOT],
     binaries=[],
-    datas=[],
+    datas=[(os.path.join(ROOT, "src", "web", "selectors", "*.json"), "src/web/selectors")],  # Phase 11
     hiddenimports=hidden,
     hookspath=[],
     runtime_hooks=[],
