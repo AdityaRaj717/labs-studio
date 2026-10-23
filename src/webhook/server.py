@@ -7,7 +7,8 @@ generator pages on the GUI thread).
 Routes (JSON in, JSON out):
     GET  /api/health          app name, version, whether a token is required
     GET  /api/pages           page keys that accept jobs
-    POST /api/jobs            submit: {"page", "prompt" | "prompts", "refs"?, "character"?, "start"?}
+    POST /api/jobs            submit: {"page", "prompt" | "prompts", "refs"?, "character"?, "start"?,
+                              "project"?}  (project name or id; default: the active project)
     GET  /api/jobs[?page=k]   jobs submitted over the API
     GET  /api/jobs/<id>       one job's status, progress, error and output paths
     GET  /api/stats           per-provider counts
@@ -68,7 +69,7 @@ def new_token() -> str:
 def parse_submit(payload: Any) -> dict:
     """Validate a POST /api/jobs body and normalise it.
 
-    Returns ``{"page", "prompts", "refs", "character", "start"}``.
+    Returns ``{"page", "prompts", "refs", "character", "start", "project"}``.
     """
     if not isinstance(payload, dict):
         raise ApiError(400, "body must be a JSON object")
@@ -96,7 +97,11 @@ def parse_submit(payload: Any) -> dict:
     start = payload.get("start", True)
     if not isinstance(start, bool):
         raise ApiError(400, "'start' must be true or false")
-    return {"page": page, "prompts": clean, "refs": refs, "character": character, "start": start}
+    project = payload.get("project") or ""
+    if not isinstance(project, str):
+        raise ApiError(400, "'project' must be a project name or id")
+    return {"page": page, "prompts": clean, "refs": refs, "character": character, "start": start,
+            "project": project.strip()}
 
 
 class _Handler(BaseHTTPRequestHandler):

@@ -19,6 +19,10 @@ log = logging.getLogger(__name__)
 
 PageFactory = Callable[[], QWidget]
 
+# Pages whose settings, rows and output folder belong to the active project; they are
+# rebuilt when the project changes (Phase 12).
+PROJECT_PAGES = ("flow_image", "flow_video", "grok", "openai_image", "demo", "upscaler", "video_cut")
+
 
 class MainWindow(QMainWindow):
     def __init__(self, parent: QWidget | None = None):
@@ -31,6 +35,7 @@ class MainWindow(QMainWindow):
         self.pages: dict[str, QWidget] = {}
         self.page_factories: dict[str, PageFactory] = self._default_factories()
         self.current_key: str | None = None
+        self.projects = None  # ProjectStore once attach_projects() ran
 
         central = QWidget()
         layout = QHBoxLayout(central)
@@ -86,6 +91,52 @@ class MainWindow(QMainWindow):
         if key != self.current_key:
             log.info("Page: %s", key)
         self.current_key = key
+
+    # ---- projects (Phase 12) -----------------------------------------
+    def attach_projects(self, store) -> None:
+        from src.ui.projects.picker import ProjectPicker
+
+        self.projects = store
+        store.busy_check = self.is_busy
+        store.listeners.append(self._on_project_event)
+        self.picker = ProjectPicker(store, self)
+        self.sidebar.set_project_widget(self.picker)
+        self._update_title()
+
+    def is_busy(self) -> bool:
+        """True while any page runs a batch (generator/tool queue or a workflow)."""
+        for page in list(self.pages.values()):
+            for w in (page, *page.findChildren(QWidget)):
+                queue = getattr(w, "queue", None)
+                if queue is not None and callable(getattr(queue, "is_running", None)) and queue.is_running():
+                    return True
+                running = getattr(w, "is_running", None)
+                if callable(running) and not isinstance(w, QStackedWidget) and running():
+                    return True
+        return False
+
+    def _on_project_event(self, event: str, project) -> None:
+        if event == "switched":
+            self.reload_project_pages()
+        self._update_title()
+
+    def reload_project_pages(self) -> None:
+        """Drop the project-scoped pages; they are rebuilt from the new project on next view."""
+        for key in PROJECT_PAGES:
+            old = self.pages.pop(key, None)
+            if old is None:
+                continue
+            shutdown = getattr(old, "shutdown", None)
+            if callable(shutdown):
+                shutdown()
+            self.stack.removeWidget(old)
+            old.deleteLater()
+        if self.current_key in PROJECT_PAGES:
+            self.switch_page(self.current_key)
+
+    def _update_title(self) -> None:
+        active = self.projects.active if self.projects is not None else None
+        self.setWindowTitle(f"{APP_NAME} — {active.name}" if active is not None else APP_NAME)
 
     # ---- theme -------------------------------------------------------
     def toggle_theme(self) -> None:

@@ -52,6 +52,10 @@ def register_pages(window) -> None:
     from src.ui.characters.page import CharactersPage  # Phase 6
     window.register_page("characters", CharactersPage)
 
+    if window.projects is not None:  # Phase 12
+        from src.ui.projects.page import ProjectsPage
+        window.register_page("projects", lambda: ProjectsPage(window.projects))
+
     from src.gen.fake_provider import FakeProvider  # Phase 10
     from src.ui.webhook.page import WebhookPage  # Phase 10
     window.register_page("demo", lambda: GeneratorPage(
@@ -87,7 +91,18 @@ def main(argv: list[str] | None = None) -> int:
     from src.stats.store import install as install_stats  # Phase 10
     install_stats()
 
+    from src import projects  # Phase 12: before any page reads pages.* settings
+    store = projects.install(settings)
+
+    def open_flow_project(event: str, project) -> None:
+        if event == "switched" or (event == "renamed" and project is store.active and project.flow_url):
+            if settings.get("web.flow_open_on_switch", True):
+                from src.web.flow_mcp import open_project_async
+                open_project_async(project)
+    store.listeners.append(open_flow_project)
+
     window = MainWindow()
+    window.attach_projects(store)
     register_pages(window)
     if settings.get("webhook.autostart", False):  # Phase 10
         window.page("webhook").start_server()

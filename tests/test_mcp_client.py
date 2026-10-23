@@ -53,8 +53,8 @@ def test_tool_payload_shapes():
 
 
 class FakeClient:
-    def __init__(self, command, cwd=None, name="", stderr_path=None):
-        self.command, self.cwd = command, cwd
+    def __init__(self, command, cwd=None, name="", stderr_path=None, env=None):
+        self.command, self.cwd, self.env = command, cwd, env
         self.calls: list[tuple[str, dict]] = []
         self.alive = True
         self.fail_next: list[str] = []
@@ -70,9 +70,13 @@ class FakeClient:
 
     def call_tool(self, name, args=None, timeout=None):
         self.calls.append((name, dict(args or {})))
-        if name == "flow_generate_image" and self.fail_next:
+        if name in ("flow_generate_image", "flow_open_project") and self.fail_next:
             code = self.fail_next.pop(0)
             raise McpToolError(code, {"error_code": code})
+        if name == "flow_open_project":
+            url = (args or {}).get("url") or f"https://flow.google.com/project/new{len(self.calls)}"
+            return {"status": "success", "url": url, "created": not (args or {}).get("url"),
+                    "title": (args or {}).get("name", "")}
         return {"status": "connected"} if name == "flow_connect" else {"status": "success", "files": []}
 
 

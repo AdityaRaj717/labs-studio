@@ -22,15 +22,18 @@ DEFAULTS: dict[str, Any] = {
     "theme": "dark",
     "sidebar_collapsed": False,
     "window": {"geometry": None},
+    # Phase 12: projects. data_root "" = the app data folder; active = project id.
+    "projects": {"data_root": "", "active": ""},
     # Phase 11: web-session providers (real Chrome over CDP, profile kept off C:).
     "web": {
         "chrome_path": r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-        "flow_mcp_dir": r"D:\Tools\google-flow-browser-mcp",  # google-flow MCP server
+        "flow_mcp_dir": "",  # google-flow MCP server; "" = mcp/google-flow in this repo
         "node_path": "node",
         "flow_campaign": "labs-studio",  # MCP campaign -> the app's Flow project
         "profile_dir": r"D:\glabs_web\chrome-profile",
         "diag_dir": r"D:\glabs_web\diag",
         "port": 9333,
+        "flow_open_on_switch": True,  # Phase 12: open the project's Flow project on switch
         "gap_min": 20.0,
         "gap_max": 45.0,
         "caps": {"flow": 60},
@@ -75,12 +78,20 @@ def _deep_merge(base: dict, extra: dict) -> dict:
 
 
 class Settings:
-    """Dict-backed settings with dotted paths, e.g. ``get("window.geometry")``."""
+    """Dict-backed settings with dotted paths, e.g. ``get("window.geometry")``.
+
+    With ``pages_backend`` set (``src.projects.install``), ``pages.*`` paths are
+    read from and written to the active project instead of this file.
+    """
 
     def __init__(self, path: Path | str | None = None):
         self.path = Path(path) if path else app_data_dir() / "settings.json"
         self.data: dict[str, Any] = copy.deepcopy(DEFAULTS)
+        self.pages_backend = None
         self.load()
+
+    def _routed(self, path: str) -> bool:
+        return self.pages_backend is not None and (path == "pages" or path.startswith("pages."))
 
     def load(self) -> None:
         if not self.path.exists():
@@ -100,6 +111,8 @@ class Settings:
         os.replace(tmp, self.path)
 
     def get(self, path: str, default: Any = None) -> Any:
+        if self._routed(path):
+            return self.pages_backend.get(path, default)
         node: Any = self.data
         for part in path.split("."):
             if not isinstance(node, dict):
@@ -110,6 +123,9 @@ class Settings:
         return node
 
     def set(self, path: str, value: Any, save: bool = True) -> None:
+        if self._routed(path):
+            self.pages_backend.set(path, value, save=save)
+            return
         parts = path.split(".")
         node = self.data
         for part in parts[:-1]:

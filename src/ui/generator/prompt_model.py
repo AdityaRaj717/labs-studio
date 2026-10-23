@@ -154,7 +154,15 @@ class PromptTableModel(QAbstractTableModel):
         if not prompts:
             return []
         start = len(self.jobs)
-        new = [Job(p, index=start + i + 1) for i, p in enumerate(prompts)]
+        return self.add_jobs([Job(p, index=start + i + 1) for i, p in enumerate(prompts)])
+
+    def add_jobs(self, new: list[Job]) -> list[Job]:
+        """Append ready-made jobs (rows restored from a project)."""
+        if not new:
+            return []
+        start = len(self.jobs)
+        for i, job in enumerate(new):
+            job.index = start + i + 1
         self.beginInsertRows(QModelIndex(), start, start + len(new) - 1)
         self.jobs.extend(new)
         self.endInsertRows()

@@ -6,7 +6,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QComboBox, QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLabel, QMessageBox, QPushButton, QScrollArea,
@@ -119,6 +119,15 @@ class GeneratorPage(QWidget):
         self.table.characters_source = lambda: [(c.id, c.name) for c in self.characters.all()]
         self.table.character_requested.connect(self.set_character)
         self.model.character_name = lambda job: char_attach.character_label(job, self.characters)
+        # Phase 12: rows live in the active project and are saved shortly after each change.
+        self._project = None
+        self._save_timer = QTimer(self)
+        self._save_timer.setSingleShot(True)
+        self._save_timer.setInterval(800)
+        self._save_timer.timeout.connect(self.save_rows)
+        self.load_rows()
+        for sig in (self.model.rowsInserted, self.model.rowsRemoved, self.model.modelReset, self.model.dataChanged):
+            sig.connect(lambda *_: self._save_timer.start())
         if self.provider_combo is not None:
             store_ = store if store is not None else config.settings()
             saved = store_.get(f"pages.{page_key}.provider", provider.key)
@@ -162,6 +171,29 @@ class GeneratorPage(QWidget):
         b = QPushButton(tr(key))
         b.clicked.connect(lambda _checked=False: slot())
         return b
+
+    # ---- project rows (Phase 12) ---------------------------------------
+    def load_rows(self) -> int:
+        """Restore this page's prompt rows from the active project (if projects are on)."""
+        from src import projects
+        from src.projects.store import row_to_job
+
+        self._project = projects.current()
+        if self._project is None:
+            return 0
+        jobs = [row_to_job(r, i + 1) for i, r in enumerate(self._project.rows(self.page_key))]
+        if jobs:
+            self.model.add_jobs(jobs)
+            self._refresh_stats()
+        return len(jobs)
+
+    def save_rows(self) -> None:
+        if self._project is None:
+            return
+        from src.projects.store import job_to_row
+
+        self._save_timer.stop()
+        self._project.set_rows(self.page_key, [job_to_row(j) for j in self.jobs])
 
     # ---- prompts -----------------------------------------------------
     @property
@@ -338,6 +370,7 @@ class GeneratorPage(QWidget):
     def _on_job_updated(self, job_id: int) -> None:
         self.model.refresh_job(job_id)
         self._refresh_stats()
+        self._save_timer.start()
 
     def _on_finished(self) -> None:
         if self.queue.is_running():
@@ -387,8 +420,9 @@ class GeneratorPage(QWidget):
         self._open(folder)
 
     def shutdown(self) -> None:
-        """Stop workers (called when the window closes)."""
+        """Stop workers and save the rows (window closing or project switch)."""
         if self.queue.is_running():
             self.queue.stop()
             self.queue.wait(5)
+        self.save_rows()
 

@@ -93,6 +93,31 @@ class PageBackend(QObject):
             raise ApiError(409, f"page {key!r} is not a generator page")
         return page
 
+    def _project(self, key: str):
+        """Make ``key`` (name or id) the active project; "" keeps the active one.
+
+        Returns the project, or None when projects are off.
+        """
+        from src import projects
+        from src.projects import ProjectBusyError
+
+        store = projects.store()
+        if store is None:
+            if key:
+                raise ApiError(400, "projects are not enabled in this app")
+            return None
+        if not key:
+            return store.active
+        project = store.find(key)
+        if project is None:
+            names = ", ".join(p.name for p in store.list())
+            raise ApiError(404, f"unknown project {key!r}; use one of: {names}")
+        try:
+            store.activate(project.id)
+        except ProjectBusyError as exc:
+            raise ApiError(409, f"can't switch to project {project.name!r}: {exc}") from None
+        return project
+
     def pages(self) -> list[dict]:
         def build() -> list[dict]:
             out = []
@@ -113,6 +138,7 @@ class PageBackend(QObject):
             raise ApiError(400, f"reference file(s) not found: {', '.join(missing)}")
 
         def add() -> dict:
+            project = self._project(req.get("project", ""))
             page = self._page(req["page"])
             char = None
             if req.get("character"):
@@ -141,8 +167,11 @@ class PageBackend(QObject):
             self.jobs_submitted.emit(req["page"], len(jobs))
             log.info("Webhook: %d job(s) added to %s%s", len(jobs), req["page"],
                      " and started" if started else "")
-            return {"page": req["page"], "started": started,
-                    "jobs": [job_info(req["page"], j) for j in jobs]}
+            out = {"page": req["page"], "started": started,
+                   "jobs": [job_info(req["page"], j) for j in jobs]}
+            if project is not None:
+                out["project"] = project.name
+            return out
 
         return self.on_gui(add)
 

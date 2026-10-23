@@ -231,15 +231,20 @@ class Inspector(QWidget):
 
 
 class WorkflowPage(QWidget):
+    @property
+    def out_dir(self) -> Path:
+        from src.gen.output import default_save_dir
+
+        return self._out_dir or default_save_dir("workflow")
+
     def __init__(self, registry: Registry | None = None, data_dir: Path | str | None = None,
                  out_dir: Path | str | None = None, parent=None):
         super().__init__(parent)
         from src.config import app_data_dir
-        from src.gen.output import default_save_dir
 
         self.registry = registry or default_registry()
         self.data_dir = Path(data_dir) if data_dir else app_data_dir() / "workflows"
-        self.out_dir = Path(out_dir) if out_dir else default_save_dir("workflow")
+        self._out_dir = Path(out_dir) if out_dir else None  # None: the active project's folder
         self.autosave_path = self.data_dir / "autosave.json"
         self.file_path: Path | None = None
         self.runner: GraphRunner | None = None

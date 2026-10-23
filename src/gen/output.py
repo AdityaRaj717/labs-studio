@@ -12,6 +12,12 @@ SUBDIR_MODES = ("none", "date", "batch")
 
 
 def default_save_dir(page_key: str) -> Path:
+    """``<active project's output folder>/<page>``, or ``<app data>/outputs/<page>`` without projects."""
+    from src import projects
+
+    project = projects.current()
+    if project is not None:
+        return project.output_dir / page_key
     from src.config import app_data_dir
 
     return app_data_dir() / "outputs" / page_key

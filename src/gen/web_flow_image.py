@@ -35,7 +35,7 @@ BLOCK_CODES = {
 }
 STOP_CODES = {  # every later job would fail the same way
     "UNKNOWN_UI_CHANGE", "GENERATION_BUTTON_DISABLED", "MODEL_NOT_AVAILABLE",
-    "RATIO_NOT_AVAILABLE", "INVALID_PARAMS",
+    "RATIO_NOT_AVAILABLE", "INVALID_PARAMS", "PROJECT_NOT_FOUND",
 }
 JOB_CODES = {"GENERATION_REFUSED"}  # only this prompt failed
 # Codes raised after the prompt was sent, so the attempt counts towards the daily cap.

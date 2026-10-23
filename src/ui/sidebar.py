@@ -28,6 +28,7 @@ NAV_ITEMS: list[tuple[str, str, str]] = [
     ("meta_muse", "nav_meta_muse", ""),
     ("google_vids", "nav_google_vids", ""),
     ("google_pics", "nav_google_pics", ""),
+    ("projects", "nav_projects", ""),
     ("characters", "nav_characters", ""),
     ("workflow", "nav_workflow", ""),
     ("video_editor", "nav_video_editor", ""),
@@ -172,6 +173,12 @@ class Sidebar(QWidget):
         self.update_theme_button()
         self._apply_collapsed()
 
+    def set_project_widget(self, widget: QWidget) -> None:
+        """Show the project picker under the header (hidden while collapsed)."""
+        self.project_widget = widget
+        self.layout().insertWidget(1, widget)
+        widget.setVisible(not self.collapsed)
+
     def set_current(self, key: str) -> None:
         btn = self.buttons.get(key)
         if btn is not None:
@@ -190,6 +197,8 @@ class Sidebar(QWidget):
     def _apply_collapsed(self) -> None:
         self.setFixedWidth(COLLAPSED_WIDTH if self.collapsed else EXPANDED_WIDTH)
         self.title.setVisible(not self.collapsed)
+        if getattr(self, "project_widget", None) is not None:
+            self.project_widget.setVisible(not self.collapsed)
         self.toggle_btn.setToolTip(tr("sidebar_expand") if self.collapsed else tr("sidebar_collapse"))
         for btn in (*self.buttons.values(), self.theme_btn, self.version_btn):
             btn.set_collapsed(self.collapsed)

@@ -50,9 +50,11 @@ def tool_payload(result: dict[str, Any]) -> dict[str, Any]:
 
 class McpStdioClient:
     def __init__(self, command: list[str], cwd: str | Path | None = None,
-                 stderr_path: str | Path | None = None, name: str = "mcp"):
+                 stderr_path: str | Path | None = None, name: str = "mcp",
+                 env: dict[str, str] | None = None):
         self.command = command
         self.cwd = str(cwd) if cwd else None
+        self.env = env  # full environment for the child (None = inherit)
         self.stderr_path = Path(stderr_path) if stderr_path else None
         self.name = name
         self.proc: subprocess.Popen | None = None
@@ -75,7 +77,7 @@ class McpStdioClient:
             stderr = open(self.stderr_path, "ab")  # noqa: SIM115 - lives as long as the process
         try:
             self.proc = subprocess.Popen(
-                self.command, cwd=self.cwd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                self.command, cwd=self.cwd, env=self.env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                 stderr=stderr, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         except OSError as exc:
             raise McpError(f"Could not start {self.name} ({' '.join(self.command)}): {exc}") from None
