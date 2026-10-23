@@ -115,9 +115,11 @@ class PromptTableModel(QAbstractTableModel):
             if col == COL_PROMPT:
                 return job.prompt
             if col == COL_REFS and job.refs:
-                name = self.character_name(job) if self.character_name else ""
-                lines = [p.name for p in job.refs]
-                return "\n".join([f"@{name}"] + lines if name else lines)
+                return "\n".join(p.name for p in job.refs)
+            if col == COL_CHARACTER and self.character_name:
+                return self.character_name(job) or None
+            if col == COL_SCENE and self.scene_name:
+                return self.scene_name(job) or None
             if col in (COL_STATUS, COL_OUTPUT) and job.error and not job.outputs:
                 return job.error
             if col == COL_OUTPUT and job.outputs:
