@@ -34,7 +34,9 @@ The data root is a setting, defaulting to the app data folder. Today's settings 
 
 Done when the app launches; two projects can be created, switched, renamed and deleted; each keeps its own prompts, settings and output folder after a restart; picking a project opens its Flow project, and a new project gets a new Flow project with its name (one small real check, with the user's OK); a Flow batch lands in the active project's Flow project and output folder; the webhook honours `project`; `pytest` passes; `docs/phase-12-handoff.md`.
 
-## Phase 13: shareable install (depends on 12)
+## Phase 13: shareable install (depends on 12) — DEFERRED
+
+**Deferred (user, 2026-10-23):** don't bundle or package yet; the user has more features to add and test first. Build this phase last, after the remaining feature phases.
 
 **13.1 No machine-specific defaults.** Every default path comes from the app data / local app data folders, for example the Chrome profile in `%LOCALAPPDATA%\LabsStudio\browser-profile` and diagnostics and temp files under `%LOCALAPPDATA%\LabsStudio`. The user's own settings keep their D: paths. Find Chrome automatically (registry App Paths, Program Files, `%LOCALAPPDATA%\Google\Chrome`) and fall back to Microsoft Edge (also Chromium, CDP works). If neither is found, show a clear message with a download link. Choose a free CDP port automatically if 9333 is taken by something that isn't ours.
 
