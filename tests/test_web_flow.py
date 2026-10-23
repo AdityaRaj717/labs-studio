@@ -1,4 +1,4 @@
-"""Flow adapter parsing and block detection on saved page snapshots (no browser)."""
+"""Flow block and sign-in detection on saved page snapshots (no browser)."""
 
 from __future__ import annotations
 
@@ -6,8 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from src.web.adapters.base import detect_block_html, detect_block_text, load_selectors, page_text
-from src.web.adapters.flow import logged_in_html, parse_chat, parse_last_turn
+from src.web.adapters.base import (
+    detect_block_html, detect_block_text, load_selectors, logged_in_html, page_text,
+)
 
 FIX = Path(__file__).parent / "fixtures" / "web"
 SEL = load_selectors("flow")
@@ -44,41 +45,6 @@ def test_logged_in_marker():
     assert logged_in_html(html("flow_home.html"), SEL)
     assert logged_in_html(html("flow_project_result.html"), SEL)
     assert not logged_in_html(html("flow_logged_out.html"), SEL)
-
-
-def test_empty_project_has_no_chat_turns():
-    assert parse_chat(html("flow_project_empty.html"), SEL) == []
-    assert parse_last_turn(html("flow_project_empty.html"), SEL) is None
-
-
-def test_finished_turn_with_one_image():
-    turns = parse_chat(html("flow_project_result.html"), SEL)
-    assert len(turns) == 2 and not turns[0].is_agent
-    last = turns[-1]
-    assert last.is_agent and last.done
-    assert len(last.images) == 1 and last.images[0].startswith("https://flow.google.com/asb/")
-    assert last.text.startswith("Here is your image of a single red apple")
-    assert "Analyzing" not in last.text  # the agent's thinking is not the reply
-
-
-def test_finished_turn_with_two_images():
-    last = parse_last_turn(html("flow_project_result_x2.html"), SEL)
-    assert last.done and len(last.images) == 2
-    assert "green apple" in last.text
-
-
-def test_turn_still_running_is_not_done():
-    running = html("flow_project_result.html").replace('aria-label="Good response"', "")
-    last = parse_last_turn(running, SEL)
-    assert last.is_agent and not last.done
-
-
-def test_text_only_reply_has_no_images():
-    page = ("<flow-chat-bubble><span>a cat</span></flow-chat-bubble>"
-            "<flow-chat-bubble><flow-a2ui-text><p>I can't create images of that.</p></flow-a2ui-text>"
-            '<button aria-label="Good response"></button></flow-chat-bubble>')
-    last = parse_last_turn(page, SEL)
-    assert last.done and last.images == [] and last.text == "I can't create images of that."
 
 
 def test_page_text_skips_scripts():

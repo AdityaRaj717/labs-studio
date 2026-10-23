@@ -441,12 +441,14 @@ STRINGS: dict[str, str] = {
     "wh_stats_reset_q": "Clear all counts?",
     # Phase 11: web sessions
     "settings_tab_web": "Web Sessions",
-    "web_note": "Web-session providers drive Google Flow in a real Chrome window with your own subscription. Sign in by hand in that window; the app never types or stores passwords. One job at a time, a random gap between jobs and a daily cap keep usage close to one person working by hand. Automated use may break the site's terms; the risk is to your own account.",
+    "web_note": "Web-session providers drive Google Flow (through the google-flow MCP server) in a real Chrome window with your own subscription. Sign in by hand in that window; the app never types or stores passwords. One job at a time, a random gap between jobs and a daily cap keep usage close to one person working by hand. Automated use may break the site's terms; the risk is to your own account.",
     "web_browser": "Browser",
     "web_chrome_path": "Chrome (chrome.exe)",
     "web_profile_dir": "Profile folder",
     "web_diag_dir": "Diagnose folder",
     "web_port": "Debugging port",
+    "web_mcp_dir": "google-flow MCP folder",
+    "web_node_path": "Node.js (node.exe)",
     "web_gap_min": "Gap between jobs, min (s)",
     "web_gap_max": "Gap between jobs, max (s)",
     "web_logged_in": "Status",
@@ -466,5 +468,5 @@ STRINGS: dict[str, str] = {
     "web_error": "Error: {error}",
     "web_diag_saved": "Snapshot saved to {path}",
     "gen_provider": "Provider",
-    "web_flow_banner": "Google Flow in your signed-in Chrome (Settings → Web Sessions), using your Google AI Pro subscription instead of an API key. Jobs run one at a time with a random gap and a daily cap.",
+    "web_flow_banner": "Google Flow through the google-flow MCP in your signed-in Chrome (Settings → Web Sessions), using your Google AI Pro subscription instead of an API key. Jobs run one at a time with a random gap and a daily cap.",
 }

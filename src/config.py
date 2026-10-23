@@ -25,6 +25,9 @@ DEFAULTS: dict[str, Any] = {
     # Phase 11: web-session providers (real Chrome over CDP, profile kept off C:).
     "web": {
         "chrome_path": r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        "flow_mcp_dir": r"D:\Tools\google-flow-browser-mcp",  # google-flow MCP server
+        "node_path": "node",
+        "flow_campaign": "labs-studio",  # MCP campaign -> the app's Flow project
         "profile_dir": r"D:\glabs_web\chrome-profile",
         "diag_dir": r"D:\glabs_web\diag",
         "port": 9333,

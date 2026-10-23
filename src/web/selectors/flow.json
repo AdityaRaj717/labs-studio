@@ -1,56 +1,37 @@
 {
   "home": "https://flow.google.com/",
   "account_button": "Account details",
-  "prompt_box": "What do you want to create?",
-  "prompt_template": "{prompt}",
-  "ref_prompt_template": "Use the attached image(s) as reference. Create a new {aspect} image: {prompt}",
-  "buttons": {
-    "new_project": "New project",
-    "new_session": "Start new session",
-    "agent_settings": "Settings",
-    "ingredients": "Add ingredients to the prompt box",
-    "send": "Start generation",
-    "download": "Download media",
-    "back_from_editor": "Back button to go to previous page",
-    "clear_prompt": "Clear prompt"
-  },
-  "agent_settings": {
-    "heading": "Agent settings",
-    "confirm_never": "Never",
-    "image_aspect_group": 1,
-    "image_count_group": 2,
-    "image_model_button": "Image generation default model",
-    "save": "Save"
-  },
-  "refs": {
-    "upload": "Upload media",
-    "asset_list": "Asset list",
-    "option_suffix": "Image",
-    "add_to_prompt": "Add to prompt",
-    "ingredient": "Ingredient"
-  },
-  "chat": {
-    "bubble_tag": "flow-chat-bubble",
-    "reply_text_tag": "flow-a2ui-text",
-    "done_button": "Good response",
-    "gallery": "Media options gallery",
-    "option_alt_prefix": "Option"
-  },
-  "collect": {
-    "open_option": "Open image in editor",
-    "sizes": {"1K": "1K Original size", "2K": "2K Upscaled", "4K": "4K Upscaled"}
-  },
   "block": {
     "captcha": {
-      "text": ["unusual traffic from your computer", "verify you're not a robot", "I'm not a robot"],
-      "url": ["google.com/sorry/", "recaptcha"]
+      "text": [
+        "unusual traffic from your computer",
+        "verify you're not a robot",
+        "I'm not a robot"
+      ],
+      "url": [
+        "google.com/sorry/",
+        "recaptcha"
+      ]
     },
     "login": {
-      "text": ["Create with Google Flow"],
-      "url": ["accounts.google.com", "flow.google.com/about"]
+      "text": [
+        "Create with Google Flow"
+      ],
+      "url": [
+        "accounts.google.com",
+        "flow.google.com/about"
+      ]
     },
     "quota": {
-      "text": ["reached your limit", "reached your daily limit", "out of credits", "not enough credits", "don't have enough credits", "try again tomorrow", "quota exceeded"],
+      "text": [
+        "reached your limit",
+        "reached your daily limit",
+        "out of credits",
+        "not enough credits",
+        "don't have enough credits",
+        "try again tomorrow",
+        "quota exceeded"
+      ],
       "url": []
     }
   },
@@ -60,7 +41,13 @@
       "Nano Banana Pro": "Nano Banana Pro",
       "Nano Banana 2 Lite": "Nano Banana 2 Lite"
     },
-    "aspects": {"1:1": "1:1", "16:9": "16:9", "9:16": "9:16", "4:3": "4:3", "3:4": "3:4"},
+    "aspects": {
+      "1:1": "1:1",
+      "16:9": "16:9",
+      "9:16": "9:16",
+      "4:3": "4:3",
+      "3:4": "3:4"
+    },
     "max_count": 4
   }
 }

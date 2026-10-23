@@ -1,8 +1,9 @@
-"""SiteAdapter: what a web-session provider needs from one site.
+"""Site checks shared by the web-session code: selectors, block and login detection.
 
-An adapter wraps a Playwright page (on the site's worker thread) plus that
-site's selector JSON. The pure helpers here work on HTML text, so block
-detection and result parsing can be tested on saved snapshots without a browser.
+Generation itself runs in the google-flow MCP (``src/web/flow_mcp.py``). What is
+here is what the app checks on its own: whether a site's tab shows a sign-in
+wall, CAPTCHA or limit message, and whether the user is signed in. The pure
+helpers work on HTML text, so they are tested on saved snapshots.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ import json
 import re
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 SELECTOR_DIR = Path(__file__).resolve().parent.parent / "selectors"
 
@@ -82,51 +83,18 @@ BLOCK_MESSAGES = {
 }
 
 
-class SiteBlocked(Exception):
-    """The site shows a CAPTCHA, a sign-in wall or a limit message."""
-
-    def __init__(self, kind: str):
-        super().__init__(kind)
-        self.kind = kind
+def logged_in_html(html: str, sel: dict[str, Any]) -> bool:
+    return f'aria-label="{sel["account_button"]}"' in html
 
 
-class UiChanged(Exception):
-    """An expected control is missing: the site's UI probably changed."""
-
-
-class GenerationRefused(Exception):
-    """The site refused this prompt (policy filter, unusable reference...)."""
-
-
-class SiteAdapter:
-    """Base class; one instance per job, used only on the site's thread."""
-
-    site = "base"
-    title = "Site"
-
-    def __init__(self, page, selectors: dict[str, Any] | None = None):
-        self.page = page
-        self.sel = selectors if selectors is not None else load_selectors(self.site)
-
-    # ---- state ---------------------------------------------------------
-    def detect_block(self) -> str | None:
-        return detect_block_text(self.page.locator("body").inner_text(timeout=10000),
-                                 self.page.url, self.sel.get("block", {}))
-
-    def is_logged_in(self) -> bool:
-        raise NotImplementedError
-
-    # ---- a job ----------------------------------------------------------
-    def prepare(self) -> None:
-        """Get the tab to where jobs start (before block and login checks)."""
-
-    def submit(self, prompt: str, refs: list[Path], opts: dict[str, Any]) -> None:
-        raise NotImplementedError
-
-    def wait_done(self, timeout: float, should_stop: Callable[[], bool],
-                  progress: Callable[[float], None] = lambda p: None) -> None:
-        raise NotImplementedError
-
-    def collect(self) -> list[tuple[bytes, str]]:
-        """Return the new results as ``(data, ext)`` pairs."""
-        raise NotImplementedError
+def page_status(page, site: str) -> str:
+    """``ok``, or ``login`` / ``captcha`` / ``quota``, for the site's tab (runs on its thread)."""
+    sel = load_selectors(site)
+    kind = detect_block_text(page.locator("body").inner_text(timeout=10000), page.url, sel.get("block", {}))
+    if kind:
+        return kind
+    try:
+        page.get_by_role("button", name=sel["account_button"]).first.wait_for(state="visible", timeout=8000)
+    except Exception:  # noqa: BLE001 - Playwright TimeoutError
+        return "login"
+    return "ok"
