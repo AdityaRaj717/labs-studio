@@ -60,7 +60,8 @@ One switch: setting `features.flow_only` (default `true`), or the environment va
 What stays: Flow Image (web), Projects, Characters, Scenes, Webhook API (`flow_image` only), Detailed Log, Settings (Web Sessions). Checked in `test_app_in_flow_only_mode_shows_only_working_features` and in the launch screenshots.
 
 ## Live check (real account, 2026-10-24)
-Script: `D:	mp_render\p14b\live14b.py`. It uses a scratch app data folder (`D:	mp_render\p14b\liveppdata`) and the existing test project "P12 Alpha renamed" (`af540247-5670-4fb4-969e-ffa12a51a6ed`). Log: `D:	mp_render\p14b\liveun.log`.
+Script: `D:\tmp_render\p14b\live14b.py`. It uses a scratch app data folder (`D:\tmp_render\p14b\live\appdata`) and the existing test project "P12 Alpha renamed" (`af540247-5670-4fb4-969e-ffa12a51a6ed`). Log: `D:\tmp_render\p14b\live\run.log`.
+un.log`.
 - Library:
   - **Survivor**, recorded in Zombie Bunker, with the portrait from the 14a import.
   - **Stranger**, recorded in Zombie Bunker, with no local image.
@@ -72,7 +73,7 @@ Script: `D:	mp_render\p14b\live14b.py`. It uses a scratch app data folder (`D:	m
   - Shelter created in P12 as a place, from the image.
   - All three recorded in the `flow` maps.
 - **Generation** through the real `GeneratorPage` + `WebFlowImageProvider` (x1, default model, 1K): done in 69 s. Flow's agent replied "featuring Survivor and the Stranger … inside the Shelter".
-  - Output: `D:	mp_render\p14b\liveppdata\LabsStudio\outputslow_image6-10-24_survivor-and-the-stranger-share-a-can-of_1.jpg`, 1024×1024.
+  - Output: `D:\tmp_render\p14b\live\appdata\LabsStudio\outputs\flow_image\2026-10-24\001_survivor-and-the-stranger-share-a-can-of_1.jpg`, 1024×1024.
   - Both faces, the clothes (red scarf, olive parka) and the bunker match the characters.
 - Leftovers in Flow: "P12 Alpha renamed" now also has **Stranger** and **Shelter**, plus this image.
 - No video was generated.
