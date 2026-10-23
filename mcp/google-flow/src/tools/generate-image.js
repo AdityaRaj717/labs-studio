@@ -38,6 +38,7 @@ const UI = {
   upload: 'Upload media',
   assetList: 'Asset list',
   addToPrompt: 'Add to prompt',
+  searchAssets: 'Search assets',
   bubble: 'flow-chat-bubble',
   replyText: 'flow-a2ui-text',
   done: 'Good response',
@@ -179,13 +180,30 @@ async function addReference(page, file) {
   const before = await chips.count();
   await btn(page, UI.ingredients).click();
   const upload = await need(page, page.getByRole('button', { name: UI.upload }), 'Upload media button');
-  const chooser = page.waitForEvent('filechooser', { timeout: 15000 });
-  await upload.click();
-  await (await chooser).setFiles(file);
   const name = path.basename(file);
   const option = page.getByRole('listbox', { name: UI.assetList })
     .getByRole('option', { name: `${name} Image`, exact: true }).first();
   const add = page.getByRole('button', { name: UI.addToPrompt });
+  // Reuse a file already uploaded to this project (same file name) instead of uploading it again.
+  const search = page.getByRole('textbox', { name: UI.searchAssets }).first();
+  let reused = false;
+  if (await search.isVisible().catch(() => false)) {
+    await search.fill(name);
+    await page.waitForTimeout(2000);
+    if (await option.isVisible().catch(() => false)) {
+      await option.click();
+      await page.waitForTimeout(800);
+      if (await chips.count() <= before && await add.isVisible().catch(() => false)) await add.click();
+      reused = true;
+    } else {
+      await search.fill('');
+    }
+  }
+  if (!reused) {
+    const chooser = page.waitForEvent('filechooser', { timeout: 15000 });
+    await upload.click();
+    await (await chooser).setFiles(file);
+  }
   const deadline = Date.now() + 120000;
   // A finished upload usually lands in the prompt by itself; otherwise select it (and press Add).
   while (await chips.count() <= before) {
@@ -199,7 +217,7 @@ async function addReference(page, file) {
   }
   const backdrop = page.locator('.cdk-overlay-backdrop');
   if (await backdrop.count()) await backdrop.last().click().catch(() => {});
-  logger.info('Reference added', { file: name });
+  logger.info('Reference added', { file: name, reused });
 }
 
 async function downloadOptions(page, count, size, outputDir, base) {
@@ -259,8 +277,12 @@ async function runGenerateImage(job, args) {
     await applyAgentSettings(page, { ratio, count, model, neverConfirm: autoConfirm });
 
     // Fresh agent session per job so earlier chat context cannot leak into this prompt.
-    await btn(page, UI.newSession).click();
-    await page.waitForTimeout(1200);
+    // With the chat panel closed there is no "Start new session" button: that already is a fresh session.
+    const newSession = btn(page, UI.newSession);
+    if (await newSession.isVisible().catch(() => false)) {
+      await newSession.click();
+      await page.waitForTimeout(1200);
+    }
     const clear = btn(page, UI.clearPrompt);
     if (await clear.isVisible().catch(() => false)) {
       await clear.click();
