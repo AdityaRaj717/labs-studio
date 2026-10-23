@@ -23,7 +23,7 @@ from src.gen.queue import JobQueue, QueueSettings, count_statuses
 from src.gen.refmatch import match_refs
 from src.i18n import tr
 from src.ui.generator.config_panel import COMMON_FIELDS, ConfigPanel
-from src.ui.generator.prompt_model import PromptTableModel
+from src.ui.generator.prompt_model import COL_PROMPT, PromptTableModel
 from src.ui.generator.prompt_table import PromptTable
 from src.ui.generator.queue_bridge import QueueBridge
 from src.ui.generator.stats_header import StatsHeader
@@ -34,11 +34,12 @@ log = logging.getLogger(__name__)
 class GeneratorPage(QWidget):
     def __init__(self, page_key: str, provider: Provider, title: str = "", banner: str = "",
                  store=None, parent: QWidget | None = None, characters=None,
-                 alternatives: list[tuple[Provider, str]] | None = None):
+                 alternatives: list[tuple[Provider, str]] | None = None, scenes=None):
         """``alternatives``: extra (provider, banner) pairs offered in a Provider picker."""
         super().__init__(parent)
         self.page_key = page_key
         self._characters = characters  # CharacterStore; the app-wide one is loaded on first use
+        self._scenes = scenes  # the scene library (Phase 14b), same
         self.provider = provider
         self._store = store
         self._batch_folder: Path | None = None
@@ -118,7 +119,11 @@ class GeneratorPage(QWidget):
         self.table.open_folder_requested.connect(self.open_row_folder)
         self.table.characters_source = lambda: [(c.id, c.name) for c in self.characters.all()]
         self.table.character_requested.connect(self.set_character)
+        self.table.character_added.connect(self.add_character)
         self.model.character_name = lambda job: char_attach.character_label(job, self.characters)
+        self.table.scenes_source = lambda: [(s.id, s.name) for s in self.scenes.all()]
+        self.table.scene_requested.connect(self.set_scene)
+        self.model.scene_name = lambda job: char_attach.scene_label(job, self.scenes)
         # Phase 12: rows live in the active project and are saved shortly after each change.
         self._project = None
         self._save_timer = QTimer(self)
@@ -260,17 +265,43 @@ class GeneratorPage(QWidget):
                 char_attach.detach(job)
         self.model.refresh_all()
 
+    def add_character(self, rows: list[int], char_id: str) -> None:
+        """Put one more character in the rows' shot (Flow takes several by name)."""
+        if self._busy_guard():
+            return
+        for row in rows:
+            job = self.model.job_at(row)
+            char_attach.set_characters(job, char_attach.character_ids(job) + [char_id], self.characters)
+        self.model.refresh_all()
+
+    # ---- scenes (Phase 14b) ------------------------------------------
+    @property
+    def scenes(self):
+        if self._scenes is None:
+            from src.characters.store import scene_store
+
+            self._scenes = scene_store()
+        return self._scenes
+
+    def set_scene(self, rows: list[int], scene_id: str) -> None:
+        """Set the rows' scene (``""`` clears it)."""
+        if self._busy_guard():
+            return
+        for row in rows:
+            char_attach.set_scenes(self.model.job_at(row), [scene_id] if scene_id else [], self.scenes)
+        self.model.refresh_all()
+
     def match_characters(self) -> int:
-        """Attach characters to rows whose prompt names them."""
-        changed = char_attach.match_by_name(self.jobs, self.characters)
+        """Attach the characters and scenes each row's prompt names."""
+        changed = char_attach.match_by_name(self.jobs, self.characters, self.scenes)
         log.info(tr("gen_characters_matched", count=changed))
         self.model.refresh_all()
         return changed
 
     def _sync_characters(self) -> None:
         for job in self.jobs:
-            if job.character or job.character_refs:
-                char_attach.sync(job, self.characters)
+            if job.character or job.character_refs or job.cast or job.scenes or job.scene_refs:
+                char_attach.sync(job, self.characters, self.scenes)
 
     def edit_row(self, row: int) -> None:
         if self._busy_guard():
@@ -278,7 +309,7 @@ class GeneratorPage(QWidget):
         job = self.model.job_at(row)
         text, ok = QInputDialog.getMultiLineText(self, tr("gen_edit_title"), tr("gen_col_prompt"), job.prompt)
         if ok and text.strip():
-            self.model.setData(self.model.index(row, 1), text)
+            self.model.setData(self.model.index(row, COL_PROMPT), text)
 
     def remove_rows(self, rows: list[int]) -> None:
         if self._busy_guard():

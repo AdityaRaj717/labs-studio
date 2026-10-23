@@ -15,9 +15,10 @@ from PySide6.QtWidgets import (
     QTabWidget, QVBoxLayout, QWidget,
 )
 
+from src import features
 from src.i18n import tr
 from src.stats.store import FIELDS, StatsStore, default_stats
-from src.ui.webhook.backend import PageBackend
+from src.ui.webhook.backend import GENERATOR_PAGES, PageBackend
 from src.webhook.server import DEFAULT_HOST, DEFAULT_PORT, RequestRecord, WebhookServer, new_token
 
 log = logging.getLogger(__name__)
@@ -121,7 +122,8 @@ class WebhookPage(QWidget):
         self.store = store
         self.stats = stats or default_stats()
         self.switch_page = switch_page
-        self.backend = PageBackend(page_lookup or (lambda key: None), self.stats, parent=self)
+        self.backend = PageBackend(page_lookup or (lambda key: None), self.stats,
+                                   page_keys=features.visible_pages(GENERATOR_PAGES), parent=self)
         self.server: WebhookServer | None = None
         self._error = ""  # why the last start failed, shown until the next start
         self.relay = _Relay(self)
@@ -192,6 +194,7 @@ class WebhookPage(QWidget):
         buttons = QHBoxLayout()
         buttons.addWidget(self.btn_toggle)
         buttons.addWidget(self.btn_demo)
+        self.btn_demo.setVisible(features.shown("webhook:demo"))
         buttons.addStretch(1)
 
         self.example = QPlainTextEdit()
@@ -285,7 +288,7 @@ class WebhookPage(QWidget):
             self.status.setText(self._error or tr("wh_stopped"))
         token = self.server.token if on else self.token.text().strip()
         self.example.setPlainText(
-            curl_example(self.url, token) + "\n\n" + tr("wh_example_status", url=self.url))
+            curl_example(self.url, token, self.backend.page_keys[0] if self.backend.page_keys else "demo") + "\n\n" + tr("wh_example_status", url=self.url))
 
     def _log_request(self, rec: RequestRecord) -> None:
         self._append_log(f"{rec.client}  {rec.method} {rec.path}  → {rec.status}")

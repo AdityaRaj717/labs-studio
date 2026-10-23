@@ -1,4 +1,9 @@
-"""CharactersPage: list of saved characters on the left, the selected one's editor on the right."""
+"""CharactersPage: list of saved characters on the left, the selected one's editor on the right.
+
+Phase 14b: the same page with ``kind="scene"`` is the Scenes page (reusable places:
+name, description, images, no voice). Both show where the entry is set up in
+Google Flow and can set it up in the active project's Flow project.
+"""
 
 from __future__ import annotations
 
@@ -13,7 +18,8 @@ from PySide6.QtWidgets import (
     QListWidget, QListWidgetItem, QMessageBox, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget,
 )
 
-from src.characters.store import CharacterStore, default_store
+from src import features
+from src.characters.store import CharacterStore, default_store, scene_store
 from src.characters.voices import VOICES, preview_voice, voice_label
 from src.gen.refmatch import IMAGE_EXTS
 from src.i18n import tr
@@ -35,6 +41,20 @@ def _thumb(path: Path, size: int = THUMB) -> QIcon:
 
 class _PreviewSignals(QObject):
     done = Signal(str, str)  # (wav path, error)
+    flow_done = Signal(str, str)  # (entry id, error) after a Flow setup
+
+
+def _flow_setup(kind: str, entry_id: str) -> None:
+    """Set the entry up in the active project's Flow project (worker thread)."""
+    from src import projects
+    from src.web.flow_mcp import flow_mcp
+
+    project = projects.current()
+    if project is None:
+        raise RuntimeError(tr("char_flow_no_project"))
+    mcp = flow_mcp()
+    url = mcp.ensure_project(project)
+    mcp.sync.ensure(kind, entry_id, url)
 
 
 class RefList(QListWidget):
@@ -75,19 +95,25 @@ class RefList(QListWidget):
 
 class CharactersPage(QWidget):
     def __init__(self, store: CharacterStore | None = None, key_source=None, transport=None,
-                 parent: QWidget | None = None):
+                 parent: QWidget | None = None, kind: str = "character", flow_setup=_flow_setup):
         super().__init__(parent)
-        self.store = store or default_store()
+        self.kind = kind
+        self.store = store or (scene_store() if kind == "scene" else default_store())
+        self._flow_setup = flow_setup
+        prefix = "scene" if kind == "scene" else "char"
+        self._k = lambda key: f"{prefix}_{key}"  # the kind's own string for "new", "empty"...
+        flow_only = features.flow_only()
         self._key_source = key_source
         self._transport = transport
         self._current: str = ""
         self._player = None
         self._signals = _PreviewSignals(self)
         self._signals.done.connect(self._preview_done)
+        self._signals.flow_done.connect(self._flow_done)
 
-        heading = QLabel(tr("nav_characters"))
+        heading = QLabel(tr("nav_scenes" if kind == "scene" else "nav_characters"))
         heading.setStyleSheet("font-size: 18px; font-weight: 600;")
-        intro = QLabel(tr("char_intro"))
+        intro = QLabel(tr("scene_intro" if kind == "scene" else "char_intro_flow" if flow_only else "char_intro"))
         intro.setWordWrap(True)
         intro.setObjectName("DemoBanner")
 
@@ -96,7 +122,7 @@ class CharactersPage(QWidget):
         self.list.setIconSize(QSize(40, 40))
         self.list.setFixedWidth(260)
         self.list.currentItemChanged.connect(lambda cur, _prev: self._select(cur.data(ROLE_ID) if cur else ""))
-        self.btn_new = QPushButton(tr("char_new"))
+        self.btn_new = QPushButton(tr(self._k("new")))
         self.btn_new.clicked.connect(lambda: self.new_character())
         self.btn_delete = QPushButton(tr("char_delete"))
         self.btn_delete.clicked.connect(lambda: self.delete_current())
@@ -120,7 +146,8 @@ class CharactersPage(QWidget):
         voice_row.addWidget(self.voice_combo, 1)
         voice_row.addWidget(self.btn_preview)
         self.notes_edit = QPlainTextEdit()
-        self.notes_edit.setPlaceholderText(tr("char_notes_hint"))
+        self.notes_edit.setPlaceholderText(tr(
+            "scene_notes_hint" if kind == "scene" else "char_notes_flow_hint" if flow_only else "char_notes_hint"))
         self.notes_edit.setMaximumHeight(110)
         self.refs = RefList()
         self.refs.files_dropped.connect(self.add_images)
@@ -133,11 +160,26 @@ class CharactersPage(QWidget):
         self.btn_save.clicked.connect(lambda: self.save_current())
         self.status = QLabel("")
         self.status.setWordWrap(True)
+        self.flow_label = QLabel("")
+        self.flow_label.setWordWrap(True)
+        self.btn_flow = QPushButton(tr("char_flow_sync"))
+        self.btn_flow.setToolTip(tr("char_flow_sync_tip"))
+        self.btn_flow.clicked.connect(lambda: self.setup_in_flow())
+        flow_row = QHBoxLayout()
+        flow_row.addWidget(self.flow_label, 1)
+        flow_row.addWidget(self.btn_flow)
 
         form = QFormLayout()
         form.addRow(tr("char_name"), self.name_edit)
-        form.addRow(tr("char_voice"), voice_row)
-        form.addRow(tr("char_notes"), self.notes_edit)
+        # Voices need a Gemini key (TTS); places have none.
+        self.voice_row_shown = kind != "scene" and features.shown("characters:voice")
+        if self.voice_row_shown:
+            form.addRow(tr("char_voice"), voice_row)
+        else:
+            for w in (self.voice_combo, self.btn_preview):
+                w.setVisible(False)
+        form.addRow(tr("scene_notes" if kind == "scene" else "char_notes"), self.notes_edit)
+        form.addRow(tr("char_flow"), flow_row)
         ref_buttons = QHBoxLayout()
         ref_buttons.addWidget(self.btn_add_refs)
         ref_buttons.addWidget(self.btn_remove_refs)
@@ -145,13 +187,13 @@ class CharactersPage(QWidget):
         ref_buttons.addWidget(self.btn_save)
         right = QVBoxLayout()
         right.addLayout(form)
-        right.addWidget(QLabel(tr("char_refs")))
+        right.addWidget(QLabel(tr("scene_refs" if kind == "scene" else "char_refs_flow" if flow_only else "char_refs")))
         right.addWidget(self.refs, 1)
         right.addLayout(ref_buttons)
         right.addWidget(self.status)
         self.editor = QWidget()
         self.editor.setLayout(right)
-        self.empty = QLabel(tr("char_empty"))
+        self.empty = QLabel(tr(self._k("empty")))
         self.empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         body = QHBoxLayout()
@@ -199,7 +241,28 @@ class CharactersPage(QWidget):
         self.voice_combo.setCurrentIndex(max(idx, 0))
         self.notes_edit.setPlainText(char.notes)
         self._fill_refs()
+        self._fill_flow()
         self.status.setText("")
+
+    def _project_url(self) -> str:
+        from src import projects
+
+        project = projects.current()
+        return project.flow_url if project is not None else ""
+
+    def _fill_flow(self) -> None:
+        char = self.store.get(self._current)
+        if not char:
+            return
+        here = self._project_url()
+        lines = []
+        if here and here in char.flow:
+            lines.append(tr("char_flow_here", name=char.flow[here]))
+        others = [u for u in char.flow if u != here]
+        if others:
+            lines.append(tr("char_flow_other", count=len(others)))
+        self.flow_label.setText(" ".join(lines) or tr("char_flow_none"))
+        self.flow_label.setToolTip("\n".join(f"{n}: {u}" for u, n in char.flow.items()))
 
     def _fill_refs(self) -> None:
         self.refs.clear()
@@ -211,7 +274,7 @@ class CharactersPage(QWidget):
 
     # ---- actions -----------------------------------------------------
     def new_character(self, name: str = "") -> str:
-        base = name or tr("char_default_name")
+        base = name or tr(self._k("default_name"))
         taken = {c.name for c in self.store.all()}
         candidate, n = base, 2
         while candidate in taken:
@@ -231,19 +294,19 @@ class CharactersPage(QWidget):
             return
         other = self.store.by_name(name)
         if other and other.id != self._current:
-            self.status.setText(tr("char_name_taken", name=name))
+            self.status.setText(tr(self._k("name_taken"), name=name))
             return
         self.store.update(self._current, name=name, notes=self.notes_edit.toPlainText(),
                           voice=self.voice_combo.currentData() or "")
         self.reload(self._current)
         self.status.setText(tr("char_saved"))
-        log.info(tr("char_saved_log", name=name))
+        log.info(tr(self._k("saved_log"), name=name))
 
     def delete_current(self, confirm: bool = True) -> None:
         char = self.store.get(self._current)
         if not char:
             return
-        if confirm and QMessageBox.question(self, tr("char_delete"), tr("char_delete_confirm", name=char.name)) \
+        if confirm and QMessageBox.question(self, tr("char_delete"), tr(self._k("delete_confirm"), name=char.name)) \
                 != QMessageBox.StandardButton.Yes:
             return
         self.store.delete(char.id)
@@ -270,6 +333,38 @@ class CharactersPage(QWidget):
         if names:
             self.reload(self._current)
         return len(names)
+
+    # ---- Google Flow (Phase 14b) ---------------------------------------
+    def setup_in_flow(self) -> None:
+        """Create (or copy) the selected entry in the active project's Flow project."""
+        char = self.store.get(self._current)
+        if not char:
+            return
+        self.save_current()
+        self.btn_flow.setEnabled(False)
+        self.status.setText(tr("char_flow_running", name=char.name))
+        entry_id, kind = char.id, self.kind
+
+        def work() -> None:
+            try:
+                self._flow_setup(kind, entry_id)
+                self._signals.flow_done.emit(entry_id, "")
+            except Exception as exc:  # noqa: BLE001 - shown to the user
+                self._signals.flow_done.emit(entry_id, str(exc) or type(exc).__name__)
+
+        threading.Thread(target=work, name="flow-character", daemon=True).start()
+
+    def _flow_done(self, entry_id: str, error: str) -> None:
+        self.btn_flow.setEnabled(True)
+        char = self.store.get(entry_id)
+        if error:
+            self.status.setText(tr("char_flow_failed", error=error))
+            log.error(tr("char_flow_failed", error=error))
+        elif char is not None:
+            self.status.setText(tr("char_flow_done", name=char.name))
+            log.info(tr("char_flow_done", name=char.name))
+        if entry_id == self._current:
+            self._fill_flow()
 
     # ---- voice preview -------------------------------------------------
     def _preview_path(self, voice: str) -> Path:

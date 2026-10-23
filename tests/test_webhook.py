@@ -90,7 +90,7 @@ def setup(qapp, tmp_path, stats):
 def test_parse_submit_normalises_and_validates():
     req = parse_submit({"page": "demo", "prompt": "  a fox  "})
     assert req == {"page": "demo", "prompts": ["a fox"], "refs": [], "character": "", "start": True,
-                   "project": ""}
+                   "characters": [], "scenes": [], "project": ""}
     assert parse_submit({"page": "x", "prompts": ["a", "b"], "start": False})["prompts"] == ["a", "b"]
     for bad in ([], {"prompt": "a"}, {"page": "x"}, {"page": "x", "prompts": []},
                 {"page": "x", "prompts": ["", "a"]}, {"page": "x", "prompt": 3},

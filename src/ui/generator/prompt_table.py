@@ -14,7 +14,8 @@ from src import theme
 from src.gen.models import JobStatus
 from src.i18n import tr
 from src.ui.generator.prompt_model import (
-    COL_INDEX, COL_OUTPUT, COL_PROGRESS, COL_PROMPT, COL_REFS, COL_STATUS, STATUS_COLORS, THUMB_HEIGHT,
+    COL_CHARACTER, COL_INDEX, COL_OUTPUT, COL_PROGRESS, COL_PROMPT, COL_REFS, COL_SCENE, COL_STATUS,
+    STATUS_COLORS, THUMB_HEIGHT,
 )
 
 IMPORT_SUFFIXES = {".txt", ".text", ".csv", ".xlsx", ".xlsm"}
@@ -68,6 +69,8 @@ class PromptTable(QTableView):
     open_output_requested = Signal(int)   # row
     open_folder_requested = Signal(int)   # row
     character_requested = Signal(list, str)  # rows, character id ("" = detach)
+    character_added = Signal(list, str)      # rows, character id joining the shot (Phase 14b)
+    scene_requested = Signal(list, str)      # rows, scene id ("" = clear) (Phase 14b)
 
     def __init__(self, model, parent=None):
         super().__init__(parent)
@@ -84,7 +87,8 @@ class PromptTable(QTableView):
         self.setIconSize(QSize(THUMB_HEIGHT * 2, THUMB_HEIGHT))
         header = self.horizontalHeader()
         header.setSectionResizeMode(COL_PROMPT, QHeaderView.ResizeMode.Stretch)
-        for col, width in ((COL_INDEX, 44), (COL_REFS, 90), (COL_STATUS, 100),
+        for col, width in ((COL_INDEX, 44), (COL_CHARACTER, 110), (COL_SCENE, 100), (COL_REFS, 50),
+                           (COL_STATUS, 100),
                            (COL_PROGRESS, 120), (COL_OUTPUT, 150)):
             header.setSectionResizeMode(col, QHeaderView.ResizeMode.Fixed)
             header.resizeSection(col, width)
@@ -95,6 +99,7 @@ class PromptTable(QTableView):
         self.customContextMenuRequested.connect(self._context_menu)
         self.doubleClicked.connect(self._double_clicked)
         self.characters_source = None  # callable -> list[(id, name)], set by GeneratorPage
+        self.scenes_source = None  # callable -> list[(id, name)], set by GeneratorPage (Phase 14b)
 
     # ---- empty state -------------------------------------------------
     def paintEvent(self, event) -> None:  # noqa: N802
@@ -150,6 +155,8 @@ class PromptTable(QTableView):
         menu.addAction(tr("gen_remove"), lambda: self.remove_requested.emit(rows))
         if self.characters_source is not None:
             self._character_menu(menu, rows, job)
+        if self.scenes_source is not None:
+            self._scene_menu(menu, rows, job)
         menu.addSeparator()
         out = menu.addAction(tr("gen_open_output"), lambda: self.open_output_requested.emit(index.row()))
         folder = menu.addAction(tr("gen_open_folder"), lambda: self.open_folder_requested.emit(index.row()))
@@ -166,13 +173,30 @@ class PromptTable(QTableView):
             act.setChecked(job.character == char_id)
         if not chars:
             sub.addAction(tr("gen_no_characters")).setEnabled(False)
+        if chars:
+            add = menu.addMenu(tr("gen_add_character"))
+            for char_id, name in chars:
+                act = add.addAction(name, lambda cid=char_id: self.character_added.emit(rows, cid))
+                act.setEnabled(job.character != char_id and char_id not in job.cast)
         detach = menu.addAction(tr("gen_detach_character"), lambda: self.character_requested.emit(rows, ""))
         detach.setEnabled(any(self.model().job_at(r).character for r in rows))
+
+    def _scene_menu(self, menu: QMenu, rows: list[int], job) -> None:
+        sub = menu.addMenu(tr("gen_set_scene"))
+        scenes = self.scenes_source()
+        for scene_id, name in scenes:
+            act = sub.addAction(name, lambda sid=scene_id: self.scene_requested.emit(rows, sid))
+            act.setCheckable(True)
+            act.setChecked(scene_id in job.scenes)
+        if not scenes:
+            sub.addAction(tr("gen_no_scenes")).setEnabled(False)
+        clear = menu.addAction(tr("gen_clear_scene"), lambda: self.scene_requested.emit(rows, ""))
+        clear.setEnabled(any(self.model().job_at(r).scenes for r in rows))
 
     def _double_clicked(self, index) -> None:
         if index.column() == COL_OUTPUT:
             self.open_output_requested.emit(index.row())
-        elif index.column() in (COL_INDEX, COL_REFS, COL_STATUS, COL_PROGRESS):
+        elif index.column() in (COL_INDEX, COL_CHARACTER, COL_SCENE, COL_REFS, COL_STATUS, COL_PROGRESS):
             self.edit_requested.emit(index.row())
         else:
             self.edit(index)

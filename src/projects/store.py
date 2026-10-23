@@ -49,6 +49,9 @@ def job_to_row(job: Job) -> dict[str, Any]:
         "refs": [str(p) for p in job.refs],
         "character": job.character,
         "character_refs": [str(p) for p in job.character_refs],
+        "cast": list(job.cast),
+        "scenes": list(job.scenes),
+        "scene_refs": [str(p) for p in job.scene_refs],
         "status": job.status.value,
         "outputs": [str(p) for p in job.outputs],
         "error": job.error,
@@ -71,6 +74,9 @@ def row_to_job(row: dict[str, Any], index: int) -> Job:
         error=str(row.get("error", "")),
         character=str(row.get("character", "")),
         character_refs=[Path(p) for p in row.get("character_refs", [])],
+        cast=[str(c) for c in row.get("cast", [])],
+        scenes=[str(c) for c in row.get("scenes", [])],
+        scene_refs=[Path(p) for p in row.get("scene_refs", [])],
     )
 
 
@@ -141,6 +147,10 @@ class Project:
     # ---- prompt rows -------------------------------------------------------
     def rows(self, page_key: str) -> list[dict[str, Any]]:
         return list((self.data.get("rows") or {}).get(page_key, []))
+
+    def all_rows(self) -> list[dict[str, Any]]:
+        """The saved rows of every page (Flow sync looks for the characters they use)."""
+        return [r for rows in (self.data.get("rows") or {}).values() for r in rows or []]
 
     def set_rows(self, page_key: str, rows: list[dict[str, Any]], save: bool = True) -> None:
         self.data.setdefault("rows", {})[page_key] = rows

@@ -22,6 +22,8 @@ DEFAULTS: dict[str, Any] = {
     "theme": "dark",
     "sidebar_collapsed": False,
     "window": {"geometry": None},
+    # Phase 14b: show only what works through the Google Flow web path (src/features.py).
+    "features": {"flow_only": True},
     # Phase 12: projects. data_root "" = the app data folder; active = project id.
     "projects": {"data_root": "", "active": ""},
     # Phase 11: web-session providers (real Chrome over CDP, profile kept off C:).

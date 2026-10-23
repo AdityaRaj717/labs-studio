@@ -148,7 +148,7 @@ def _gen_store(tmp_path, key):
 def test_character_refs_reach_gemini_request(qapp, tmp_path, store, images):
     from src.gen.gemini_image import GeminiImageProvider
     from src.ui.generator.page import GeneratorPage
-    from src.ui.generator.prompt_model import COL_REFS
+    from src.ui.generator.prompt_model import COL_CHARACTER, COL_REFS
 
     sent: list[dict] = []
     out_png = base64.b64encode(images[0].read_bytes()).decode()
@@ -163,7 +163,8 @@ def test_character_refs_reach_gemini_request(qapp, tmp_path, store, images):
     page = GeneratorPage("t_gem", provider, store=_gen_store(tmp_path, "t_gem"), characters=store)
     page.add_prompts(["Mia on a beach", "an empty room"])
     page.set_character([0], mia.id)
-    assert page.model.data(page.model.index(0, COL_REFS)) == "@Mia 2"
+    assert page.model.data(page.model.index(0, COL_REFS)) == "2"
+    assert page.model.data(page.model.index(0, COL_CHARACTER)) == "Mia"
 
     assert page.start() == 2
     assert run_until(qapp, lambda: not page.queue.is_running() and len(sent) == 2)

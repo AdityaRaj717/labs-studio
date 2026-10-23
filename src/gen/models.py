@@ -44,6 +44,9 @@ class Job:
     id: int = field(default_factory=lambda: next(_ids))
     character: str = ""  # attached character id (Phase 6), "" = none
     character_refs: list[Path] = field(default_factory=list)  # the refs in ``refs`` it brought
+    cast: list[str] = field(default_factory=list)  # more character ids in the shot (Phase 14b)
+    scenes: list[str] = field(default_factory=list)  # scene (place) ids (Phase 14b)
+    scene_refs: list[Path] = field(default_factory=list)  # the refs in ``refs`` the scenes brought
 
     def reset(self) -> None:
         self.status = JobStatus.PENDING

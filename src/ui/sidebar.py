@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
 )
 
 from src import APP_NAME, __version__
-from src import theme
+from src import features, theme
 from src.i18n import tr
 
 ICON_FONT = "Segoe MDL2 Assets"
@@ -30,6 +30,7 @@ NAV_ITEMS: list[tuple[str, str, str]] = [
     ("google_pics", "nav_google_pics", ""),
     ("projects", "nav_projects", ""),
     ("characters", "nav_characters", ""),
+    ("scenes", "nav_scenes", ""),
     ("workflow", "nav_workflow", ""),
     ("video_editor", "nav_video_editor", ""),
     ("upscaler", "nav_upscaler", ""),
@@ -145,6 +146,7 @@ class Sidebar(QWidget):
             btn.clicked.connect(lambda _checked=False, k=key: self.page_requested.emit(k))
             self.group.addButton(btn)
             self.buttons[key] = btn
+            btn.setVisible(features.page_shown(key))  # Phase 14b: Flow-only mode
             nav_layout.addWidget(btn)
         nav_layout.addStretch(1)
         scroll = QScrollArea()

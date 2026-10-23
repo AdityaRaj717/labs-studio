@@ -9,7 +9,7 @@ from PySide6.QtCore import QByteArray
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QMainWindow, QMessageBox, QStackedWidget, QWidget
 
 from src import APP_NAME, __version__
-from src import config, theme
+from src import config, features, theme
 from src.i18n import tr
 from src.ui.log_panel import LogPanel
 from src.ui.pages.placeholder import PlaceholderPage
@@ -51,7 +51,7 @@ class MainWindow(QMainWindow):
         self.sidebar.version_clicked.connect(self.show_about)
 
         self._restore_geometry()
-        self.switch_page(NAV_KEYS[0])
+        self.switch_page(next((k for k in NAV_KEYS if features.page_shown(k)), NAV_KEYS[0]))
 
     # ---- page router -------------------------------------------------
     def _default_factories(self) -> dict[str, PageFactory]:

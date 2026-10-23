@@ -18,6 +18,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from src.characters.flow_sync import SyncError
 from src.gen.models import Job, OutputFile
 from src.gen.provider import ConfigField, Provider, ProviderError, RunContext, StopRequested
 from src.web.adapters.base import BLOCK_MESSAGES, load_selectors
@@ -100,13 +101,20 @@ class WebFlowImageProvider(Provider):
     def generate(self, job: Job, options: dict[str, Any], ctx: RunContext) -> list[OutputFile]:
         timeout = float(options.get("timeout", 300))
         _, _, max_count = _flow_options()
+        # Library characters and scenes go to Flow by name (set up in its Characters
+        # section first), so their images are not uploaded as loose references.
+        from src.characters.attach import character_ids
+
+        chars, scenes = character_ids(job), list(job.scenes)
+        library = set(job.character_refs) | set(job.scene_refs)
+        refs = [r for r in job.refs if r not in library] if chars or scenes else list(job.refs)
         args = {
             "prompt": job.prompt,
             "model": options.get("model") or None,
             "ratio": options.get("aspect") or "1:1",
             "count": max(1, min(int(options.get("count", 1)), max_count)),
             "download_size": options.get("download_size") or "1K",
-            "reference_images": [str(Path(r).resolve()) for r in job.refs],
+            "reference_images": [str(Path(r).resolve()) for r in refs],
             "filename": "img",
         }
         args = {k: v for k, v in args.items() if v not in (None, [])}
@@ -121,7 +129,8 @@ class WebFlowImageProvider(Provider):
             out = self._out_dir(job)
             args["output_folder"] = str(out)
             try:
-                result = self.backend.generate_image(args, timeout)
+                extra = {"characters": chars, "scenes": scenes} if chars or scenes else {}
+                result = self.backend.generate_image(args, timeout, **extra)
                 used = self.pacer.record_use()
                 log.info("%s: job %d done via MCP (%d today): %s", SITE_TITLE, job.index, used,
                          str(result.get("agent_reply", ""))[:120])
@@ -137,6 +146,8 @@ class WebFlowImageProvider(Provider):
                 raise ProviderError(f"{SITE_TITLE} MCP did not answer in time", retryable=True) from None
             except ProviderError:
                 raise
+            except SyncError as exc:
+                raise ProviderError(f"{SITE_TITLE}: {exc}") from None
             except Exception as exc:  # noqa: BLE001 - e.g. Chrome could not be launched
                 raise ProviderError(f"{type(exc).__name__}: {exc}", stop_queue=True) from None
             finally:

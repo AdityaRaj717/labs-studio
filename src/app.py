@@ -26,11 +26,16 @@ def register_pages(window) -> None:
     from src.ui.pages.settings_page import SettingsPage
     from src.ui.editor import editor_page
 
+    from src import features  # Phase 14b: Flow-only mode hides what does not work yet
     from src.gen.web_flow_image import WebFlowImageProvider  # Phase 11a
 
-    window.register_page("flow_image", lambda: GeneratorPage(
-        "flow_image", GeminiImageProvider(), title=tr("nav_img"), banner=tr("gemini_banner"),
-        alternatives=[(WebFlowImageProvider(), tr("web_flow_banner"))]))
+    if features.shown("provider:gemini_image"):
+        window.register_page("flow_image", lambda: GeneratorPage(
+            "flow_image", GeminiImageProvider(), title=tr("nav_img"), banner=tr("gemini_banner"),
+            alternatives=[(WebFlowImageProvider(), tr("web_flow_banner"))]))
+    else:
+        window.register_page("flow_image", lambda: GeneratorPage(
+            "flow_image", WebFlowImageProvider(), title=tr("nav_img"), banner=tr("web_flow_banner")))
     window.register_page("flow_video", lambda: GeneratorPage(
         "flow_video", GeminiVideoProvider(), title=tr("nav_video"), banner=tr("omni_banner")))
     window.register_page("grok", lambda: GeneratorPage(
@@ -51,6 +56,7 @@ def register_pages(window) -> None:
 
     from src.ui.characters.page import CharactersPage  # Phase 6
     window.register_page("characters", CharactersPage)
+    window.register_page("scenes", lambda: CharactersPage(kind="scene"))  # Phase 14b
 
     if window.projects is not None:  # Phase 12
         from src.ui.projects.page import ProjectsPage

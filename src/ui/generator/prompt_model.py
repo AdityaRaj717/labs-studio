@@ -10,9 +10,9 @@ from PySide6.QtGui import QColor, QPainter, QPixmap, QPolygonF
 from src.gen.models import Job, JobStatus
 from src.i18n import tr
 
-COL_INDEX, COL_PROMPT, COL_REFS, COL_STATUS, COL_PROGRESS, COL_OUTPUT = range(6)
-COLUMN_KEYS = ("gen_col_index", "gen_col_prompt", "gen_col_refs", "gen_col_status",
-               "gen_col_progress", "gen_col_output")
+COL_INDEX, COL_PROMPT, COL_CHARACTER, COL_SCENE, COL_REFS, COL_STATUS, COL_PROGRESS, COL_OUTPUT = range(8)
+COLUMN_KEYS = ("gen_col_index", "gen_col_prompt", "gen_col_character", "gen_col_scene", "gen_col_refs",
+               "gen_col_status", "gen_col_progress", "gen_col_output")
 THUMB_HEIGHT = 56
 VIDEO_EXTS = {".mp4", ".webm", ".mov"}
 
@@ -62,6 +62,7 @@ class PromptTableModel(QAbstractTableModel):
         self._thumbs: dict[Path, QPixmap] = {}
         self.editable = True
         self.character_name = None  # callable(job) -> str, set by GeneratorPage (Phase 6)
+        self.scene_name = None  # callable(job) -> str, set by GeneratorPage (Phase 14b)
 
     # ---- data access -------------------------------------------------
     def rowCount(self, parent: Index = QModelIndex()) -> int:  # noqa: N802
@@ -91,10 +92,12 @@ class PromptTableModel(QAbstractTableModel):
                 return job.index
             if col == COL_PROMPT:
                 return job.prompt
+            if col == COL_CHARACTER:
+                return self.character_name(job) if self.character_name else ""
+            if col == COL_SCENE:
+                return self.scene_name(job) if self.scene_name else ""
             if col == COL_REFS:
-                count = str(len(job.refs)) if job.refs else ""
-                name = self.character_name(job) if self.character_name else ""
-                return f"@{name} {count}".strip() if name else count
+                return str(len(job.refs)) if job.refs else ""
             if col == COL_STATUS:
                 text = tr(f"status_{job.status.value}")
                 if job.status is JobStatus.RUNNING and job.attempts > 1:

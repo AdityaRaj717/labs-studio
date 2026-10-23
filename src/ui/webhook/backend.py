@@ -39,6 +39,8 @@ def job_info(page_key: str, job: Job) -> dict[str, Any]:
         "outputs": [str(p) for p in job.outputs],
         "refs": [str(p) for p in job.refs],
         "character": job.character,
+        "characters": [job.character, *job.cast] if job.character else list(job.cast),
+        "scenes": list(job.scenes),
     }
 
 
@@ -131,6 +133,18 @@ class PageBackend(QObject):
             return out
         return self.on_gui(build)
 
+    @staticmethod
+    def _lookup(store, names: list[str], kind: str) -> list[str]:
+        """Library ids for names; an unknown name is a 400 that lists the known ones."""
+        ids = []
+        for name in names:
+            entry = store.by_name(name)
+            if entry is None:
+                known = ", ".join(e.name for e in store.all()) or "none yet"
+                raise ApiError(400, f"no {kind} named {name!r} (known: {known})")
+            ids.append(entry.id)
+        return ids
+
     def submit(self, req: dict) -> dict:
         refs = [Path(r) for r in req.get("refs", [])]
         missing = [str(r) for r in refs if not r.is_file()]
@@ -140,20 +154,20 @@ class PageBackend(QObject):
         def add() -> dict:
             project = self._project(req.get("project", ""))
             page = self._page(req["page"])
-            char = None
-            if req.get("character"):
-                char = page.characters.by_name(req["character"])
-                if char is None:
-                    raise ApiError(400, f"no character named {req['character']!r}")
+            names = req.get("characters") or ([req["character"]] if req.get("character") else [])
+            chars = self._lookup(page.characters, names, "character")
+            scenes = self._lookup(page.scenes, req.get("scenes") or [], "scene") if req.get("scenes") else []
             jobs = page.add_prompts(req["prompts"])
-            if char is not None or refs:
+            if chars or scenes or refs:
                 from src.characters import attach
                 for job in jobs:
                     for r in refs:
                         if r not in job.refs:
                             job.refs.append(r)
-                    if char is not None:
-                        attach.attach(job, char.id, page.characters)
+                    if chars:
+                        attach.set_characters(job, chars, page.characters)
+                    if scenes:
+                        attach.set_scenes(job, scenes, page.scenes)
                     page.model.refresh_job(job.id)
             with self._lock:
                 for job in jobs:

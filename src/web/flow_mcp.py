@@ -6,6 +6,10 @@ drives Flow in the Chrome the app launched (same CDP port), so the user's one
 signed-in profile is shared. Each app project (``src.projects``) has its own Flow
 project: ``ensure_project`` opens it (creating and titling it when missing) and
 jobs pass its URL. Without projects, jobs go to the ``web.flow_campaign`` project.
+
+Phase 14b: library characters and scenes (``src.characters``) are set up in the
+Flow project before a job that uses them (``src.characters.flow_sync``), and when
+a project becomes active (``sync_project``). Jobs then pass them by Flow name.
 """
 
 from __future__ import annotations
@@ -40,6 +44,7 @@ class FlowMcp:
         self._lock = threading.Lock()
         self._project_lock = threading.Lock()
         self._opened: tuple[str, str, str] | None = None  # (project id, url, title) open in the tab
+        self._sync = None
 
     @property
     def session(self):
@@ -118,6 +123,29 @@ class FlowMcp:
                 raise
         raise AssertionError("unreachable")
 
+    def call_tool(self, tool: str, args: dict[str, Any], timeout: float) -> dict[str, Any]:
+        return self._call(tool, args, timeout)
+
+    @property
+    def sync(self):
+        """The ``FlowSync`` over the app-wide character and scene libraries."""
+        if self._sync is None:
+            from src.characters.flow_sync import FlowSync
+            from src.characters.store import default_store, scene_store
+
+            self._sync = FlowSync(self.call_tool, default_store(), scene_store())
+        return self._sync
+
+    def sync_project(self, project) -> dict[str, Any]:
+        """Set up every character and scene the project's prompt rows use in its Flow project."""
+        from src.characters.flow_sync import used_in_rows
+
+        url = self.ensure_project(project)
+        chars, scenes = used_in_rows(project.all_rows())
+        if not chars and not scenes:
+            return {"characters": {}, "scenes": {}, "errors": []}
+        return self.sync.sync(url, chars, scenes)
+
     def open_project(self, name: str, url: str = "", create: bool = True) -> dict[str, Any]:
         """``flow_open_project``: open ``url`` (or create a project) titled ``name``."""
         args = {"name": name, "create_if_missing": create}
@@ -141,10 +169,13 @@ class FlowMcp:
             self._opened = (project.id, url, project.name)
             return url
 
-    def generate_image(self, args: dict[str, Any], timeout: float) -> dict[str, Any]:
+    def generate_image(self, args: dict[str, Any], timeout: float, characters: list[str] | None = None,
+                       scenes: list[str] | None = None) -> dict[str, Any]:
         """Call ``flow_generate_image`` (generating, not just preparing) and wait for it.
 
         With projects installed the job goes to the active project's Flow project.
+        ``characters`` / ``scenes`` are library ids: they are set up in that Flow
+        project first if needed and passed by their Flow names.
         """
         from src import projects
 
@@ -160,6 +191,10 @@ class FlowMcp:
         for attempt in (1, 2):
             if project is not None:
                 full["project_url"] = self.ensure_project(project)
+            if characters or scenes:
+                url = full.get("project_url") or self._campaign_url()
+                names, places = self.sync.names(url, characters or [], scenes or [])
+                full["characters"], full["scenes"] = names, places
             try:
                 return self._call("flow_generate_image", full, timeout=timeout + 240)
             except McpToolError as exc:
@@ -168,6 +203,11 @@ class FlowMcp:
                     continue
                 raise
         raise AssertionError("unreachable")
+
+    def _campaign_url(self) -> str:
+        """Without projects there is no URL to set characters up in."""
+        raise McpToolError("characters and scenes need an app project (Projects page)",
+                           {"error_code": "INVALID_PARAMS"})
 
     def status(self) -> dict[str, Any]:
         return self.ensure().call_tool("flow_status", {}, timeout=60)
@@ -185,12 +225,19 @@ def flow_mcp() -> FlowMcp:
         return _flow_mcp
 
 
-def open_project_async(project) -> threading.Thread:
-    """Open ``project``'s Flow project in the background (on switch, or from the Projects page)."""
+def open_project_async(project, sync: bool = True) -> threading.Thread:
+    """Open ``project``'s Flow project in the background (on switch, or from the Projects page),
+    then set up the characters and scenes its prompts use (``sync``)."""
     def run() -> None:
         try:
             url = flow_mcp().ensure_project(project)
             log.info("Flow project for %r: %s", project.name, url)
+            if sync:
+                res = flow_mcp().sync_project(project)
+                done = len(res["characters"]) + len(res["scenes"])
+                if done or res["errors"]:
+                    log.info("Flow characters/scenes for %r: %d ready, %d failed",
+                             project.name, done, len(res["errors"]))
         except Exception as exc:  # noqa: BLE001 - shown in the log; the next Flow job retries
             log.warning("Could not open the Flow project for %r: %s", project.name, exc)
 

@@ -2,8 +2,13 @@
 
 Layout under ``<AppData>/LabsStudio/characters/``::
 
-    characters.json          {"version": 1, "characters": [{id, name, notes, voice, refs}]}
+    characters.json          {"version": 1, "characters": [{id, name, notes, voice, refs, flow}]}
     <id>/<image files>       copies of the reference images (refs holds the file names)
+
+Scenes (Phase 14b: reusable places) use the same store under ``scenes/`` with
+``scenes.json``. Both libraries are global, not per project. ``flow`` maps a Flow
+project URL to the entry's name in that project's Characters section, so the app
+knows where it is already set up (``src.characters.flow_sync``).
 
 The store is Qt-free. Every change is written straight away (the file is tiny).
 """
@@ -14,6 +19,7 @@ import json
 import logging
 import os
 import shutil
+import threading
 import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -23,6 +29,7 @@ from src.gen.refmatch import IMAGE_EXTS
 log = logging.getLogger(__name__)
 
 INDEX_FILE = "characters.json"
+INDEX_FILES = {"character": "characters.json", "scene": "scenes.json"}
 VERSION = 1
 
 
@@ -33,6 +40,7 @@ class Character:
     voice: str = ""
     refs: list[str] = field(default_factory=list)  # file names inside the character's folder
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
+    flow: dict[str, str] = field(default_factory=dict)  # Flow project URL -> name there (14b)
 
     @classmethod
     def from_dict(cls, d: dict) -> "Character":
@@ -42,20 +50,24 @@ class Character:
             voice=str(d.get("voice") or ""),
             refs=[str(r) for r in d.get("refs") or [] if isinstance(r, str)],
             id=str(d.get("id") or uuid.uuid4().hex[:12]),
+            flow={str(k): str(v) for k, v in (d.get("flow") or {}).items() if k and v}
+            if isinstance(d.get("flow"), dict) else {},
         )
 
 
 class CharacterStore:
-    def __init__(self, root: Path | str):
+    def __init__(self, root: Path | str, kind: str = "character"):
         self.root = Path(root)
+        self.kind = kind  # "character" or "scene" (a place)
         self._chars: list[Character] = []
         self._listeners: list = []
+        self._lock = threading.RLock()  # Flow sync records names from worker threads
         self.load()
 
     # ---- persistence -------------------------------------------------
     @property
     def index_path(self) -> Path:
-        return self.root / INDEX_FILE
+        return self.root / INDEX_FILES.get(self.kind, INDEX_FILE)
 
     def load(self) -> None:
         self._chars = []
@@ -71,11 +83,12 @@ class CharacterStore:
                 self._chars.append(Character.from_dict(d))
 
     def save(self) -> None:
-        self.root.mkdir(parents=True, exist_ok=True)
-        data = {"version": VERSION, "characters": [asdict(c) for c in self._chars]}
-        tmp = self.index_path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-        os.replace(tmp, self.index_path)
+        with self._lock:
+            self.root.mkdir(parents=True, exist_ok=True)
+            data = {"version": VERSION, "characters": [asdict(c) for c in self._chars]}
+            tmp = self.index_path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+            os.replace(tmp, self.index_path)
         for listener in list(self._listeners):
             listener()
 
@@ -159,6 +172,26 @@ class CharacterStore:
             pass
         return True
 
+    # ---- Flow (Phase 14b) ----------------------------------------------
+    def set_flow(self, char_id: str, project_url: str, name: str) -> None:
+        """Record that the entry exists as ``name`` in the Flow project ``project_url``."""
+        with self._lock:
+            char = self._require(char_id)
+            if char.flow.get(project_url) == name:
+                return
+            char.flow[project_url] = name
+            self.save()
+
+    def drop_flow(self, char_id: str, project_url: str) -> bool:
+        """Forget the entry's Flow copy in ``project_url`` (it was deleted there)."""
+        with self._lock:
+            char = self.get(char_id)
+            if not char or project_url not in char.flow:
+                return False
+            del char.flow[project_url]
+            self.save()
+            return True
+
     def _require(self, char_id: str) -> Character:
         char = self.get(char_id)
         if not char:
@@ -182,6 +215,7 @@ class CharacterStore:
 
 
 _default: CharacterStore | None = None
+_scenes: CharacterStore | None = None
 
 
 def default_store() -> CharacterStore:
@@ -192,3 +226,13 @@ def default_store() -> CharacterStore:
 
         _default = CharacterStore(app_data_dir() / "characters")
     return _default
+
+
+def scene_store() -> CharacterStore:
+    """The app-wide scene (place) library, next to the characters."""
+    global _scenes
+    if _scenes is None:
+        from src.config import app_data_dir
+
+        _scenes = CharacterStore(app_data_dir() / "scenes", kind="scene")
+    return _scenes
