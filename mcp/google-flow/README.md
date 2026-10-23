@@ -195,10 +195,9 @@ google-flow-browser-mcp/
 │   │   ├── generate-image.js       # Image generation
 │   │   ├── generate-video.js       # Video generation (setup only)
 │   │   ├── download-latest.js      # Download generated files
-│   │   ├── create-character.js     # Create a character
-│   │   ├── import-character.js     # Import character JSON
-│   │   ├── open-characters.js      # List characters
-│   │   ├── create-scene.js         # Create a scene
+│   │   ├── create-character.js     # List / create characters (people and places)
+│   │   ├── import-character.js     # Copy a character from another project
+│   │   ├── create-scene.js         # List / create scenes (places kept as characters)
 │   │   ├── open-tools-gallery.js   # Open tools gallery
 │   │   ├── grid-architect.js       # Batch shot generation
 │   │   ├── discover-ui.js          # UI discovery & mapping
@@ -245,15 +244,17 @@ All tools are organized by function for easy discovery.
 | Tool | Description |
 |------|-------------|
 | `flow_generate_video` | Set up video generation (Omni Flash, Veo models, custom duration/ratio). ⚠️ **Stops at "ready to generate" — no credit consumed.** |
-| `flow_create_scene` | Create a video scene with characters and a text prompt |
 
 ### 👤 Characters
 
 | Tool | Description |
 |------|-------------|
-| `flow_create_character` | Create a new character with name, description, and optional reference images |
-| `flow_import_character` | Import a character from a saved JSON file |
-| `flow_open_characters` | Open the characters page and list all existing characters |
+| `flow_list_characters` | Names in a project's Characters section (`details: true` adds kind, info, url) |
+| `flow_create_character` | Create a named character from an image (local file or project image, free) or from a prompt (generates a portrait, `auto_confirm`) |
+| `flow_import_character` | Copy a character from another project (portrait downloaded and uploaded again; Flow can't paste across projects) |
+| `flow_list_scenes` / `flow_create_scene` | Reusable places, kept as characters marked as a place (Flow's own Scenes are video timelines) |
+
+`flow_generate_image` takes `characters` and `scenes` name lists and adds them as ingredients through the prompt picker's Characters tab (`{ name, project }` for another project's character).
 
 ### 🛠️ Tools & Discovery
 

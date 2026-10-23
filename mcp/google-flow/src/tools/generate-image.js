@@ -24,6 +24,7 @@ const UI = {
   account: 'Account details',
   composer: 'What do you want to create?',
   newSession: 'Start new session',
+  expandChat: 'Expand',
   clearPrompt: 'Clear prompt',
   start: 'Start generation',
   settings: 'Settings',
@@ -39,6 +40,10 @@ const UI = {
   assetList: 'Asset list',
   addToPrompt: 'Add to prompt',
   searchAssets: 'Search assets',
+  categories: 'Category navigation',
+  charactersTab: 'Characters',
+  selectProject: 'Select project',
+  projectTitle: 'Editable text',
   bubble: 'flow-chat-bubble',
   replyText: 'flow-a2ui-text',
   done: 'Good response',
@@ -65,6 +70,7 @@ const BLOCKS = {
 // Old names still accepted: "Nano Banana 2" was renamed "Nano Banana 2.1".
 const MODEL_ALIASES = { 'Nano Banana 2': 'Nano Banana 2.1', auto: 'Nano Banana 2.1' };
 const REF_TEMPLATE = 'Use the attached image(s) as reference. Create a new {aspect} image: {prompt}';
+const CHAR_TEMPLATE = 'Use the attached Flow characters and places ({names}) exactly as they are{refs}. Create a new {aspect} image: {prompt}';
 
 function selectModel(requested) {
   const name = MODEL_ALIASES[requested || 'auto'] || requested;
@@ -151,6 +157,15 @@ async function openProject(page, args) {
   await need(page, page.getByRole('textbox', { name: UI.composer }).first(), 'agent prompt box', 20000);
 }
 
+// Returns true when the collapsed chat was expanded.
+async function expandChat(page) {
+  const expand = btn(page, UI.expandChat);
+  if (!await expand.isVisible().catch(() => false)) return false;
+  await expand.click().catch(() => {});
+  await page.waitForTimeout(1200);
+  return true;
+}
+
 async function applyAgentSettings(page, { ratio, count, model, neverConfirm }) {
   await need(page, btn(page, UI.settings).last(), 'agent Settings button');
   await btn(page, UI.settings).last().click();
@@ -220,6 +235,52 @@ async function addReference(page, file) {
   logger.info('Reference added', { file: name, reused });
 }
 
+// Add a Flow character (or a place kept as one) as an ingredient through the picker's
+// Characters tab. entry: "Name" (this project) or { name, project } (another project's title).
+async function addCharacter(page, entry) {
+  const name = String(typeof entry === 'string' ? entry : entry.name || '').trim();
+  if (!name) throw new FlowError(ErrorCodes.INVALID_PARAMS, `Character entry without a name: ${JSON.stringify(entry)}`);
+  const chips = btn(page, UI.ingredientChip);
+  const before = await chips.count();
+  const here = (await page.getByRole('textbox', { name: UI.projectTitle }).first().inputValue().catch(() => '')).trim();
+  const project = (typeof entry === 'object' && entry.project) || here;
+  await btn(page, UI.ingredients).click();
+  await need(page, page.getByRole('tablist', { name: UI.categories }), 'asset picker');
+  // The picker remembers the last project it showed, so always set it.
+  const switcher = page.getByRole('combobox', { name: UI.selectProject }).first();
+  if (project && !(await switcher.innerText().catch(() => '')).includes(project)) {
+    await switcher.click();
+    const opt = page.getByRole('listbox', { name: UI.selectProject }).getByRole('option', { name: project, exact: true });
+    if (!await opt.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await page.keyboard.press('Escape');
+      throw new FlowError(ErrorCodes.PROJECT_NOT_FOUND, `No Flow project "${project}" in the picker's project switcher`, { project });
+    }
+    await opt.click();
+    await page.waitForTimeout(1500);
+  }
+  await page.getByRole('tab', { name: UI.charactersTab, exact: true }).click();
+  await page.getByRole('textbox', { name: UI.searchAssets }).first().fill(name);
+  await page.waitForTimeout(2000);
+  const option = page.getByRole('listbox', { name: UI.assetList }).getByRole('option', { name, exact: true }).first();
+  if (!await option.isVisible().catch(() => false)) {
+    await page.keyboard.press('Escape');
+    throw new FlowError(ErrorCodes.INVALID_PARAMS, `No character "${name}" in Flow project "${project}". Create it with flow_create_character.`,
+      { name, project });
+  }
+  await option.click();
+  const add = page.getByRole('button', { name: UI.addToPrompt });
+  const deadline = Date.now() + 20000;
+  while (await chips.count() <= before) {
+    if (Date.now() > deadline) throw new FlowError(ErrorCodes.UNKNOWN_UI_CHANGE, `Character ${name} never reached the prompt`);
+    if (await add.isVisible().catch(() => false)) await add.click().catch(() => {});
+    await page.waitForTimeout(700);
+  }
+  const backdrop = page.locator('.cdk-overlay-backdrop');
+  if (await backdrop.count()) await backdrop.last().click().catch(() => {});
+  logger.info('Character added', { name, project });
+  return name;
+}
+
 async function downloadOptions(page, count, size, outputDir, base) {
   const files = [];
   const sizeLabel = UI.sizes[size] || UI.sizes['1K'];
@@ -272,12 +333,16 @@ async function runGenerateImage(job, args) {
     const size = args.download_size || '1K';
     if (!UI.sizes[size]) throw new FlowError(ErrorCodes.INVALID_PARAMS, `download_size must be 1K, 2K or 4K, got ${size}`);
     const refs = args.reference_images || [];
+    const characters = [...(args.characters || []), ...(args.scenes || [])];
 
     await openProject(page, args);
     await applyAgentSettings(page, { ratio, count, model, neverConfirm: autoConfirm });
 
+    // The chat can be collapsed to just the prompt box; its reply bubbles only render when
+    // expanded, so open it first (then "Start new session" shows too).
+    await expandChat(page);
     // Fresh agent session per job so earlier chat context cannot leak into this prompt.
-    // With the chat panel closed there is no "Start new session" button: that already is a fresh session.
+    // With no "Start new session" button the chat is empty: that already is a fresh session.
     const newSession = btn(page, UI.newSession);
     if (await newSession.isVisible().catch(() => false)) {
       await newSession.click();
@@ -288,11 +353,20 @@ async function runGenerateImage(job, args) {
       await clear.click();
       await page.waitForTimeout(500);
     }
+    const charNames = [];
+    for (const c of characters) charNames.push(await addCharacter(page, c));
     for (const ref of refs) await addReference(page, ref);
 
     const prompt = args.prompt.replace(/\s+/g, ' ').trim();
     // With references the agent tends to edit them and keep their shape, so say the aspect.
-    const request = refs.length ? REF_TEMPLATE.replace('{aspect}', ratio).replace('{prompt}', prompt) : prompt;
+    let request = prompt;
+    if (charNames.length) {
+      request = CHAR_TEMPLATE.replace('{names}', charNames.join(', '))
+        .replace('{refs}', refs.length ? ', and the attached image(s) as reference' : '')
+        .replace('{aspect}', ratio).replace('{prompt}', prompt);
+    } else if (refs.length) {
+      request = REF_TEMPLATE.replace('{aspect}', ratio).replace('{prompt}', prompt);
+    }
     const composer = await need(page, page.getByRole('textbox', { name: UI.composer }).first(), 'agent prompt box');
     await composer.click();
     await page.keyboard.insertText(request);
@@ -303,7 +377,7 @@ async function runGenerateImage(job, args) {
       const result = {
         status: 'ready_for_confirmation', type: 'image',
         message: 'Settings applied and prompt typed. Nothing generated. Call again with auto_confirm=true.',
-        model_used: model, ratio, count, references: refs.length, prompt: args.prompt, screenshot: shot, jobId: job.id,
+        model_used: model, ratio, count, references: refs.length, characters: charNames, prompt: args.prompt, request, screenshot: shot, jobId: job.id,
       };
       jobQueue.completeJob(job.id, result);
       return result;
@@ -328,6 +402,7 @@ async function runGenerateImage(job, args) {
     while (Date.now() - t0 < timeoutMs) {
       await page.waitForTimeout(2000);
       checkUrlBlock(page.url());
+      if (await expandChat(page)) await page.waitForTimeout(1500);
       const turns = await readChat(page);
       const last = turns.length > turnsBefore ? turns[turns.length - 1] : null;
       if (last && last.agent && last.done) { turn = last; break; }
@@ -350,7 +425,7 @@ async function runGenerateImage(job, args) {
     saveMetadata(job.id, { type: 'image', model, ratio, count, prompt: args.prompt, files, jobId: job.id });
     const result = {
       status: 'success', type: 'image', model_used: model, ratio, count_requested: count,
-      download_size: size, references: refs.length, prompt: args.prompt, agent_reply: turn.text,
+      download_size: size, references: refs.length, characters: charNames, prompt: args.prompt, agent_reply: turn.text,
       files, image_count: files.length, jobId: job.id,
     };
     jobQueue.completeJob(job.id, result);

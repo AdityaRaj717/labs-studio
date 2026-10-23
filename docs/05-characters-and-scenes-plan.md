@@ -8,6 +8,19 @@ Goal (user): a channel (YouTube, Instagram…) reuses the same characters and pl
 - The prompt box's **+** opens an asset picker. It has a project switcher at the top-left (so assets from **other projects** can be picked), a search box, categories (All, Images, Videos, Voices, **Characters**, Avatars, Uploads) and **Add to prompt**. This is what the agent uses in place of drag and drop. A person can still drag images in by hand.
 - Fixed now: references used to be uploaded again for every job (Uploads showed MD_01 five times). The MCP now searches the picker by file name and adds the existing asset, and uploads only when it isn't there yet (`addReference` in `generate-image.js`).
 
+## Findings from the live exploration (phase 14a, 2026-10-24)
+- **A character is a named entity**, at `/project/<id>/character/<uuid>`. It has a name, a voice ("Select a voice"), **Character info** ("The Flow agent can use this information to help craft scenes with your character"), and a portrait. "Create body" adds a full-body image.
+- **Cost**: on the New character page (`/character`), **Upload** or **Add from project** with one image creates the character straight from that image, with no generation and no credits. It takes about 10–30 s to process before the character page opens. Typing a description and pressing Start generation makes a portrait with the selected model (Nano Banana Pro / 2 Lite / 2.1). That is an image generation, which costs nothing on this account (the user says images are free; videos should use Omni Flash). The character page opens before the portrait is done, and leaving it early loses the portrait.
+- **Format** (enabled once the description has text) rewrites a short description into a full studio-portrait prompt: medium shot, neutral expression, centred, plain white background. No image is made.
+- **In the "+" picker** a character appears by name under the **Characters** tab, and the search box finds it. Clicking it adds it right away, with no "Add to prompt" needed, as an `Ingredient` chip with a character badge. The agent treats it as that character: an x1 Nano Banana 2.1 image with Survivor + Stranger + Bunker kept both faces, the clothes and the bunker.
+- **Per project**: each project has its own Characters section. The card menu has Copy, but pasting into another project gives "Pasting characters across projects is not currently supported". The picker's **project switcher** can still add another project's character as an ingredient, without copying it. Library holds collections (folders) in the project and is not a shared character store.
+- **Scenes are not places**: Add media → **New scene** at once creates an "Untitled Scene <date>" at `/scene/<uuid>`. That is a **video timeline editor** (clips, timeline, Omni 1.1 Flash prompt), and it has no Scenes tab in the picker. So a reusable *place* is kept as a **character**. Flow allows this ("The Wildcard: anything can be a character"), and a bunker image works as a character portrait. The MCP marks places by starting their Character info with `Place (a location, not a person): `.
+- The character page's "Download image" saves only a 512 px preview. The portrait URL with `=s0` gives the original size, which the import uses.
+- The agent chat can be collapsed down to just the prompt box. Its reply bubbles only render after **Expand**, so `flow_generate_image` now expands it first. Without that, the job timed out even though the image had been made.
+
+## Built in 14a (MCP)
+`flow_list_characters`, `flow_create_character`, `flow_import_character` (download the portrait at full size, then upload it with the same name and info), `flow_list_scenes` / `flow_create_scene` (places as characters), and `characters` / `scenes` on `flow_generate_image` (picker > Characters; `{name, project}` for another project). See `docs/phase-14a-handoff.md`.
+
 ## Proposed design
 
 ### 1. One character library in the app (cross-project)
@@ -41,11 +54,8 @@ The old `flow_create_character`, `flow_import_character` and `flow_create_scene`
 3. `images.md` lists the characters and scenes for each IMG instead of MD files, and generation adds them by name.
 4. The next video in the same series imports the same characters into its new Flow project.
 
-## To find out first (one exploration session, no credits)
-- What a Flow character is after creation: a sheet, a single image, or an editable entity with a name? Does it show by name under the picker's Characters category, and does the agent treat it differently from a plain image?
-- Whether Characters and Scenes are per project or shared through Library, and what "Format" offers.
-- What the Scenes section's creation page looks like (it wasn't opened yet).
-- Whether generating a character spends credits like an image does.
+## To find out first
+Answered in "Findings" above (14a).
 
 ## Phasing
 - **14a**: exploration above, plus MCP character and scene tools, plus `characters`/`scenes` on `flow_generate_image`.
