@@ -20,6 +20,8 @@ class ProjectPicker(QWidget):
         self.menu_btn.setText("⋯")
         self.menu_btn.setToolTip(tr("proj_actions"))
         self.menu_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.menu_btn.setStyleSheet("QToolButton::menu-indicator { image: none; width: 0; }")
+        self.menu_btn.setFixedWidth(28)
         menu = QMenu(self)
         menu.addAction(tr("proj_new"), lambda: actions.new_project(self, store))
         menu.addAction(tr("proj_rename"), lambda: actions.rename_project(self, store, store.active.id))

@@ -31,6 +31,16 @@
 
 ---
 
+> **Labs Studio copy.** This folder is vendored into Labs Studio (`mcp/google-flow/`) and modified
+> there: the Flow agent-chat UI (Oct 2026), `flow_open_project`, `project_url` for
+> `flow_generate_image`, and environment overrides. Set it up once with
+> `npm ci --cache D:	mp_render
+pmcache` in this folder. Labs Studio starts the server itself and passes
+> `FLOW_CDP_PORT`, `FLOW_CHROME_PATH`, `FLOW_CHROME_PROFILE_DIR` and `FLOW_DATA_DIR` (logs, outputs,
+> screenshots, projects file). Without `config/flow.config.json` the server uses
+> `config/flow.config.example.json`; `FLOW_MCP_CONFIG` points at another file. An empty
+> `expectedAccount` accepts whichever Google account is signed in.
+
 ## 📸 What It Does
 
 This MCP server connects your AI agent to **[Google Flow](https://labs.google/fx/tools/flow)** — Google's creative suite for image and video generation. Your agent can:
