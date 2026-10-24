@@ -39,6 +39,7 @@ NAV_ITEMS: list[tuple[str, str, str]] = [
     ("course", "nav_course", ""),
     ("log", "nav_log", ""),
     ("settings", "nav_settings", ""),
+    ("help", "nav_help", ""),  # Phase 15
 ]
 NAV_KEYS = [key for key, _, _ in NAV_ITEMS]
 

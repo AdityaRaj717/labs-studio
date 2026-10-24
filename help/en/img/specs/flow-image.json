@@ -1,0 +1,57 @@
+{
+  "page": "flow_image",
+  "features": "flow",
+  "size": [
+    1600,
+    860
+  ],
+  "setup": "demo_rows",
+  "grab": "page",
+  "callouts": [
+    {
+      "n": 1,
+      "target": "scroll",
+      "shape": "box",
+      "badge": "tl"
+    },
+    {
+      "n": 2,
+      "target": [
+        "btn_import",
+        "btn_paste"
+      ],
+      "shape": "box",
+      "badge": "top"
+    },
+    {
+      "n": 3,
+      "target": [
+        "btn_match",
+        "btn_match_chars"
+      ],
+      "shape": "box",
+      "badge": "top"
+    },
+    {
+      "n": 4,
+      "target": [
+        "btn_start",
+        "btn_folder"
+      ],
+      "shape": "box",
+      "badge": "top"
+    },
+    {
+      "n": 5,
+      "target": "stats_header",
+      "shape": "box",
+      "badge": "left"
+    },
+    {
+      "n": 6,
+      "target": "table",
+      "shape": "box",
+      "badge": "bl"
+    }
+  ]
+}

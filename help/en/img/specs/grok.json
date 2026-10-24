@@ -1,0 +1,32 @@
+{
+  "page": "grok",
+  "features": "all",
+  "size": [
+    1600,
+    860
+  ],
+  "grab": "page",
+  "callouts": [
+    {
+      "n": 1,
+      "target": "scroll",
+      "shape": "box",
+      "badge": "tl"
+    },
+    {
+      "n": 2,
+      "target": "banner_label",
+      "shape": "box",
+      "badge": "bottom"
+    },
+    {
+      "n": 3,
+      "target": [
+        "btn_import",
+        "table"
+      ],
+      "shape": "box",
+      "badge": "bl"
+    }
+  ]
+}

@@ -86,7 +86,7 @@ def test_theme_tokens_present_for_every_mode():
 
 def test_every_nav_key_resolves_in_en():
     strings = load_language("en")
-    assert len(NAV_ITEMS) == 19
+    assert len(NAV_ITEMS) == 20  # Phase 15: Help
     for _, label_key, _ in NAV_ITEMS:
         assert label_key in strings, label_key
         assert tr(label_key) == en.STRINGS[label_key]
@@ -97,7 +97,7 @@ def test_nav_order_matches_spec():
     expected = [
         "Flow Image", "Flow Video", "Grok Imagen", "OpenAI Image", "Meta Vibes", "Meta Muse",
         "Google Vids", "Google Pics", "Projects", "Characters", "Scenes", "Workflow", "Video Editor", "Image Upscaler",
-        "Video Cut", "Webhook API", "Course", "Detailed Log", "Settings",
+        "Video Cut", "Webhook API", "Course", "Detailed Log", "Settings", "Help",
     ]
     assert [tr(lk) for _, lk, _ in NAV_ITEMS] == expected
 

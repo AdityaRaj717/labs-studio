@@ -12,6 +12,8 @@ from src import APP_NAME, __version__
 from src import config, features, theme
 from src.i18n import tr
 from src.ui.log_panel import LogPanel
+from src.ui.help.button import attach_help_button
+from src.ui.help.page import HelpPage
 from src.ui.pages.placeholder import PlaceholderPage
 from src.ui.sidebar import NAV_ITEMS, NAV_KEYS, Sidebar
 
@@ -22,6 +24,25 @@ PageFactory = Callable[[], QWidget]
 # Pages whose settings, rows and output folder belong to the active project; they are
 # rebuilt when the project changes (Phase 12).
 PROJECT_PAGES = ("flow_image", "flow_video", "grok", "openai_image", "demo", "upscaler", "video_cut")
+
+# Page key -> help topic (help/en/<topic>.md) its "?" button opens (Phase 15).
+PAGE_TOPICS: dict[str, str] = {
+    "flow_image": "flow-image",
+    "flow_video": "api-generators",
+    "grok": "api-generators",
+    "openai_image": "api-generators",
+    "projects": "projects",
+    "characters": "characters-and-scenes",
+    "scenes": "characters-and-scenes",
+    "workflow": "workflow",
+    "video_editor": "video-editor",
+    "upscaler": "video-tools",
+    "video_cut": "video-tools",
+    "webhook": "webhook-api",
+    "demo": "webhook-api",
+    "log": "troubleshooting",
+    "settings": "google-flow-sign-in",
+}
 
 
 class MainWindow(QMainWindow):
@@ -59,6 +80,7 @@ class MainWindow(QMainWindow):
         for key, label_key, _ in NAV_ITEMS:
             factories[key] = lambda lk=label_key: PlaceholderPage(tr(lk))
         factories["log"] = LogPanel
+        factories["help"] = HelpPage
         return factories
 
     def register_page(self, key: str, factory: PageFactory) -> None:
@@ -77,6 +99,8 @@ class MainWindow(QMainWindow):
         if widget is None:
             factory = self.page_factories[key]
             widget = factory()
+            if key in PAGE_TOPICS and not isinstance(widget, PlaceholderPage):
+                attach_help_button(widget, PAGE_TOPICS[key], self.open_help)
             self.pages[key] = widget
             self.stack.addWidget(widget)
             log.debug("Built page %s", key)
@@ -91,6 +115,11 @@ class MainWindow(QMainWindow):
         if key != self.current_key:
             log.info("Page: %s", key)
         self.current_key = key
+
+    def open_help(self, topic: str) -> None:
+        """Show the Help page on ``topic`` (the pages' "?" buttons)."""
+        self.switch_page("help")
+        self.page("help").open_topic(topic)
 
     # ---- projects (Phase 12) -----------------------------------------
     def attach_projects(self, store) -> None:

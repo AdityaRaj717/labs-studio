@@ -1,0 +1,32 @@
+{
+  "page": "upscaler",
+  "features": "all",
+  "size": [
+    1280,
+    700
+  ],
+  "grab": "page",
+  "callouts": [
+    {
+      "n": 1,
+      "target": "config_panel/editors/model",
+      "shape": "box",
+      "badge": "right"
+    },
+    {
+      "n": 2,
+      "target": [
+        "config_panel/editors/out_format",
+        "config_panel/editors/tta"
+      ],
+      "shape": "box",
+      "badge": "left"
+    },
+    {
+      "n": 3,
+      "target": "table",
+      "shape": "box",
+      "badge": "tr"
+    }
+  ]
+}
