@@ -58,6 +58,7 @@ If Flow shows the sign-in wall later, the app shows the same flow instead of onl
 - Update `packaging/labs_studio.spec` and `build.bat` for the selectors, the Node runtime and the MCP.
 - Use Inno Setup per-user install (already `PrivilegesRequired=lowest`), with a Start menu entry and an uninstaller that keeps user data unless asked.
 - Version shown in the app.
+- **Ship the help guide (phase 15).** Bundle `help/` (the Markdown topics and the screenshots in `help/<lang>/img/`; the `img/specs/` JSON is not needed) so the Help page works in the installed app. `src/help/topics.py` `help_dir()` looks for it next to the executable. Rerun `tools/make_help_screenshots.py` before building if the UI changed.
 - Test on a clean Windows user account or VM if available, otherwise a fresh local Windows user, with no Python, Node or D: drive assumptions. Sign in there with a test Google account the user provides by hand.
 
 Done when the installer builds; a clean Windows user with only Chrome or Edge can install, sign in through the app and generate Flow images in a project, without editing any setting; uninstall works; `pytest` passes; `docs/phase-13-handoff.md` lists anything the friend still has to do (for example, Windows SmartScreen on an unsigned exe).
