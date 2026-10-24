@@ -4,7 +4,7 @@
     python tools/make_help_screenshots.py flow-image # just these
 
 For every ``help/en/img/specs/<name>.json`` (format: ``src/help/shots.py``) this
-builds the real main window offscreen with demo data, opens the page, grabs it
+builds the real main window hidden with demo data, opens the page, grabs it
 with ``QWidget.grab()``, draws the numbered callouts and writes
 ``help/en/img/<name>.png``.
 
@@ -26,9 +26,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-if os.name == "nt":  # the offscreen platform has no fonts of its own
-    os.environ.setdefault("QT_QPA_FONTDIR", os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts"))
+if os.name != "nt":
+    # On Windows the native platform renders text with ClearType/DirectWrite; the offscreen
+    # platform's unhinted FreeType text came out blurry. Windows stay hidden (WA_DontShowOnScreen).
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 LANG_DIR = ROOT / "help" / "en"
 ACCENT = "#ff5a36"
@@ -346,13 +347,14 @@ def make_window(features: str, size):
 
 
 def shoot(name: str, spec: dict, out_dir: Path) -> Path:
-    from PySide6.QtCore import QRect
+    from PySide6.QtCore import QRect, Qt
     from PySide6.QtWidgets import QApplication
 
     app = QApplication.instance()
     window = make_window(spec.get("features", "flow"), spec.get("size", [1280, 800]))
     try:
         window.switch_page(spec["page"])
+        window.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, True)
         window.show()
         page = window.page(spec["page"])
         for _ in range(3):
