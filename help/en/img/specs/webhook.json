@@ -13,8 +13,7 @@
         "status",
         "token"
       ],
-      "shape": "box",
-      "badge": "left"
+      "label": "Status, port and token"
     },
     {
       "n": 2,
@@ -22,14 +21,12 @@
         "lan",
         "autostart"
       ],
-      "shape": "box",
-      "badge": "left"
+      "label": "Network and autostart"
     },
     {
       "n": 3,
       "target": "btn_toggle",
-      "shape": "box",
-      "badge": "right"
+      "label": "Start / Stop server"
     },
     {
       "n": 4,
@@ -37,14 +34,13 @@
         "example",
         "btn_copy"
       ],
-      "shape": "box",
-      "badge": "left"
+      "label": "Example"
     },
     {
       "n": 5,
       "target": "requests",
-      "shape": "box",
-      "badge": "left"
+      "label": "Recent requests"
     }
-  ]
+  ],
+  "gutter": 220
 }

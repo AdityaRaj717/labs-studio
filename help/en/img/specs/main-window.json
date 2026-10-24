@@ -13,29 +13,22 @@
         "window:sidebar/buttons/flow_image",
         "window:sidebar/buttons/help"
       ],
-      "shape": "box",
-      "badge": "right"
+      "label": "Sidebar"
     },
     {
       "n": 2,
       "target": "window:picker",
-      "shape": "box",
-      "badge": "right"
+      "label": "Project picker"
     },
     {
       "n": 3,
       "target": "table",
-      "shape": "box",
-      "badge": "tl"
+      "label": "The page"
     },
     {
       "n": 4,
       "target": "help_button",
-      "shape": "arrow",
-      "from": [
-        -70,
-        50
-      ]
+      "label": "Help button"
     },
     {
       "n": 5,
@@ -43,8 +36,7 @@
         "window:sidebar/theme_btn",
         "window:sidebar/version_btn"
       ],
-      "shape": "box",
-      "badge": "right"
+      "label": "Theme and version"
     }
   ]
 }

@@ -56,7 +56,7 @@
   - `window:` to start from the main window;
   - a list for a bounding box.
 
-  The shapes are `box` and `arrow`, with numbered badges.
+  Each callout draws a tight box round its target and a numbered label pill (`label`) with an arrow to it. Pills are placed automatically in empty space, the margin round the shot, or a right-hand label column (`gutter` on the spec); `at: [dx, dy]` pins one by hand and `split: true` boxes each widget of a list separately. Shots render with native Windows text, in hidden windows.
 - Run it from the repo root with one command:
   ```bat
   ..\..\..\.venv\Scripts\python.exe tools\make_help_screenshots.py

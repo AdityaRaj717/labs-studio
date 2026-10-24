@@ -14,26 +14,22 @@
         "list",
         "btn_delete"
       ],
-      "shape": "box",
-      "badge": "tl"
+      "label": "Library"
     },
     {
       "n": 2,
       "target": "name_edit",
-      "shape": "box",
-      "badge": "right"
+      "label": "Name"
     },
     {
       "n": 3,
       "target": "notes_edit",
-      "shape": "box",
-      "badge": "right"
+      "label": "Notes"
     },
     {
       "n": 4,
       "target": "refs",
-      "shape": "box",
-      "badge": "tl"
+      "label": "Reference images"
     },
     {
       "n": 5,
@@ -41,8 +37,8 @@
         "flow_label",
         "btn_flow"
       ],
-      "shape": "box",
-      "badge": "right"
+      "label": "In Google Flow"
     }
-  ]
+  ],
+  "gutter": 200
 }

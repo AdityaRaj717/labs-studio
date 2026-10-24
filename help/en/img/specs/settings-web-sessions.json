@@ -12,10 +12,10 @@
       "n": 1,
       "target": [
         "tabs/currentWidget/PathEdit{key=web.chrome_path}",
+        "tabs/currentWidget/PathEdit{key=web.profile_dir}",
         "tabs/currentWidget/PathEdit{key=web.diag_dir}"
       ],
-      "shape": "box",
-      "badge": "left"
+      "label": "Browser"
     },
     {
       "n": 2,
@@ -23,8 +23,7 @@
         "tabs/currentWidget/PathEdit{key=web.flow_mcp_dir}",
         "tabs/currentWidget/QLineEdit{text=node}"
       ],
-      "shape": "box",
-      "badge": "left"
+      "label": "MCP folder and Node.js"
     },
     {
       "n": 3,
@@ -33,26 +32,24 @@
         "tabs/currentWidget/QDoubleSpinBox[1]",
         "tabs/currentWidget/rows/flow/cap"
       ],
-      "shape": "box",
-      "badge": "right"
+      "label": "Pacing",
+      "split": true
     },
     {
       "n": 4,
       "target": "tabs/currentWidget/rows/flow/btn_launch",
-      "shape": "box",
-      "badge": "bottom"
+      "label": "Launch browser"
     },
     {
       "n": 5,
       "target": "tabs/currentWidget/rows/flow/btn_check",
-      "shape": "box",
-      "badge": "bottom"
+      "label": "Check login"
     },
     {
       "n": 6,
       "target": "tabs/currentWidget/rows/flow/btn_diag",
-      "shape": "box",
-      "badge": "bottom"
+      "label": "Diagnose page"
     }
-  ]
+  ],
+  "gutter": 220
 }

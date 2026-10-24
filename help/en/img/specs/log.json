@@ -11,8 +11,7 @@
     {
       "n": 1,
       "target": "view",
-      "shape": "box",
-      "badge": "tl"
+      "label": "The log"
     },
     {
       "n": 2,
@@ -20,8 +19,8 @@
         "QPushButton{text=Open log file}",
         "QPushButton{text=Clear}"
       ],
-      "shape": "box",
-      "badge": "bottom"
+      "label": "Open log file / Clear"
     }
-  ]
+  ],
+  "gutter": 220
 }

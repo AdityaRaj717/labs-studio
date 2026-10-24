@@ -11,8 +11,7 @@
     {
       "n": 1,
       "target": "scroll",
-      "shape": "box",
-      "badge": "tl"
+      "label": "Settings"
     },
     {
       "n": 2,
@@ -20,8 +19,7 @@
         "btn_import",
         "btn_paste"
       ],
-      "shape": "box",
-      "badge": "top"
+      "label": "Add prompts"
     },
     {
       "n": 3,
@@ -29,8 +27,7 @@
         "btn_match",
         "btn_match_chars"
       ],
-      "shape": "box",
-      "badge": "top"
+      "label": "Match refs / characters"
     },
     {
       "n": 4,
@@ -38,20 +35,18 @@
         "btn_start",
         "btn_folder"
       ],
-      "shape": "box",
-      "badge": "top"
+      "label": "Run controls"
     },
     {
       "n": 5,
       "target": "stats_header",
-      "shape": "box",
-      "badge": "left"
+      "label": "Counters"
     },
     {
       "n": 6,
       "target": "table",
-      "shape": "box",
-      "badge": "bl"
+      "label": "Prompt table"
     }
-  ]
+  ],
+  "gutter": 220
 }

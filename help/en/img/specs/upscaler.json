@@ -10,8 +10,7 @@
     {
       "n": 1,
       "target": "config_panel/editors/model",
-      "shape": "box",
-      "badge": "right"
+      "label": "Model"
     },
     {
       "n": 2,
@@ -19,14 +18,13 @@
         "config_panel/editors/out_format",
         "config_panel/editors/tta"
       ],
-      "shape": "box",
-      "badge": "left"
+      "label": "Options"
     },
     {
       "n": 3,
       "target": "table",
-      "shape": "box",
-      "badge": "tr"
+      "label": "Files"
     }
-  ]
+  ],
+  "gutter": 220
 }

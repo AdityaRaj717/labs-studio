@@ -10,14 +10,12 @@
     {
       "n": 1,
       "target": "scroll",
-      "shape": "box",
-      "badge": "tl"
+      "label": "Provider options"
     },
     {
       "n": 2,
       "target": "banner_label",
-      "shape": "box",
-      "badge": "bottom"
+      "label": "Banner"
     },
     {
       "n": 3,
@@ -25,8 +23,8 @@
         "btn_import",
         "table"
       ],
-      "shape": "box",
-      "badge": "bl"
+      "label": "Prompt table and toolbar"
     }
-  ]
+  ],
+  "gutter": 220
 }

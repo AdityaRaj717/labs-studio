@@ -11,11 +11,19 @@ Each ``help/<lang>/img/specs/<name>.json`` describes one screenshot that
       "grab": "window",                # "window" (default) or "page"
       "crop": [0, 0, 1280, 500],       # optional, in grabbed-image pixels
       "callouts": [
-        {"n": 1, "target": "config_panel", "shape": "box", "badge": "tl"},
-        {"n": 2, "target": ["btn_import", "btn_paste"], "shape": "box", "badge": "bottom"},
-        {"n": 3, "target": "window:picker", "shape": "arrow", "from": [160, 40]}
+        {"n": 1, "target": "config_panel", "label": "Settings"},
+        {"n": 2, "target": ["btn_import", "btn_paste"], "label": "Add prompts"},
+        {"n": 3, "target": "window:picker", "label": "Project", "at": [160, 40]}
       ]
     }
+
+Every callout draws a tight box round its target (``"box": false`` leaves it
+out) and a numbered label pill with an arrow to it. The pill is placed in
+free space automatically; ``at: [dx, dy]`` pins its centre relative to the
+target's centre instead. A list of targets gets one box round all of them;
+``"split": true`` boxes each widget on its own, with an arrow to each.
+``"gutter": 220`` on a spec adds a label column on the right for dense pages. ``label`` is a few words matching the numbered list
+under the image in the topic.
 
 A target is a widget path from the page: attribute names, dict keys,
 ``Class[i]`` (the i-th child widget of that class) or ``Class{attr=value}``
@@ -31,12 +39,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-SHAPES = ("box", "arrow")
-BADGES = ("tl", "tr", "bl", "br", "left", "right", "top", "bottom")
 FEATURES = ("flow", "all")
 GRABS = ("window", "page")
-KEYS = {"page", "features", "size", "setup", "grab", "crop", "callouts", "note"}
-CALLOUT_KEYS = {"n", "target", "rect", "shape", "badge", "from", "pad"}
+KEYS = {"page", "features", "size", "setup", "grab", "crop", "gutter", "callouts", "note"}
+CALLOUT_KEYS = {"n", "target", "rect", "label", "at", "box", "split", "pad"}
 
 
 def _is_int_list(v: Any, n: int) -> bool:
@@ -58,6 +64,8 @@ def validate_spec(spec: Any) -> list[str]:
         errors.append("'size' must be [width, height] in pixels")
     if "crop" in spec and not (_is_int_list(spec["crop"], 4) and spec["crop"][2] > 0 and spec["crop"][3] > 0):
         errors.append("'crop' must be [x, y, width, height]")
+    if "gutter" in spec and not (isinstance(spec["gutter"], int) and 0 <= spec["gutter"] <= 400):
+        errors.append("'gutter' must be 0-400 pixels")
     if "setup" in spec and not isinstance(spec["setup"], str):
         errors.append("'setup' must be a name")
     callouts = spec.get("callouts", [])
@@ -87,12 +95,14 @@ def validate_spec(spec: Any) -> list[str]:
             errors.append(f"{where}: 'target' must be a widget path or a list of them")
         if rect is not None and not (_is_int_list(rect, 4) and rect[2] > 0 and rect[3] > 0):
             errors.append(f"{where}: 'rect' must be [x, y, width, height]")
-        if c.get("shape", "box") not in SHAPES:
-            errors.append(f"{where}: 'shape' must be one of {SHAPES}")
-        if c.get("badge", "tl") not in BADGES:
-            errors.append(f"{where}: 'badge' must be one of {BADGES}")
-        if c.get("shape") == "arrow" and not _is_int_list(c.get("from"), 2):
-            errors.append(f"{where}: an arrow needs 'from': [dx, dy], the badge's offset from the target centre")
+        label = c.get("label")
+        if not isinstance(label, str) or not label.strip() or len(label) > 32:
+            errors.append(f"{where}: 'label' must be a short text (1-32 characters)")
+        if "at" in c and not _is_int_list(c["at"], 2):
+            errors.append(f"{where}: 'at' must be [dx, dy], the label's offset from the target centre")
+        for flag in ("box", "split"):
+            if flag in c and not isinstance(c[flag], bool):
+                errors.append(f"{where}: '{flag}' must be true or false")
         if "pad" in c and not (isinstance(c["pad"], int) and 0 <= c["pad"] <= 40):
             errors.append(f"{where}: 'pad' must be 0-40")
     if seen and seen != set(range(1, len(seen) + 1)):

@@ -14,20 +14,18 @@
         "tabs/currentWidget/KeyRow[0]/edit",
         "tabs/currentWidget/KeyRow[0]/btn_clear"
       ],
-      "shape": "box",
-      "badge": "left"
+      "label": "Key box"
     },
     {
       "n": 2,
       "target": "tabs/currentWidget/KeyRow[0]/status",
-      "shape": "box",
-      "badge": "left"
+      "label": "Status line"
     },
     {
       "n": 3,
       "target": "tabs/currentWidget/KeyRow[0]/QLabel{openExternalLinks=True}",
-      "shape": "box",
-      "badge": "right"
+      "label": "Get a key"
     }
-  ]
+  ],
+  "gutter": 220
 }

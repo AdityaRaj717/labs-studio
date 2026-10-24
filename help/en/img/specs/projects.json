@@ -10,14 +10,12 @@
     {
       "n": 1,
       "target": "window:picker",
-      "shape": "box",
-      "badge": "right"
+      "label": "Project picker"
     },
     {
       "n": 2,
       "target": "table",
-      "shape": "box",
-      "badge": "tl"
+      "label": "Project list"
     },
     {
       "n": 3,
@@ -25,14 +23,12 @@
         "btn_switch",
         "btn_refresh"
       ],
-      "shape": "box",
-      "badge": "top"
+      "label": "Actions"
     },
     {
       "n": 4,
       "target": "root_label",
-      "shape": "box",
-      "badge": "left"
+      "label": "Data folder"
     }
   ]
 }

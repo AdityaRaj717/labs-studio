@@ -14,20 +14,18 @@
         "btn_add",
         "btn_folder"
       ],
-      "shape": "box",
-      "badge": "bottom"
+      "label": "Toolbar"
     },
     {
       "n": 2,
       "target": "view",
-      "shape": "box",
-      "badge": "tl"
+      "label": "Graph"
     },
     {
       "n": 3,
       "target": "inspector",
-      "shape": "box",
-      "badge": "tr"
+      "label": "Inspector"
     }
-  ]
+  ],
+  "gutter": 220
 }

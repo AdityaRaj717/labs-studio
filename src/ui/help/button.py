@@ -36,9 +36,14 @@ class HelpButton(QPushButton):
         self.move(page.width() - SIZE - MARGIN, MARGIN)
 
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:  # noqa: N802 - Qt override
-        if obj is self.parentWidget() and event.type() in (QEvent.Type.Resize, QEvent.Type.Show):
-            self._place()
-            self.raise_()
+        if event.type() not in (QEvent.Type.Resize, QEvent.Type.Show):
+            return False
+        try:
+            if obj is self.parentWidget():
+                self._place()
+                self.raise_()
+        except RuntimeError:  # page or button already deleted on the C++ side during teardown
+            pass
         return False
 
 

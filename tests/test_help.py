@@ -121,9 +121,12 @@ def test_numbered_list_matches_callouts(topics):
     ({"page": "x", "callouts": [{"n": 1}]}, "exactly one of"),
     ({"page": "x", "callouts": [{"n": 1, "target": "a"}, {"n": 1, "target": "b"}]}, "used twice"),
     ({"page": "x", "callouts": [{"n": 2, "target": "a"}]}, "no gaps"),
-    ({"page": "x", "callouts": [{"n": 1, "target": "a", "shape": "arrow"}]}, "'from'"),
-    ({"page": "x", "callouts": [{"n": 1, "target": "a", "badge": "middle"}]}, "'badge'"),
-    ({"page": "x", "callouts": [{"n": 1, "rect": [0, 0, 0, 5]}]}, "'rect'"),
+    ({"page": "x", "callouts": [{"n": 1, "target": "a"}]}, "'label'"),
+    ({"page": "x", "callouts": [{"n": 1, "target": "a", "label": "x" * 40}]}, "'label'"),
+    ({"page": "x", "callouts": [{"n": 1, "target": "a", "label": "A", "at": [1]}]}, "'at'"),
+    ({"page": "x", "callouts": [{"n": 1, "target": "a", "label": "A", "box": "no"}]}, "'box'"),
+    ({"page": "x", "callouts": [{"n": 1, "target": "a", "label": "A", "shape": "box"}]}, "unknown key"),
+    ({"page": "x", "callouts": [{"n": 1, "rect": [0, 0, 0, 5], "label": "A"}]}, "'rect'"),
     ({"page": "x", "colour": "red"}, "unknown key"),
 ])
 def test_validate_spec_rejects(bad, fragment):
@@ -134,8 +137,8 @@ def test_validate_spec_rejects(bad, fragment):
 def test_validate_spec_accepts_minimal():
     assert shots.validate_spec({"page": "flow_image"}) == []
     assert shots.validate_spec({"page": "log", "callouts": [
-        {"n": 1, "target": ["a", "b/c"], "shape": "arrow", "from": [10, -20]},
-        {"n": 2, "rect": [1, 2, 3, 4]}]}) == []
+        {"n": 1, "target": ["a", "b/c"], "label": "Buttons", "at": [10, -20]},
+        {"n": 2, "rect": [1, 2, 3, 4], "label": "Area", "box": False}]}) == []
 
 
 def test_specs_name_real_pages_and_setups():

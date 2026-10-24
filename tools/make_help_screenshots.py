@@ -228,41 +228,47 @@ def resolve(window, page, target: str):
     return obj
 
 
-def target_rect(window, page, grab_root, target):
+def target_rects(window, page, grab_root, target, split=False):
+    """The bounding rect of the targets, or with ``split`` one rect per widget (touching ones merged)."""
     from PySide6.QtCore import QPoint, QRect
 
     targets = target if isinstance(target, list) else [target]
-    rect = QRect()
+    rects = []
     for t in targets:
         w = resolve(window, page, t)
         if not hasattr(w, "mapTo"):
             raise TypeError(f"{t!r} is not a widget ({type(w).__name__})")
         if not w.isVisible():
             raise RuntimeError(f"{t!r} is not visible")
-        r = QRect(w.mapTo(grab_root, QPoint(0, 0)), w.size())
-        rect = r if rect.isNull() else rect.united(r)
-    return rect
+        rects.append(QRect(w.mapTo(grab_root, QPoint(0, 0)), w.size()))
+    if not split:
+        out = rects[0]
+        for r in rects[1:]:
+            out = out.united(r)
+        return [out]
+    merged = True
+    while merged:
+        merged = False
+        for i in range(len(rects)):
+            for j in range(i + 1, len(rects)):
+                if rects[i].adjusted(-14, -14, 14, 14).intersects(rects[j]):
+                    rects[i] = rects[i].united(rects.pop(j))
+                    merged = True
+                    break
+            if merged:
+                break
+    return rects
 
 
 # ---- drawing ---------------------------------------------------------------
-def _badge_pos(rect, where: str, pad: int):
-    from PySide6.QtCore import QPoint
-
-    h = BADGE // 2
-    r = rect.adjusted(-pad, -pad, pad, pad)
-    return {
-        "tl": QPoint(r.left(), r.top()), "tr": QPoint(r.right(), r.top()),
-        "bl": QPoint(r.left(), r.bottom()), "br": QPoint(r.right(), r.bottom()),
-        "left": QPoint(r.left() - h - 2, r.center().y()), "right": QPoint(r.right() + h + 2, r.center().y()),
-        "top": QPoint(r.center().x(), r.top() - h - 2), "bottom": QPoint(r.center().x(), r.bottom() + h + 2),
-    }[where]
+# Each callout is a tight box around its target plus a label pill ("3  Match refs")
+# placed in free space nearby, with an arrow from the pill to the box.
+PILL_H = 26
+BIG = 0.08  # targets covering more of the image than this get their pill inside
 
 
-def _clamp(pt, w, h):
-    from PySide6.QtCore import QPoint
-
-    m = BADGE // 2 + 1
-    return QPoint(min(max(pt.x(), m), w - m), min(max(pt.y(), m), h - m))
+def _pill_size(fm, c) -> tuple[int, int]:
+    return BADGE + 10 + fm.horizontalAdvance(c["label"]) + 12, PILL_H
 
 
 def _edge_point(rect, toward):
@@ -279,53 +285,227 @@ def _edge_point(rect, toward):
     return QPointF(c.x() + dx * s, c.y() + dy * s)
 
 
-def draw_callouts(img, rects: list[tuple[dict, object]]) -> None:
+def _candidates(box, w, h, big: bool, img_w: int = 0, img_h: int = 0, gutter: int = 0):
+    """Pill top-left corners around ``box``, nearest first, then spots in the margin lined up with it."""
+    from PySide6.QtCore import QRect
+
+    out = []
+    for d in (22, 40, 64, 96, 140, 200, 270):
+        cx, cy = box.center().x() - w // 2, box.center().y() - h // 2
+        out += [
+            QRect(cx, box.top() - d - h, w, h), QRect(cx, box.bottom() + d, w, h),
+            QRect(box.right() + d, cy, w, h), QRect(box.left() - d - w, cy, w, h),
+            QRect(box.left(), box.top() - d - h, w, h), QRect(box.right() - w, box.top() - d - h, w, h),
+            QRect(box.left(), box.bottom() + d, w, h), QRect(box.right() - w, box.bottom() + d, w, h),
+            QRect(box.right() + d, box.top(), w, h), QRect(box.left() - d - w, box.top(), w, h),
+        ]
+    if gutter:  # the label column on the right, level with the target (tried first)
+        x = img_w - gutter - MARGIN // 2
+        cy = box.center().y() - h // 2
+        out = [QRect(x, cy + dy, w, h) for dy in (0, -30, 30, -60, 60)] + out
+    if img_w:  # margin rows above and below the shot, lined up with the target
+        cx = box.center().x() - w // 2
+        rows = [MARGIN_TB // 2 - h // 2, img_h - MARGIN_TB // 2 - h // 2]
+        for y in rows:
+            for dx in (0, -80, 80, -160, 160, -260, 260):
+                out.append(QRect(cx + dx, y, w, h))
+    if big:  # inside the region, near its top and left edges
+        for fx in (0.05, 0.3, 0.5, 0.7):
+            for fy in (0.1, 0.3, 0.5, 0.7, 0.9):
+                out.append(QRect(box.left() + int((box.width() - w) * fx), box.top() + int((box.height() - h) * fy), w, h))
+    return out
+
+
+def _busy(img, r) -> int:
+    """How much is drawn under ``r``: sampled pixels that differ from the area's main colour."""
+    from collections import Counter
+
+    px = [img.pixel(x, y) & 0xFFFFFF for y in range(r.top(), r.bottom(), 3) for x in range(r.left(), r.right(), 3)]
+    if not px:
+        return 0
+    base = Counter(px).most_common(1)[0][0]
+    br, bg, bb = base >> 16, (base >> 8) & 255, base & 255
+    return sum(1 for v in px if abs((v >> 16) - br) + abs(((v >> 8) & 255) - bg) + abs((v & 255) - bb) > 40)
+
+
+def _seg_hits_rect(p1, p2, r) -> bool:
+    """Does the segment p1-p2 pass through rect ``r`` (sampled)?"""
     import math
 
-    from PySide6.QtCore import QPointF, QRectF, Qt
-    from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF
+    n = max(2, int(math.hypot(p2.x() - p1.x(), p2.y() - p1.y()) / 3))
+    for k in range(1, n):
+        t = k / n
+        x, y = p1.x() + (p2.x() - p1.x()) * t, p1.y() + (p2.y() - p1.y()) * t
+        if r.contains(int(x), int(y)):
+            return True
+    return False
+
+
+def _segs_cross(a1, a2, b1, b2) -> bool:
+    def side(p, q, r):
+        return (q.x() - p.x()) * (r.y() - p.y()) - (q.y() - p.y()) * (r.x() - p.x())
+    return side(a1, a2, b1) * side(a1, a2, b2) < 0 and side(b1, b2, a1) * side(b1, b2, a2) < 0
+
+
+def _arrows(pill, boxes):
+    """(start, tip) of each arrow from ``pill`` to its boxes; none for a pill inside its box."""
+    from PySide6.QtCore import QPointF, QRectF
+
+    out = []
+    for box in boxes:
+        if box.contains(pill):
+            continue
+        tip = _edge_point(QRectF(box), QPointF(pill.center()))
+        out.append((_edge_point(QRectF(pill), tip), tip))
+    return out
+
+
+def _path_busy(img, a, b) -> int:
+    """Edges the segment a-b crosses (text, borders), sampled every 4 px."""
+    import math
+
+    n = max(1, int(math.hypot(b.x() - a.x(), b.y() - a.y()) / 4))
+    hits, prev = 0, None
+    for k in range(n + 1):
+        x = int(a.x() + (b.x() - a.x()) * k / n)
+        y = int(a.y() + (b.y() - a.y()) * k / n)
+        if not (0 <= x < img.width() and 0 <= y < img.height()):
+            continue
+        v = img.pixel(x, y)
+        lum = ((v >> 16) & 255) + ((v >> 8) & 255) + (v & 255)
+        if prev is not None and abs(lum - prev) > 60:
+            hits += 1
+        prev = lum
+    return hits
+
+
+def _place_pill(img, own, anchor, size, img_rect, all_boxes, pills, arrows, big, gutter=0):
+    import math
+
+    best, best_score = None, None
+    for i, r in enumerate(_candidates(anchor, *size, big, img.width(), img.height(), gutter)):
+        if not img_rect.adjusted(4, 4, -4, -4).contains(r):
+            continue
+        if any(r.adjusted(-6, -6, 6, 6).intersects(p) for p in pills):
+            continue
+        inside = any(b.contains(r) for b in own)
+        if not inside and any(r.adjusted(-3, -3, 3, 3).intersects(b) for b in own):
+            continue
+        if inside and not big:
+            continue
+        others = [b for b in all_boxes if not any(b is o for o in own)]
+        # a pill on another callout's target would read as belonging to it
+        if any(r.adjusted(-4, -4, 4, 4).intersects(b) for b in others):
+            continue
+        mine = _arrows(r, own)
+        length = sum(math.hypot(t.x() - s0.x(), t.y() - s0.y()) for s0, t in mine)
+        cross = sum(1 for s0, t in mine for b in others if _seg_hits_rect(s0, t, b))
+        cross += sum(1 for s0, t in mine for a1, a2 in arrows if _segs_cross(s0, t, a1, a2))
+        cross += sum(1 for s0, t in mine for p in pills if _seg_hits_rect(s0, t, p))
+        score = (cross * 2000 + _busy(img, r) * 40 + length * 1.5 + i * 0.1
+                 + sum(_path_busy(img, s0, t) for s0, t in mine) * 25)
+        if best_score is None or score < best_score:
+            best, best_score = r, score
+    return best
+
+
+MARGIN = 44  # plain border round each shot, so labels near the edges don't cover the UI
+MARGIN_TB = 64  # taller above and below: room for a row of labels
+
+
+def _add_margin(img, rects, gutter: int = 0):
+    """Plain border round the shot; ``gutter`` widens the right side into a label column."""
+    from PySide6.QtGui import QColor, QImage, QPainter
+
+    out = QImage(img.width() + 2 * MARGIN + gutter, img.height() + 2 * MARGIN_TB, QImage.Format.Format_ARGB32)
+    out.fill(QColor(img.pixel(1, 1)).darker(135))
+    p = QPainter(out)
+    p.drawImage(MARGIN, MARGIN_TB, img)
+    p.end()
+    return out, [(c, [r.translated(MARGIN, MARGIN_TB) for r in rs]) for c, rs in rects]
+
+
+def draw_callouts(img, rects: list[tuple[dict, object]], gutter: int = 0) -> None:
+    import math
+
+    from PySide6.QtCore import QPointF, QRect, QRectF, Qt
+    from PySide6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPen, QPolygonF
 
     p = QPainter(img)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
     accent = QColor(ACCENT)
-    pen = QPen(accent, 2.5)
-    for c, rect in rects:
-        pad = c.get("pad", 3)
-        if c.get("shape", "box") == "box":
-            p.setPen(pen)
-            p.setBrush(Qt.BrushStyle.NoBrush)
-            p.drawRoundedRect(QRectF(rect.adjusted(-pad, -pad, pad, pad)), 6, 6)
-            centre = _badge_pos(rect, c.get("badge", "tl"), pad)
+    label_font = QFont("Segoe UI")
+    label_font.setPixelSize(13)
+    label_font.setBold(True)
+    fm = QFontMetrics(label_font)
+    img_rect = QRect(0, 0, img.width(), img.height())
+    area = img.width() * img.height()
+
+    groups = [[r.adjusted(-c.get("pad", 2), -c.get("pad", 2), c.get("pad", 2), c.get("pad", 2)) for r in rs]
+              for c, rs in rects]
+    all_boxes = [b for g in groups for b in g]
+    pills: list = []
+    arrows: list = []
+    plan = []
+    for (c, _), own in zip(rects, groups):
+        size = _pill_size(fm, c)
+        anchor = own[0]
+        for b in own[1:]:
+            anchor = anchor.united(b)
+        big = max(b.width() * b.height() for b in own) > BIG * area
+        if "at" in c:
+            cx, cy = anchor.center().x() + c["at"][0], anchor.center().y() + c["at"][1]
+            pill = QRect(cx - size[0] // 2, cy - size[1] // 2, *size)
         else:
-            dx, dy = c["from"]
-            centre = rect.center()
-            centre.setX(centre.x() + dx)
-            centre.setY(centre.y() + dy)
-            centre = _clamp(centre, img.width(), img.height())
-            tip = _edge_point(rect.adjusted(-pad, -pad, pad, pad), centre)
-            ang = math.atan2(tip.y() - centre.y(), tip.x() - centre.x())
-            start = QPointF(centre.x() + math.cos(ang) * BADGE / 2, centre.y() + math.sin(ang) * BADGE / 2)
-            line = QPen(accent, 3)
-            line.setCapStyle(Qt.PenCapStyle.RoundCap)
-            p.setPen(line)
-            p.drawLine(start, tip)
-            head = QPolygonF([
-                tip,
-                QPointF(tip.x() - 12 * math.cos(ang - 0.45), tip.y() - 12 * math.sin(ang - 0.45)),
-                QPointF(tip.x() - 12 * math.cos(ang + 0.45), tip.y() - 12 * math.sin(ang + 0.45)),
-            ])
-            p.setBrush(accent)
-            p.drawPolygon(head)
-        centre = _clamp(centre, img.width(), img.height())
-        p.setPen(QPen(QColor("#ffffff"), 2))
+            pill = _place_pill(img, own, anchor, size, img_rect, all_boxes, pills, arrows, big, gutter)
+            if pill is None:  # crowded: fall back to just above the target, kept on the image
+                pill = QRect(anchor.left(), max(4, anchor.top() - 30), *size)
+        pills.append(pill)
+        arrows += _arrows(pill, own)
+        plan.append((c, own, pill))
+
+    # boxes first, then arrows, then pills on top so labels stay readable
+    for c, own, _ in plan:
+        if c.get("box", True):
+            p.setPen(QPen(accent, 2))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            for box in own:
+                p.drawRoundedRect(QRectF(box), 4, 4)
+    for start, tip in arrows:
+        if math.hypot(tip.x() - start.x(), tip.y() - start.y()) < 10:
+            continue
+        ang = math.atan2(tip.y() - start.y(), tip.x() - start.x())
+        shaft_end = QPointF(tip.x() - 8 * math.cos(ang), tip.y() - 8 * math.sin(ang))
+        outline = QPen(QColor(0, 0, 0, 150), 5.5)
+        outline.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(outline)
+        p.drawLine(start, shaft_end)
+        line = QPen(accent, 2.5)
+        line.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(line)
+        p.drawLine(start, shaft_end)
+        head = QPolygonF([
+            tip,
+            QPointF(tip.x() - 13 * math.cos(ang - 0.42), tip.y() - 13 * math.sin(ang - 0.42)),
+            QPointF(tip.x() - 13 * math.cos(ang + 0.42), tip.y() - 13 * math.sin(ang + 0.42)),
+        ])
+        p.setPen(QPen(QColor(0, 0, 0, 150), 1))
         p.setBrush(accent)
-        p.drawEllipse(QPointF(centre), BADGE / 2, BADGE / 2)
-        f = QFont("Segoe UI")
-        f.setPixelSize(14)
-        f.setBold(True)
-        p.setFont(f)
-        p.drawText(QRectF(centre.x() - BADGE / 2, centre.y() - BADGE / 2, BADGE, BADGE),
-                   Qt.AlignmentFlag.AlignCenter, str(c["n"]))
+        p.drawPolygon(head)
+    for c, _, pill in plan:
+        pr = QRectF(pill)
+        p.setPen(QPen(accent, 2))
+        p.setBrush(QColor(18, 18, 22, 240))
+        p.drawRoundedRect(pr, PILL_H / 2, PILL_H / 2)
+        circle = QRectF(pr.left() + 2, pr.top() + 1, BADGE, BADGE)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(accent)
+        p.drawEllipse(circle)
+        p.setFont(label_font)
+        p.setPen(QColor("#ffffff"))
+        p.drawText(circle, Qt.AlignmentFlag.AlignCenter, str(c["n"]))
+        p.drawText(QRectF(circle.right() + 8, pr.top(), pr.width() - BADGE - 12, pr.height()),
+                   Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, c["label"])
     p.end()
 
 
@@ -368,12 +548,15 @@ def shoot(name: str, spec: dict, out_dir: Path) -> Path:
         rects = []
         for c in spec.get("callouts", []):
             if "rect" in c:
-                rects.append((c, QRect(*c["rect"])))
+                rects.append((c, [QRect(*c["rect"])]))
             else:
-                rects.append((c, target_rect(window, page, root, c["target"])))
-        draw_callouts(img, rects)
+                rects.append((c, target_rects(window, page, root, c["target"], c.get("split", False))))
         if spec.get("crop"):
+            cx, cy = spec["crop"][:2]
             img = img.copy(QRect(*spec["crop"]))
+            rects = [(c, [r.translated(-cx, -cy) for r in rs]) for c, rs in rects]
+        img, rects = _add_margin(img, rects, spec.get("gutter", 0))
+        draw_callouts(img, rects, spec.get("gutter", 0))
         out = out_dir / f"{name}.png"
         img.save(str(out))
         return out

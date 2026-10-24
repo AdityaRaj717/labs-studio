@@ -38,7 +38,7 @@ Topics:
 
 ## 15.3 Screenshots that regenerate (`tools/make_help_screenshots.py`)
 - Runs offscreen with a scratch app data folder (`APPDATA` pointed at a temp dir on D:, the QApplication *not* named LabsStudio, so `config.app_data_dir()` stays out of the real one). It builds a real `MainWindow` with a demo project store, demo prompt rows, demo characters and scenes, and settings with no account data and no email.
-- One JSON spec per screenshot in `help/en/img/specs/<name>.json`: page key, feature mode (`flow` or `all`), window size, optional setup step (a named function in the script, for demo rows), optional crop, and callouts. A callout targets a widget by attribute path from the page (`"widget": "start_btn"`, `"stats_header"`) or by object name, or a fixed `rect`. Shapes: `box` (outline with a number badge) and `arrow` (badge at an offset, arrow to the target). Targets are found again on every run, so moved widgets keep their callouts.
+- One JSON spec per screenshot in `help/en/img/specs/<name>.json`: page key, feature mode (`flow` or `all`), window size, optional setup step (a named function in the script, for demo rows), optional crop, and callouts. A callout targets a widget by attribute path from the page (`"widget": "start_btn"`, `"stats_header"`) or by object name, or a fixed `rect`. Each callout is a tight box round the target plus a numbered label pill with an arrow to it (changed after review: the first version had badges on loose boxes). Targets are found again on every run, so moved widgets keep their callouts.
 - `validate_spec()` checks the spec shape. The script fails loudly if a target widget isn't found.
 - Output: `help/en/img/<name>.png`. Running it again refreshes every image.
 
