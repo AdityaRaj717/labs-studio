@@ -1,0 +1,48 @@
+{
+  "page": "characters",
+  "features": "flow",
+  "size": [
+    1180,
+    720
+  ],
+  "setup": "characters",
+  "grab": "page",
+  "callouts": [
+    {
+      "n": 1,
+      "target": [
+        "list",
+        "btn_delete"
+      ],
+      "shape": "box",
+      "badge": "tl"
+    },
+    {
+      "n": 2,
+      "target": "name_edit",
+      "shape": "box",
+      "badge": "right"
+    },
+    {
+      "n": 3,
+      "target": "notes_edit",
+      "shape": "box",
+      "badge": "right"
+    },
+    {
+      "n": 4,
+      "target": "refs",
+      "shape": "box",
+      "badge": "tl"
+    },
+    {
+      "n": 5,
+      "target": [
+        "flow_label",
+        "btn_flow"
+      ],
+      "shape": "box",
+      "badge": "right"
+    }
+  ]
+}

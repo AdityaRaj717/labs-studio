@@ -1,0 +1,29 @@
+{
+  "page": "video_cut",
+  "features": "all",
+  "size": [
+    1280,
+    700
+  ],
+  "grab": "page",
+  "callouts": [
+    {
+      "n": 1,
+      "target": "tabs/tabBar",
+      "shape": "box",
+      "badge": "right"
+    },
+    {
+      "n": 2,
+      "target": "slicer/config_panel",
+      "shape": "box",
+      "badge": "tl"
+    },
+    {
+      "n": 3,
+      "target": "slicer/table",
+      "shape": "box",
+      "badge": "tl"
+    }
+  ]
+}

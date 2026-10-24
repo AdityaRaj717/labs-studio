@@ -1,0 +1,50 @@
+{
+  "page": "flow_image",
+  "features": "flow",
+  "size": [
+    1600,
+    860
+  ],
+  "setup": "demo_rows",
+  "callouts": [
+    {
+      "n": 1,
+      "target": [
+        "window:sidebar/buttons/flow_image",
+        "window:sidebar/buttons/help"
+      ],
+      "shape": "box",
+      "badge": "right"
+    },
+    {
+      "n": 2,
+      "target": "window:picker",
+      "shape": "box",
+      "badge": "right"
+    },
+    {
+      "n": 3,
+      "target": "table",
+      "shape": "box",
+      "badge": "tl"
+    },
+    {
+      "n": 4,
+      "target": "help_button",
+      "shape": "arrow",
+      "from": [
+        -70,
+        50
+      ]
+    },
+    {
+      "n": 5,
+      "target": [
+        "window:sidebar/theme_btn",
+        "window:sidebar/version_btn"
+      ],
+      "shape": "box",
+      "badge": "right"
+    }
+  ]
+}

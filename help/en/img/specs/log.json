@@ -1,0 +1,27 @@
+{
+  "page": "log",
+  "features": "flow",
+  "size": [
+    1100,
+    560
+  ],
+  "setup": "log",
+  "grab": "page",
+  "callouts": [
+    {
+      "n": 1,
+      "target": "view",
+      "shape": "box",
+      "badge": "tl"
+    },
+    {
+      "n": 2,
+      "target": [
+        "QPushButton{text=Open log file}",
+        "QPushButton{text=Clear}"
+      ],
+      "shape": "box",
+      "badge": "bottom"
+    }
+  ]
+}

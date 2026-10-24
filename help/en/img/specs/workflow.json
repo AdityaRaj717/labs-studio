@@ -1,0 +1,33 @@
+{
+  "page": "workflow",
+  "features": "all",
+  "size": [
+    1280,
+    760
+  ],
+  "setup": "workflow",
+  "grab": "page",
+  "callouts": [
+    {
+      "n": 1,
+      "target": [
+        "btn_add",
+        "btn_folder"
+      ],
+      "shape": "box",
+      "badge": "bottom"
+    },
+    {
+      "n": 2,
+      "target": "view",
+      "shape": "box",
+      "badge": "tl"
+    },
+    {
+      "n": 3,
+      "target": "inspector",
+      "shape": "box",
+      "badge": "tr"
+    }
+  ]
+}

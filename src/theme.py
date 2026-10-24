@@ -123,6 +123,14 @@ QPushButton#PrimaryButton {{
     border-color: {c['accent']};
 }}
 QPushButton#PrimaryButton:disabled {{ background-color: {c['panel']}; color: {c['text_muted']}; border-color: {c['border']}; }}
+QPushButton#HelpButton {{
+    padding: 0;
+    border-radius: 11px;
+    font-weight: 600;
+    color: {c['text_muted']};
+}}
+QPushButton#HelpButton:hover {{ color: {c['accent']}; border-color: {c['accent']}; }}
+QTextBrowser#HelpView {{ background-color: {c['panel']}; padding: 8px 14px; }}
 
 QLabel#StatsHeader {{ color: {c['text_muted']}; padding: 4px 2px; }}
 QLabel#DemoBanner {{

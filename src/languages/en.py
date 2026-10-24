@@ -535,4 +535,12 @@ STRINGS: dict[str, str] = {
     "proj_root": "Projects are stored in {folder}",
     "proj_change_root": "Change data folder…",
     "proj_root_restart": "Restart Labs Studio to use the new data folder. Projects in the old folder are not moved.",
+    # Phase 15: help guide
+    "nav_help": "Help",
+    "help_search": "Search help",
+    "help_results": "{count} topic(s) found",
+    "help_back": "← Back",
+    "help_forward": "Forward →",
+    "help_button_tip": "Help for this page",
+    "help_missing": "The help files were not found in {folder}.",
 }

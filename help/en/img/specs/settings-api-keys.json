@@ -1,0 +1,33 @@
+{
+  "page": "settings",
+  "features": "all",
+  "size": [
+    1180,
+    700
+  ],
+  "setup": "settings_api",
+  "grab": "page",
+  "callouts": [
+    {
+      "n": 1,
+      "target": [
+        "tabs/currentWidget/KeyRow[0]/edit",
+        "tabs/currentWidget/KeyRow[0]/btn_clear"
+      ],
+      "shape": "box",
+      "badge": "left"
+    },
+    {
+      "n": 2,
+      "target": "tabs/currentWidget/KeyRow[0]/status",
+      "shape": "box",
+      "badge": "left"
+    },
+    {
+      "n": 3,
+      "target": "tabs/currentWidget/KeyRow[0]/QLabel{openExternalLinks=True}",
+      "shape": "box",
+      "badge": "right"
+    }
+  ]
+}

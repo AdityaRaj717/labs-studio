@@ -1,0 +1,38 @@
+{
+  "page": "projects",
+  "features": "flow",
+  "size": [
+    1280,
+    640
+  ],
+  "setup": "projects",
+  "callouts": [
+    {
+      "n": 1,
+      "target": "window:picker",
+      "shape": "box",
+      "badge": "right"
+    },
+    {
+      "n": 2,
+      "target": "table",
+      "shape": "box",
+      "badge": "tl"
+    },
+    {
+      "n": 3,
+      "target": [
+        "btn_switch",
+        "btn_refresh"
+      ],
+      "shape": "box",
+      "badge": "top"
+    },
+    {
+      "n": 4,
+      "target": "root_label",
+      "shape": "box",
+      "badge": "left"
+    }
+  ]
+}

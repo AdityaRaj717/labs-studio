@@ -1,0 +1,44 @@
+{
+  "page": "video_editor",
+  "features": "all",
+  "size": [
+    1280,
+    800
+  ],
+  "grab": "page",
+  "callouts": [
+    {
+      "n": 1,
+      "target": "ffmpeg_bar",
+      "shape": "box",
+      "badge": "left"
+    },
+    {
+      "n": 2,
+      "target": [
+        "QToolButton{text=File}",
+        "btn_export"
+      ],
+      "shape": "box",
+      "badge": "left"
+    },
+    {
+      "n": 3,
+      "target": "preview",
+      "shape": "box",
+      "badge": "tl"
+    },
+    {
+      "n": 4,
+      "target": "tabs",
+      "shape": "box",
+      "badge": "tr"
+    },
+    {
+      "n": 5,
+      "target": "timeline_scroll",
+      "shape": "box",
+      "badge": "tl"
+    }
+  ]
+}

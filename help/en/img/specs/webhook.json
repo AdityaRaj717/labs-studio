@@ -1,0 +1,50 @@
+{
+  "page": "webhook",
+  "features": "flow",
+  "size": [
+    1180,
+    820
+  ],
+  "grab": "page",
+  "callouts": [
+    {
+      "n": 1,
+      "target": [
+        "status",
+        "token"
+      ],
+      "shape": "box",
+      "badge": "left"
+    },
+    {
+      "n": 2,
+      "target": [
+        "lan",
+        "autostart"
+      ],
+      "shape": "box",
+      "badge": "left"
+    },
+    {
+      "n": 3,
+      "target": "btn_toggle",
+      "shape": "box",
+      "badge": "right"
+    },
+    {
+      "n": 4,
+      "target": [
+        "example",
+        "btn_copy"
+      ],
+      "shape": "box",
+      "badge": "left"
+    },
+    {
+      "n": 5,
+      "target": "requests",
+      "shape": "box",
+      "badge": "left"
+    }
+  ]
+}
