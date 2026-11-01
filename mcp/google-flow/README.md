@@ -73,7 +73,6 @@ All through your **own Google account** — no API keys, no third-party tokens.
 
 - **15+ MCP tools** ready to use
 - **Smart job queue** — no parallel conflicts
-- **Auto-discover UI** — adapts to Flow changes
 - **Structured logging** for debugging
 - **Safe actions** — resilient click/fill logic
   </td>
@@ -172,7 +171,6 @@ google-flow-browser-mcp/
 │
 ├── 📂 config/
 │   ├── flow.config.example.json    # Configuration template
-│   └── selectors.map.json          # UI selectors (auto-populated)
 │
 ├── 📂 scripts/
 │   ├── start-browser.sh            # Launch Chrome + CDP
@@ -190,7 +188,6 @@ google-flow-browser-mcp/
 │   │   └── safe-actions.js         # Safe click, fill, detection
 │   │
 │   ├── 📁 tools/                   # All MCP tool implementations
-│   │   ├── flow-open.js            # Navigate to Flow
 │   │   ├── flow-status.js          # Connection status
 │   │   ├── generate-image.js       # Image generation
 │   │   ├── generate-video.js       # Video generation (setup only)
@@ -200,7 +197,6 @@ google-flow-browser-mcp/
 │   │   ├── create-scene.js         # List / create scenes (places kept as characters)
 │   │   ├── open-tools-gallery.js   # Open tools gallery
 │   │   ├── grid-architect.js       # Batch shot generation
-│   │   ├── discover-ui.js          # UI discovery & mapping
 │   │   └── use-flow-tool.js        # Generic tool opener
 │   │
 │   ├── 📁 queue/                   # Job management
@@ -263,7 +259,6 @@ All tools are organized by function for easy discovery.
 | `flow_open_tools_gallery` | Open the tools gallery and browse available tools |
 | `flow_use_tool` | Open any Flow tool by name with optional parameters |
 | `flow_use_grid_architect` | Configure Grid Architect for batch shot generation with theme prompts, visual logic, and reference images |
-| `flow_discover_ui` | Discover and map all interactive elements (buttons, inputs, headings) on any Flow page |
 
 ### 📊 Queue & Monitoring
 
@@ -374,7 +369,7 @@ Verify that `expectedAccount` in `config/flow.config.json` matches the email log
 <details>
 <summary><strong>Flow UI changed and tools don't work</strong></summary>
 
-Run `flow_discover_ui` to re-map selectors. The `selectors.map.json` will auto-update with new UI element positions.
+Update the labels in `config/ui-contract.json`, then run `node src/tools/doctor.js` with Chrome attached to see which keys are missing.
 </details>
 
 ### Usage

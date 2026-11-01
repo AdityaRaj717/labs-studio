@@ -11,7 +11,6 @@ import { logger } from './utils/logger.js';
 import { launchKiaraProfile, navigateToFlow } from './browser/launch-profile.js';
 import { getPage, getBrowser, setBrowser, closeBrowser as closeBrowserConnection } from './browser/connect.js';
 import { verifyAccount as checkAccount } from './browser/account-check.js';
-import { handleFlowOpen } from './tools/flow-open.js';
 import { handleFlowStatus } from './tools/flow-status.js';
 import { handleGenerateImage } from './tools/generate-image.js';
 import { handleOpenProject, handleListProjects, handleRenameProject, handleDeleteProject } from './tools/open-project.js';
@@ -22,7 +21,6 @@ import { handleImportCharacter } from './tools/import-character.js';
 import { handleCreateScene, handleListScenes } from './tools/create-scene.js';
 import { handleOpenToolsGallery } from './tools/open-tools-gallery.js';
 import { handleUseGridArchitect } from './tools/grid-architect.js';
-import { handleDiscoverUi } from './tools/discover-ui.js';
 import { handleUseFlowTool } from './tools/use-flow-tool.js';
 import { jobQueue } from './queue/job-queue.js';
 import { takeScreenshot } from './utils/screenshots.js';
@@ -65,17 +63,6 @@ const TOOL_DEFINITIONS = [
     name: 'flow_account_check',
     description: 'Verify the logged-in Google account matches the configured expected email (Profile 3).',
     inputSchema: { type: 'object', properties: {} },
-  },
-  {
-    name: 'flow_discover_ui',
-    description: 'Navigate to a Google Flow page and discover all interactive elements (buttons, inputs, links, headings). Updates the internal selectors map for robust automation.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        page: { type: 'string', description: 'Page to discover. Options: main, image-generation, video-generation, characters, scenes, tools-gallery, grid-architect.', default: 'main' },
-      },
-      required: ['page'],
-    },
   },
   {
     name: 'flow_generate_image',
@@ -335,11 +322,6 @@ async function handleToolCall(name, args) {
     case 'flow_account_check': {
       const page = getPage();
       const result = await checkAccount(page);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-
-    case 'flow_discover_ui': {
-      const result = await handleDiscoverUi(args);
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
 
