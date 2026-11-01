@@ -28,7 +28,9 @@ try {
 // Environment overrides set by the host app (Labs Studio).
 if (process.env.FLOW_CDP_PORT) config.cdpPort = Number(process.env.FLOW_CDP_PORT);
 if (process.env.FLOW_CHROME_PATH) config.chromePath = process.env.FLOW_CHROME_PATH;
-if (process.env.FLOW_CHROME_PROFILE_DIR) config.chromeProfileDir = process.env.FLOW_CHROME_PROFILE_DIR;
+// FLOW_CHROME_PROFILE_DIR is what the app and the help pages already set.
+const chromeProfile = process.env.FLOW_CHROME_PROFILE || process.env.FLOW_CHROME_PROFILE_DIR;
+if (chromeProfile) config.chromeProfileDir = chromeProfile;
 if (process.env.FLOW_DATA_DIR) config.dataDir = process.env.FLOW_DATA_DIR;
 if (process.env.FLOW_EXPECTED_ACCOUNT !== undefined) config.expectedAccount = process.env.FLOW_EXPECTED_ACCOUNT;
 

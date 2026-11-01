@@ -8,7 +8,7 @@ import {
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
 import { logger } from './utils/logger.js';
-import { launchKiaraProfile, navigateToFlow } from './browser/launch-profile.js';
+import { launchFlowChrome, navigateToFlow } from './browser/launch-profile.js';
 import { getPage, getBrowser, setBrowser, closeBrowser as closeBrowserConnection } from './browser/connect.js';
 import { verifyAccount as checkAccount } from './browser/account-check.js';
 import { handleFlowStatus } from './tools/flow-status.js';
@@ -19,9 +19,6 @@ import { handleDownloadLatest } from './tools/download-latest.js';
 import { handleCreateCharacter, handleListCharacters } from './tools/create-character.js';
 import { handleImportCharacter } from './tools/import-character.js';
 import { handleCreateScene, handleListScenes } from './tools/create-scene.js';
-import { handleOpenToolsGallery } from './tools/open-tools-gallery.js';
-import { handleUseGridArchitect } from './tools/grid-architect.js';
-import { handleUseFlowTool } from './tools/use-flow-tool.js';
 import { jobQueue } from './queue/job-queue.js';
 import { takeScreenshot } from './utils/screenshots.js';
 import fs from 'fs';
@@ -46,7 +43,7 @@ const TOOL_DEFINITIONS = [
   },
   {
     name: 'flow_disconnect',
-    description: 'Close the browser and clean up the MCP connection to Google Flow.',
+    description: 'Detach the MCP from Chrome. Chrome and its tabs stay open.',
     inputSchema: { type: 'object', properties: {} },
   },
   {
@@ -61,18 +58,18 @@ const TOOL_DEFINITIONS = [
   },
   {
     name: 'flow_account_check',
-    description: 'Verify the logged-in Google account matches the configured expected email (Profile 3).',
+    description: 'Verify the logged-in Google account matches the configured expected email. Returns status ok, or unverified when no expected account is set or no account is shown; a different account is an error.',
     inputSchema: { type: 'object', properties: {} },
   },
   {
     name: 'flow_generate_image',
-    description: '⚠️ CES IMAGES CONSOMMENT DES CRÉDITS. Generates images through the agent chat of the Flow project. Sets the Agent settings of the project (aspect, count, model), uploads reference images as ingredients, sends the prompt. auto_confirm=false (default): prepares only and returns "ready_for_confirmation", nothing generated. auto_confirm=true: also sets "Confirm before generating: Never" for that project, presses Start generation, waits for the agent, and downloads every image at full size through the Flow Download media action. Errors carry a code: NOT_LOGGED_IN, MANUAL_VERIFICATION_REQUIRED, GOOGLE_LIMIT_REACHED, GENERATION_REFUSED, UNKNOWN_UI_CHANGE, ...',
+    description: '⚠️ THESE IMAGES SPEND CREDITS. Generates images through the agent chat of the Flow project. Sets the Agent settings of the project (aspect, count, model), uploads reference images as ingredients, sends the prompt. auto_confirm=false (default): prepares only and returns "ready_for_confirmation", nothing generated. auto_confirm=true: also sets "Confirm before generating: Never" for that project, presses Start generation, waits for the agent, and downloads every image at full size through the Flow Download media action. Errors carry a code: NOT_LOGGED_IN, MANUAL_VERIFICATION_REQUIRED, GOOGLE_LIMIT_REACHED, GENERATION_REFUSED, UNKNOWN_UI_CHANGE, ...',
     inputSchema: {
       type: 'object',
       properties: {
         prompt: { type: 'string', description: 'The text prompt for image generation.' },
         model: { type: 'string', description: 'Image model: Nano Banana 2.1 (default), Nano Banana Pro, Nano Banana 2 Lite. "Nano Banana 2" is accepted as 2.1.', default: 'Nano Banana 2.1' },
-        auto_confirm: { type: 'boolean', description: '⚠️ CRÉDITS. false (default): prepare only. true: generate (spends credits).', default: false },
+        auto_confirm: { type: 'boolean', description: '⚠️ CREDITS. false (default): prepare only. true: generate (spends credits).', default: false },
         ratio: { type: 'string', description: 'Aspect ratio: 1:1, 16:9, 9:16, 4:3, 3:4.', default: '1:1' },
         count: { type: 'number', description: 'Number of images, 1-4 (Agent settings x1-x4).', default: 1 },
         download_size: { type: 'string', description: 'Download size: 1K (original), 2K (upscaled), 4K (upscaled, higher plans only).', default: '1K' },
@@ -81,7 +78,7 @@ const TOOL_DEFINITIONS = [
         scenes: { type: 'array', items: CHARACTER_REF, description: 'Places made with flow_create_scene, added the same way.' },
         brand: { type: 'string', description: 'Brand context for automatic model selection: premium, standard.' },
         project_name: { type: 'string', description: 'Name for the project (will reuse existing project with same campaign, or create new).' },
-        campaign: { type: 'string', description: 'Campaign identifier for project matching (e.g., "ete-2026", "nouvelle-collection").' },
+        campaign: { type: 'string', description: 'Campaign identifier for project matching (e.g., "summer-2026").' },
         project_url: { type: 'string', description: 'Flow project URL to generate in (from flow_open_project). Wins over campaign / project_name. PROJECT_NOT_FOUND if it no longer exists.' },
         output_folder: { type: 'string', description: 'Folder to save the downloaded images into (created if missing).' },
         filename: { type: 'string', description: 'Base file name without extension (e.g. "IMG-001"). Several images get _v1, _v2 suffixes.' },
@@ -130,7 +127,7 @@ const TOOL_DEFINITIONS = [
         duration: { type: 'number', description: 'Target duration in seconds.', default: 5 },
         reference_images: { type: 'array', items: { type: 'string' }, description: 'Paths to reference images (optional).' },
         project_name: { type: 'string', description: 'Name for the project (will reuse existing project with same campaign, or create new).' },
-        campaign: { type: 'string', description: 'Campaign identifier for project matching (e.g., "ete-2026", "nouvelle-collection").' },
+        campaign: { type: 'string', description: 'Campaign identifier for project matching (e.g., "summer-2026").' },
       },
       required: ['prompt'],
     },
@@ -206,43 +203,6 @@ const TOOL_DEFINITIONS = [
     },
   },
   {
-    name: 'flow_open_tools_gallery',
-    description: 'Open the Google Flow Tools Gallery and list available tools.',
-    inputSchema: { type: 'object', properties: {} },
-  },
-  {
-    name: 'flow_use_grid_architect',
-    description: 'Open Grid Architect in Google Flow, fill theme prompt, shot prompts, engine, ratio, and visual logic settings. Supports batch shot generation for brand campaigns.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        theme_prompt: { type: 'string', description: 'Overall theme prompt for the grid.' },
-        shot_prompts: { type: 'array', items: { type: 'string' }, description: 'Array of individual shot prompts for the grid.' },
-        engine: { type: 'string', description: 'Engine/model for the grid.', default: 'Nano Banana 2' },
-        ratio: { type: 'string', description: 'Aspect ratio for all shots.', default: '16:9' },
-        visual_logic: { type: 'string', description: 'Visual logic type: None, Colour Pop, Side by Side, etc.' },
-        references: { type: 'array', items: { type: 'string' }, description: 'Paths to reference images.' },
-        project_name: { type: 'string', description: 'Name for the project (will reuse existing project with same campaign, or create new).' },
-        campaign: { type: 'string', description: 'Campaign identifier for project matching (e.g., "ete-2026", "nouvelle-collection").' },
-      },
-      required: ['theme_prompt'],
-    },
-  },
-  {
-    name: 'flow_use_tool',
-    description: 'Open any tool by name in Google Flow and optionally fill its configuration parameters.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        tool_name: { type: 'string', description: 'Name of the tool to open (e.g. Grid Architect, Image Generation).' },
-        params: { type: 'object', description: 'Optional configuration parameters for the tool.' },
-        project_name: { type: 'string', description: 'Name for the project (will reuse existing project with same campaign, or create new).' },
-        campaign: { type: 'string', description: 'Campaign identifier for project matching (e.g., "ete-2026", "nouvelle-collection").' },
-      },
-      required: ['tool_name'],
-    },
-  },
-  {
     name: 'flow_screenshot',
     description: 'Take a screenshot of the current Google Flow page.',
     inputSchema: {
@@ -269,7 +229,7 @@ async function handleToolCall(name, args) {
 
   switch (name) {
     case 'flow_connect': {
-      const result = await launchKiaraProfile(args?.headless || false);
+      const result = await launchFlowChrome(args?.headless || false);
       if (result.browser) setBrowser(result.browser);
       const page = getPage();
       let oauthRequired = false;
@@ -284,26 +244,20 @@ async function handleToolCall(name, args) {
       try {
         accountCheck = await checkAccount(page);
       } catch (e) {
-        accountCheck = { verified: false, error: e.message };
+        accountCheck = { status: 'mismatch', verified: false, error: e.message };
       }
       if (oauthRequired) {
         return { content: [{ type: 'text', text: JSON.stringify({
           status: 'oauth_required',
-          message: 'Google Flow requires OAuth authentication. Open Chrome Profile 3 manually once:\n'
-            + '  1. Launch: google-chrome --profile-directory="Profile 3"\n'
-            + '  2. Navigate to: https://labs.google/fx/tools/flow/tools/grid-architect\n'
-            + '  3. Complete the Google sign-in (one time)\n'
-            + '  4. Retry this MCP tool in headless mode',
-          browserType: 'Chrome Profile 3',
-          account: accountCheck?.account || 'verified-account',
+          message: 'Google Flow wants you to sign in. Sign in by hand in the Chrome window, then retry.',
+          account: accountCheck?.account ?? null,
           url: page.url().substring(0, 100),
           accountVerified: accountCheck,
         }, null, 2) }] };
       }
       return { content: [{ type: 'text', text: JSON.stringify({
         status: 'connected',
-        browserType: 'Chrome Profile 3',
-        account: accountCheck?.account || 'verified-account',
+        account: accountCheck?.account ?? null,
         url: page.url(),
         accountVerified: accountCheck,
       }, null, 2) }] };
@@ -315,7 +269,7 @@ async function handleToolCall(name, args) {
     }
 
     case 'flow_status': {
-      const status = await handleFlowStatus();
+      const status = await handleFlowStatus(args || {});
       return { content: [{ type: 'text', text: JSON.stringify(status, null, 2) }] };
     }
 
@@ -363,21 +317,6 @@ async function handleToolCall(name, args) {
         flow_import_character: handleImportCharacter, flow_list_scenes: handleListScenes, flow_create_scene: handleCreateScene,
       }[name];
       const result = await fn(args || {});
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-
-    case 'flow_open_tools_gallery': {
-      const result = await handleOpenToolsGallery(args);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-
-    case 'flow_use_grid_architect': {
-      const result = await handleUseGridArchitect(args);
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-    }
-
-    case 'flow_use_tool': {
-      const result = await handleUseFlowTool(args);
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
 

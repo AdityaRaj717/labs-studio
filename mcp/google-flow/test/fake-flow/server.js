@@ -8,6 +8,8 @@ const SCENARIOS = {
   chatOpen: { chatOpen: true, running: true, ingredient: true, promo: true },
   noStart: { noStart: true },
   stuckMenu: { stuckMenu: true },
+  slowCards: { cardDelayMs: 4000 },
+  slowDelete: { refreshDelayMs: 4000 },
 };
 
 const readPage = (name) => readFileSync(new URL(`./pages/${name}.html`, import.meta.url), 'utf8');

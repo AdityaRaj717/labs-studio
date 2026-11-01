@@ -1,15 +1,30 @@
 <!doctype html><meta charset="utf-8"><title>Flow</title><!--fake-->
 <main>
+  <button>Account details</button>
+  <button aria-label="Google Account: Fake User (fake@example.com), Google membership"></button>
   <button>New project</button>
-  <div><a href="/project/p1" aria-label="Open project">open</a> spike <button>Edit project title</button> <button class="del">Delete project</button></div>
-  <div><a href="/project/p2" aria-label="Open project">open</a> other <button>Edit project title</button> <button class="del">Delete project</button></div>
+  <div id="cards">
+    <div class="card"><a href="/project/p1" aria-label="Open project">open</a> spike <button>Edit project title</button> <button class="del">Delete project</button></div>
+    <div class="card"><a href="/project/p2" aria-label="Open project">open</a> other <button>Edit project title</button> <button class="del">Delete project</button></div>
+  </div>
 </main>
 <div class="cdk-overlay-container"></div>
 <script>
+  const F = window.FAKE;
   const overlay = document.querySelector('.cdk-overlay-container');
+  const list = document.getElementById('cards');
   document.querySelectorAll('.del').forEach((b) => b.onclick = () => {
     overlay.innerHTML = `<div role="dialog" aria-label="Are you sure you want to delete this project?">
       <h2>Are you sure you want to delete this project?</h2>
-      <button onclick="this.parentNode.remove()">Cancel</button><button>Delete project</button></div>`;
+      <button onclick="this.parentNode.remove()">Cancel</button><button id="confirm">Delete project</button></div>`;
+    document.getElementById('confirm').onclick = () => {
+      overlay.innerHTML = '';
+      setTimeout(() => b.closest('.card').remove(), F.refreshDelayMs || 0);
+    };
   });
+  if (F.cardDelayMs) {
+    const cards = [...list.children];
+    list.replaceChildren();
+    setTimeout(() => list.append(...cards), F.cardDelayMs);
+  }
 </script>

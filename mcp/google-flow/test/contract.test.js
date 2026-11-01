@@ -92,7 +92,8 @@ test('locate resolves every contract key against fake Flow', { timeout: 60000 },
   await page.close(); await flow.close();
 
   await open('/project/p1/character');
-  await see(['character.prompt', 'character.upload', 'character.addFromProject']);
+  await see(['character.prompt', 'character.upload', 'character.addFromProject', 'character.nav', 'character.section',
+    'character.format', 'character.name', 'character.info', 'character.portrait', 'character.done']);
 
   const unseen = Object.keys(contract.keys).filter((k) => !seen.has(k));
   assert.deepEqual(unseen, []);

@@ -5,7 +5,7 @@ import { FlowError, ErrorCodes } from '../utils/errors.js';
 import { takeScreenshot } from '../utils/screenshots.js';
 import { detectPageElements } from '../browser/safe-actions.js';
 import { prepareDownload, findNewFiles, saveMetadata } from '../utils/file-manager.js';
-import { ensureProjectInContext, navigateToSidebar } from '../navigation/project-navigator.js';
+import { ensureProjectInContext } from '../navigation/project-navigator.js';
 import { get } from '../utils/config.js';
 import fs from 'fs';
 import path from 'path';
@@ -66,7 +66,7 @@ export async function handleGenerateVideo(args) {
       inputs: elements.inputs.length,
     });
 
-    // Find prompt input — try current view first, then navigate sidebar
+    // Find prompt input
     let promptInput = null;
     const promptCandidates = [
       page.locator('textarea:visible, [contenteditable="true"]:visible').first(),
@@ -78,19 +78,6 @@ export async function handleGenerateVideo(args) {
       if (await candidate.isVisible().catch(() => false)) {
         promptInput = candidate;
         break;
-      }
-    }
-
-    if (!promptInput) {
-      logger.info('No prompt found on current view, trying sidebar navigation');
-      await navigateToSidebar(page, 'Outils');
-      await page.waitForTimeout(2000);
-
-      for (const candidate of promptCandidates) {
-        if (await candidate.isVisible().catch(() => false)) {
-          promptInput = candidate;
-          break;
-        }
       }
     }
 

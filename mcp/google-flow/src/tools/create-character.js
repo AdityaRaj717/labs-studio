@@ -5,6 +5,7 @@ import { FlowError, ErrorCodes } from '../utils/errors.js';
 import { takeScreenshot } from '../utils/screenshots.js';
 import { getDataDir } from '../utils/config.js';
 import { gotoProject, projectBase } from './open-project.js';
+import { contract, locate } from '../flow/contract.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -22,28 +23,9 @@ import path from 'path';
 //  - Flow's own "Scenes" are video timelines, not places. A place for image work is kept as a
 //    character whose info starts with PLACE_PREFIX (Flow: "anything can be a character").
 
-export const UI = {
-  account: 'Account details',
-  nav: 'Project navigation',
-  charactersNav: 'Characters',
-  activeClass: 'mdc-list-item--activated',
-  describe: 'Describe your character…',
-  format: 'Format',
-  start: 'Start generation',
-  upload: 'Upload',
-  addFromProject: 'Add from project',
-  selectProject: 'Select project',
-  searchAssets: 'Search assets',
-  assetList: 'Asset list',
-  name: 'Character name',
-  info: 'Character personality',
-  portrait: 'Generated character image',
-  done: 'Done',
-};
+const ACTIVE_NAV_CLASS = 'mdc-list-item--activated';
 
 export const PLACE_PREFIX = 'Place (a location, not a person): ';
-
-const btn = (page, name) => page.getByRole('button', { name, exact: true });
 
 async function need(page, locator, what, timeout = 15000) {
   try {
@@ -81,8 +63,7 @@ export async function openProjectOrFail(page, url) {
 // Character names in the open project, read from its Characters section.
 async function readCharacterNames(page, base) {
   if (page.url().split('?')[0] !== base) await gotoProject(page, base);
-  const nav = page.getByRole('navigation', { name: UI.nav });
-  const section = await need(page, nav.getByRole('button', { name: UI.charactersNav, exact: true }), 'Characters section button');
+  const section = await need(page, locate(page, 'character.section'), 'Characters section button');
   await section.click();
   const end = Date.now() + 10000;
   let names = [];
@@ -92,7 +73,7 @@ async function readCharacterNames(page, base) {
     // No characters: Flow jumps to the New character page.
     if (page.url().includes('/character')) return [];
     // With the section filter on, every tile in the grid is a character (thumbnails load lazily).
-    if (!(await section.getAttribute('class') || '').includes(UI.activeClass)) continue;
+    if (!(await section.getAttribute('class') || '').includes(ACTIVE_NAV_CLASS)) continue;
     const now = await page.evaluate(() => [...document.querySelectorAll('[role=group]')]
       .map(g => g.getAttribute('aria-label') || '').filter(Boolean));
     // The section fills in over a second or two: wait until the list stops changing.
@@ -112,13 +93,13 @@ async function openCharacter(page, base, name) {
   }
   await page.getByRole('group', { name, exact: true }).first().click();
   await page.waitForURL(/\/character\/[^/?#]+/, { timeout: 20000 });
-  await need(page, page.getByRole('textbox', { name: UI.name }), 'character name box', 20000);
+  await need(page, locate(page, 'character.name'), 'character name box', 20000);
   await page.waitForTimeout(800);
   return page.url();
 }
 
 async function readCharacterInfo(page) {
-  return (await page.getByRole('textbox', { name: UI.info }).inputValue().catch(() => '')).trim();
+  return (await locate(page, 'character.info').inputValue().catch(() => '')).trim();
 }
 
 function kindOf(info) {
@@ -143,7 +124,7 @@ async function waitForCharacterPage(page, timeout = 180000) {
   const end = Date.now() + timeout;
   while (Date.now() < end) {
     if (/\/character\/[^/?#]+/.test(page.url())
-        && await page.getByRole('textbox', { name: UI.name }).isVisible().catch(() => false)) return page.url();
+        && await locate(page, 'character.name').isVisible().catch(() => false)) return page.url();
     await page.waitForTimeout(1000);
   }
   await takeScreenshot(page, 'character-not-created');
@@ -155,22 +136,22 @@ async function waitForCharacterPage(page, timeout = 180000) {
 async function startFromImage(page, image, fromProjectTitle) {
   if (fs.existsSync(image)) {
     const chooser = page.waitForEvent('filechooser', { timeout: 15000 });
-    await (await need(page, btn(page, UI.upload), 'Upload button')).click();
+    await (await need(page, locate(page, 'character.upload'), 'Upload button')).click();
     await (await chooser).setFiles(image);
     return 'upload';
   }
-  await (await need(page, btn(page, UI.addFromProject), 'Add from project button')).click();
+  await (await need(page, locate(page, 'character.addFromProject'), 'Add from project button')).click();
   const dialog = await need(page, page.getByRole('dialog').first(), 'Select media dialog');
   if (fromProjectTitle) {
-    await dialog.getByRole('combobox', { name: UI.selectProject }).click();
-    const opt = page.getByRole('listbox', { name: UI.selectProject }).getByRole('option', { name: fromProjectTitle, exact: true });
+    await locate(page, 'picker.selectProject', { root: dialog }).click();
+    const opt = page.getByRole('listbox', { name: contract.keys['picker.selectProject'].name }).getByRole('option', { name: fromProjectTitle, exact: true });
     await need(page, opt, `project "${fromProjectTitle}" in the project switcher`, 8000);
     await opt.click();
     await page.waitForTimeout(2000);
   }
-  await dialog.getByRole('textbox', { name: UI.searchAssets }).fill(image);
+  await locate(page, 'picker.search', { root: dialog }).fill(image);
   await page.waitForTimeout(2000);
-  const option = dialog.getByRole('listbox', { name: UI.assetList }).getByRole('option', { name: image, exact: true }).first();
+  const option = locate(page, 'picker.assetList', { root: dialog }).getByRole('option', { name: image, exact: true }).first();
   if (!await option.isVisible().catch(() => false)) {
     await page.keyboard.press('Escape');
     throw new FlowError(ErrorCodes.INVALID_PARAMS, `"${image}" is neither a local file nor an image in the project`, { image });
@@ -180,20 +161,20 @@ async function startFromImage(page, image, fromProjectTitle) {
 }
 
 async function setNameAndInfo(page, name, info) {
-  const box = page.getByRole('textbox', { name: UI.name });
+  const box = locate(page, 'character.name');
   await box.click();
   await box.fill(name);
   await box.press('Enter');
   await page.waitForTimeout(1000);
   if (info) {
-    const infoBox = page.getByRole('textbox', { name: UI.info });
+    const infoBox = locate(page, 'character.info');
     await infoBox.click();
     await infoBox.fill(info);
     await page.waitForTimeout(1200);
   }
   const got = (await box.inputValue().catch(() => '')).trim();
   if (got !== name) logger.warn('Character name did not stick', { wanted: name, got });
-  await btn(page, UI.done).click();
+  await locate(page, 'character.done').click();
   await page.waitForTimeout(2500);
   return got;
 }
@@ -221,19 +202,19 @@ export async function createCharacter(page, args) {
   }
 
   await page.goto(`${base}/character`, { waitUntil: 'domcontentloaded', timeout: 60000 });
-  await need(page, page.getByRole('textbox', { name: UI.describe }), 'New character page', 20000);
+  await need(page, locate(page, 'character.prompt'), 'New character page', 20000);
   let source;
   if (images.length) {
     source = await startFromImage(page, images[0], args.from_project_title);
     if (images.length > 1) logger.warn('Only the first image is used for a character', { name, ignored: images.slice(1) });
   } else {
     const prompt = String(args.prompt).replace(/\s+/g, ' ').trim();
-    const box = page.getByRole('textbox', { name: UI.describe });
+    const box = locate(page, 'character.prompt');
     await box.click();
     await page.keyboard.insertText(prompt);
     if (args.format) {
       // "Format" rewrites the text into a studio portrait prompt (free, no image).
-      await btn(page, UI.format).click();
+      await locate(page, 'character.format').click();
       const end = Date.now() + 30000;
       while (Date.now() < end && (await box.innerText()).trim() === prompt) await page.waitForTimeout(800);
     }
@@ -245,7 +226,7 @@ export async function createCharacter(page, args) {
         prompt: (await box.innerText()).trim(), screenshot: shot,
       };
     }
-    const start = btn(page, UI.start);
+    const start = locate(page, 'project.start');
     await need(page, start, 'Start generation button');
     await start.click();
     source = 'prompt';
@@ -255,7 +236,7 @@ export async function createCharacter(page, args) {
     // The character page opens while the portrait is still generating; leaving it early
     // (Done) loses the portrait, so wait for it.
     try {
-      await page.getByRole('img', { name: UI.portrait }).first().waitFor({ state: 'visible', timeout: Number(args.timeout_ms) || 240000 });
+      await locate(page, 'character.portrait').first().waitFor({ state: 'visible', timeout: Number(args.timeout_ms) || 240000 });
     } catch {
       await takeScreenshot(page, 'character-no-portrait');
       throw new FlowError(ErrorCodes.GENERATION_TIMEOUT, 'The character page opened but its portrait never appeared', { url });
@@ -273,7 +254,7 @@ export async function downloadPortrait(page, base, name) {
   const dir = path.join(getDataDir(), 'characters');
   fs.mkdirSync(dir, { recursive: true });
   // "Download image" saves a 512 px preview; the portrait URL with "=s0" is the original size.
-  const img = await need(page, page.getByRole('img', { name: UI.portrait }).first(), 'character portrait');
+  const img = await need(page, locate(page, 'character.portrait').first(), 'character portrait');
   const src = await img.getAttribute('src');
   const got = await page.evaluate(async (u) => {
     const res = await fetch(u.replace(/=[sw]\d+[^/]*$/, '') + '=s0', { credentials: 'include' });

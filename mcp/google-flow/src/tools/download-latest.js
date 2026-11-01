@@ -8,7 +8,7 @@ export async function handleDownloadLatest() {
   logger.info('Attempting to download latest result');
 
   try {
-    const downloadBtnLocator = page.locator('button:has-text("Download"), button:has-text("Télécharger"), [aria-label*="download"]').first();
+    const downloadBtnLocator = page.locator('button:has-text("Download"), [aria-label*="download"]').first();
 const downloadBtnVisible = await downloadBtnLocator.isVisible().catch(() => false);
 const downloadBtn = downloadBtnVisible ? downloadBtnLocator : null;
     if (downloadBtn) {

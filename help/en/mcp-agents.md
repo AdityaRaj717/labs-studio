@@ -145,7 +145,7 @@ Docs: [Codex MCP](https://developers.openai.com/codex/mcp).
 | `flow_generate_image` | One prompt → up to 4 images (model, aspect, count, 1K/2K, reference images, `project_url`, `characters`, `scenes`, an output folder) |
 | `flow_list_characters`, `flow_create_character`, `flow_import_character` | Flow characters in a project: list, create from an image (free) or a description, copy from another project |
 | `flow_list_scenes`, `flow_create_scene` | Places, kept in Flow as characters marked as a place |
-| `flow_generate_video`, `flow_download_latest`, `flow_use_tool`, `flow_open_tools_gallery`, `flow_use_grid_architect`, `flow_screenshot`, `flow_queue_status` | Older tools. Video and the Flow tools haven't been updated for Flow's current page and may fail. Video generation spends your Flow credits |
+| `flow_generate_video`, `flow_download_latest`, `flow_screenshot`, `flow_queue_status` | Older tools. Video hasn't been updated for Flow's current page and may fail. Video generation spends your Flow credits |
 
 Errors come back with an `error_code`. `NOT_LOGGED_IN`, `MANUAL_VERIFICATION_REQUIRED` (a CAPTCHA) and `GOOGLE_LIMIT_REACHED` mean a person has to look at the Chrome window. Don't let an agent retry those in a loop.
 

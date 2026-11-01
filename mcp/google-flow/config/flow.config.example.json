@@ -16,6 +16,7 @@
     "Nano Banana 2 Lite": "nano-banana-2-lite"
   },
   "videoModels": {
+    "Omni 1.1 Flash": "omni-flash",
     "Omni Flash": "omni-flash",
     "Veo 3.1 - Lite": "veo-3.1-lite",
     "Veo 3.1 - Fast": "veo-3.1-fast",
@@ -29,8 +30,8 @@
     "9:16"
   ],
   "videoRatios": [
-    "9:16",
-    "16:9"
+    "16:9",
+    "9:16"
   ],
   "durations": [
     "4s",
@@ -54,5 +55,5 @@
   ],
   "locale": "en",
   "chromePath": "C:/Program Files/Google/Chrome/Application/chrome.exe",
-  "chromeProfileDir": "./chrome-profile"
+  "chromeProfileDir": "D:/glabs_web/chrome-profile"
 }

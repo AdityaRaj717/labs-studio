@@ -1,14 +1,16 @@
 import { logger } from '../utils/logger.js';
 import { getPage, isBrowserConnected } from '../browser/connect.js';
+import { readAccountStatus } from '../browser/account-check.js';
+import { isFlowHost } from '../browser/host.js';
 import { jobQueue } from '../queue/job-queue.js';
 import { get } from '../utils/config.js';
+import { takeScreenshot } from '../utils/screenshots.js';
 
-const EXPECTED_ACCOUNT = get('expectedAccount', '');
-
-export async function handleFlowStatus() {
+export async function handleFlowStatus(args = {}) {
   const status = {
     browser: isBrowserConnected(),
     account: null,
+    accountStatus: 'unverified',
     flowAccessible: false,
     oauthRequired: false,
     currentUrl: null,
@@ -21,21 +23,21 @@ export async function handleFlowStatus() {
       const page = getPage();
       status.currentUrl = page.url();
       status.pageTitle = await page.title();
-      status.flowAccessible = status.currentUrl?.includes('labs.google') || false;
+      status.flowAccessible = isFlowHost(status.currentUrl);
       status.oauthRequired = status.currentUrl?.includes('accounts.google.com') || false;
 
       if (status.flowAccessible && !status.oauthRequired) {
-        const accountEl = await page.$('[data-account-email], [aria-label*="gmail"]');
-        if (accountEl) {
-          status.account = await accountEl.textContent();
-        }
+        const check = await readAccountStatus(page);
+        status.account = check.account;
+        status.accountStatus = check.status;
       }
+      if (args.full) status.screenshot = await takeScreenshot(page, 'flow-status');
     } catch (err) {
       status.browserError = err.message;
     }
   }
 
-  status.expectedAccount = EXPECTED_ACCOUNT;
+  status.expectedAccount = get('expectedAccount', '');
 
   logger.info('Status check', status);
   return status;
