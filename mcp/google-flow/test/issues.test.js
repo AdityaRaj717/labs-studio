@@ -53,7 +53,7 @@ test('no source file contains networkidle', () => {
 });
 
 test('no source file contains French labels or old hosts and names', () => {
-  const french = /Nouveau|Projet|projet|Outils|Personnages|Scènes|Corbeille|Modifier|Supprimer|Vidéo|Créer|Confirmer|Télécharger|CRÉDITS|CONSOMMENT|IMPOSSIBLE|fr-FR|/fr/|Nom|nom|nouvelle-collection|ete-2026/;
+  const french = /Nouveau|Projet|\bprojet\b|Outils|Personnages|Scènes|Corbeille|Modifier|Supprimer|Vidéo|Créer|Confirmer|Télécharger|CRÉDITS|CONSOMMENT|IMPOSSIBLE|fr-FR|\/fr\/|\bNom\b|\bnom\b|nouvelle-collection|ete-2026/;
   assert.deepEqual(offenders(french), []);
   assert.deepEqual(offenders(/labs\.google|launchKiaraProfile|Profile 3/), []);
 });
