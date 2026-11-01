@@ -9,3 +9,8 @@ __pycache__/
 *.egg-info/
 build/
 dist/
+
+# Agent tooling and Node
+.superpowers/
+.claude/
+node_modules/
