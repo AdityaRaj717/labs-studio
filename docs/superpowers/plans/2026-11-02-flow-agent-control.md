@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Any MCP agent can run Google Flow image and video work end to end, including batches, voiceover, music and optional assembly, with durable outputs and truthful live status in Labs Studio.
+**Goal:** Any MCP agent can run Google Flow image and video work end to end, including batches, YouTube productions with per-item review, and voiceover and audio API access, with durable outputs and truthful live status in Labs Studio. Assembly moves to Later phase L.
 
 **Architecture:** One local Node engine owns Chrome, the queue, pacing, budgets and files. A thin stdio MCP shim and the PySide6 app are both clients of it over token-protected localhost HTTP and SSE.
 
@@ -52,6 +52,17 @@ From the independent review of this plan:
 - **Screenshots:** hard 10s timeout, never fail a job on one.
 - **C6 settled:** `grid-architect.js` is deleted in Task 4.
 - **`npm test`** is `node --test test/*.test.js`; bare `test/` fails on Node 22.
+
+## YouTube production phase (added 2026-11-02; these override anything below that conflicts)
+
+Plan: `docs/superpowers/plans/2026-11-02-youtube-production.md`. Spec: `docs/superpowers/specs/2026-11-02-youtube-production-design.md`. Y tasks slot into this plan, with **order:** 1-4 (done) → **Y0** → 5-8 → 9-11 → **Y1-Y5** → 12-14 → **Y6, Y7** → 15, 16 → **Y8** → 19 → **Y9** → 20 → Phase L.
+
+- **Later phase (L):** Task 18 whole; Task 16's voice row and `preview_voice`; Task 17; the stitch and music parts of Task 19; the assembled-video eval in Task 20. FFmpeg, `src/editor/{model,ffmpeg,subtitles,autoedit}.py` and `last_frame_cmd` stay, per Global Constraints.
+- **Tool list:** `stitch_video` is not registered. Task 8 pins spec 6.4 minus it and asserts it's absent; Y tasks add theirs. Task 19's no-`NOT_IMPLEMENTED` test covers that list. L1 registers it.
+- **Silent:** Task 10 builds `src/flow/silent.js` this way: `stripAudio(file, {ffmpegPath}) -> {file, original, audio_streams}`. The stripped file is the deliverable under the normal name, the original moves to `videos/_original/<stem>.flow.mp4`, and a repeat strips from the existing original. Task 10 adds tests `stripAudio on a testsrc plus sine clip leaves zero audio streams and keeps duration within 0.5s`, `the original still has one audio stream`, `repeating stripAudio doesn't lose the original`, and `verifyVideo with an audio stream in the deliverable is RESULT_MISMATCH`.
+- **Task 20:** adds the YouTube spec's vocabulary to `GLOSSARY.md`, and writes `docs/adr/0002-production-review-state.md` (production.json as review truth, one writer). Assembly steps inside guide section 17 and the T-17 campaign are Later phase L3.
+- **UI freeze:** the owner lifted it only for the review list in YouTube spec R1, applied in Y6 and Y7. Otherwise frozen.
+- **Stitcher runtime** Build Rule applies from L1.
 
 ## Review Focus
 
@@ -319,7 +330,7 @@ Issue map: #1 networkidle, #2 host check, #3 French labels, #5 `full`, #6 delete
 **Files:** per audit. Delete `src/gen/{gemini_image,gemini_video,grok,openai_image,http_common}.py`, `src/workflow/`, `src/ui/workflow/`, `src/ui/editor/`, `src/ui/tools/`, `src/tools/{realesrgan,tasks}.py` with tests and help; modify `src/app.py`, `src/ui/sidebar.py`, `src/ui/main_window.py`, `src/features.py`, `src/characters/voices.py`, `src/ui/characters/page.py`, `src/languages/en.py`, `src/webhook/*`, `src/ui/webhook/*`, `packaging/labs_studio.spec`, `tools/make_help_screenshots.py`, `help/en/*`, `tests/*`; move `src/gen/fake_provider.py` to `tests/fake_provider.py`.
 
 **Interfaces:**
-- Produces: `src/tools/ffmpeg.py` keeps `last_frame_cmd`; single setting `tools.ffmpeg_path`; `features.py` removed or reduced with flow strings hard-coded; `Character.voice` kept as a Fish `reference_id`; `preview_voice` removed until Task 16.
+- Produces: `src/tools/ffmpeg.py` keeps `last_frame_cmd`; single setting `tools.ffmpeg_path`; `features.py` removed or reduced with flow strings hard-coded; `Character.voice` kept as a Fish `reference_id`; `preview_voice` removed until Later phase L2.
 
 - [ ] **Step 1:** Add test `test_nav_visible_default` capturing the current default sidebar keys before any deletion. Run; PASS.
 - [ ] **Step 2:** Remove one feature per commit in this order: placeholders, workflow, upscaler and Video Cut, GUI editor, Grok and OpenAI, Gemini, demo (moving the fake to tests, retargeting webhook default to `flow_image`). Run pytest after each; expect PASS with removed tests gone.
@@ -375,12 +386,14 @@ Issue map: #1 networkidle, #2 host check, #3 French labels, #5 `full`, #6 delete
 
 ### Task 16: Stable Audio 3, keys
 
+**Later phase L2 (not in this task):** the character voice row, and changes to `src/ui/characters/page.py` and `src/characters/voices.py`.
+
 **Files:**
 - Create: `src/audio/stable.js`, `src/keys_push.py`, `test/stable.test.js`, `tests/test_audio_keys.py`
-- Modify: `src/keys.py`, `src/ui/pages/settings_page.py`, `src/ui/characters/page.py`, `src/characters/voices.py`, `src/features.py`
+- Modify: `src/keys.py`, `src/ui/pages/settings_page.py`, `src/features.py`
 
 **Interfaces:**
-- Produces: `audio_stable_generate({kind:'music'|'sfx', prompt, duration, seed, steps=8, cfg_scale=1, output_format='wav', run_id, name, auto_confirm})`, charged at 8 Stability credits; `pushKeys(engine)`; character voice row calling Fish.
+- Produces: `audio_stable_generate({kind:'music'|'sfx', prompt, duration, seed, steps=8, cfg_scale=1, output_format='wav', run_id, name, auto_confirm})`, charged at 8 Stability credits; `pushKeys(engine)`.
 
 - [ ] **Step 1:** Write tests: `multipart body has spec's fields`; `202 then poll then saved in bgm/ or sfx/`; `poll has a bounded timeout`; `403 is SAFETY_BLOCKED; 402 is AUDIO_NO_CREDIT; 422 fails the job`; `no auto_confirm returns an estimate only`; `results are saved before reporting done`; Python: `keys tab lists Fish and Stability only`, `pushKeys posts to /secrets`, `no key means a clear error`.
 - [ ] **Step 2:** Run; expect failure. Implement. Run; expect PASS.
@@ -388,9 +401,11 @@ Issue map: #1 networkidle, #2 host check, #3 French labels, #5 `full`, #6 delete
 
 ### Task 17: Optional local Small models (only if the owner chooses)
 
-Skipped by default per C4. If chosen: separate venv under `tools/stable_audio/`, `backend: 'local'` on the same tool, Small music and SFX only, and the owner accepts the gated licence on Hugging Face personally.
+**Later phase.** Skipped by default per C4. If chosen: separate venv under `tools/stable_audio/`, `backend: 'local'` on the same tool, Small music and SFX only, and the owner accepts the gated licence on Hugging Face personally.
 
 ### Task 18: Stitcher
+
+**Later phase L1. Not in the current order;** kept here as the brief for L1.
 
 **Files:**
 - Create: `src/editor/stitch.py`, `src/stitch_cli.py`, `tests/test_stitch.py`, `mcp/google-flow/test/stitch.test.js`
@@ -419,8 +434,8 @@ Skipped by default per C4. If chosen: separate venv under `tools/stable_audio/`,
 - Create: `docs/flow-live-acceptance.md`, `tests/live/run_acceptance.mjs`
 
 - [ ] **Step 1:** Update guide: new tool names, real model names, `auto_confirm: true` where generation is meant, and a credit column. Each test must assert a file exists and is valid, not a status. Remove Gemini, Grok and OpenAI tables.
-- [ ] **Step 2:** Run sections 1-10, 13-16, 18 on images. Video with Omni 360p unless the test is about another model. Add voice, music, and stitch tests.
-- [ ] **Step 3:** Record each result with evidence path and credit use. Stop at 300 credits. Fix failures through `superpowers:systematic-debugging`, adding a failing test first. Report any remaining failure plainly.
+- [ ] **Step 2:** Run sections 1-10, 13-16, 18 on images. Video with Omni 360p unless the test is about another model. Add voice and SFX API tests. Stitch, music and assembled-video tests are Later phase L3.
+- [ ] **Step 3:** Record each result with evidence path and credit use. Stop at 300 credits, counting Y0's video leg, Y8 and Y9 if the owner put them inside the cap. Fix failures through `superpowers:systematic-debugging`, adding a failing test first. Report any remaining failure plainly.
 
 ### Task 20: Cold-agent evals, docs, final review
 
@@ -428,7 +443,7 @@ Skipped by default per C4. If chosen: separate venv under `tools/stable_audio/`,
 - Create: `tests/evals/prompts.json`, `tests/evals/score.mjs`, `docs/adr/0001-flow-engine.md`, `GLOSSARY.md`, `CLAUDE.md`, `.github/workflows/test.yml`
 - Modify: `README.md`, `help/en/mcp-agents.md`, `help/en/*`, `mcp/google-flow/README.md`, `src/shim/guide.md`
 
-- [ ] **Step 1:** Write about 15 eval prompts, from "make one image" through the T-17 campaign, a story with narration and music assembled, a failure in the middle, and "continue yesterday's run". Run each with a fresh low-context agent (`sonnet-worker`) given only the MCP. Score completion, tool-call count, and wrong calls. Fix tool descriptions and errors, not the prompts. Target: 100% on easy, at least 90% overall, no unapproved spend.
+- [ ] **Step 1:** Extend Y9's `tests/evals/score.mjs` with about 15 eval prompts, from "make one image" through the T-17 campaign, a failure in the middle, and "continue yesterday's run". (A story with narration and music assembled is Later phase L3.) Run each with a fresh low-context agent (`sonnet-worker`) given only the MCP. Score completion, tool-call count, and wrong calls. Fix tool descriptions and errors, not the prompts. Target: 100% on easy, at least 90% overall, no unapproved spend.
 - [ ] **Step 2:** Docs: config for Claude Code, Claude Desktop, Cursor, Codex; recovery guide; updated help; CI running Node and Python offline suites on `windows-latest`; regenerate help screenshots.
 - [ ] **Step 3:** Run `node --test`, pytest, `gitleaks` with `--redact`, `osv-scanner`, `/security-review`, and a whole-branch review. Fix findings.
 - [ ] **Step 4:** Use `superpowers:finishing-a-development-branch`. Then ask the owner for the UI overhaul brief.
@@ -437,11 +452,14 @@ Skipped by default per C4. If chosen: separate venv under `tools/stable_audio/`,
 
 ## Dependency order
 
-Task 1 → 2 → 3 → 4 → 5, 6, 7 → 8 → 9 → 10 → 11 → 12 → 13 → 14 → 15 → 16 → 18 → 19 → 20. Tasks 5, 6, 7 are independent of each other. So are 12 and 15, 16, 18 once 8 is done. Task 17 is optional.
+Task 1 → 2 → 3 → 4 → **Y0** → 5, 6, 7 → 8 → 9 → 10 → 11 → **Y1 → Y2 → Y3 → Y4 → Y5** → 12 → 13 → 14 → **Y6 → Y7** → 15 → 16 → **Y8** → 19 → **Y9** → 20 → Later phase L (18, 17 if chosen, voice and assembly). Tasks 5, 6, 7 are independent of each other. So are 12 and 15, 16 once 8 is done, but this order is what's planned.
 
 ## Owner checkpoints
 
-1. Before Task 2: approve up to 40 credits.
-2. Task 2 findings may change Tasks 10 and 13, and settle C6.
-3. Task 15 and 16: owner enters API keys.
-4. Before Task 19: approve up to 300 credits.
+1. Before Task 2: approve up to 40 credits. (Done.)
+2. Task 2 findings may change Tasks 10 and 13, and settle C6. (Done.)
+3. **Before anything resumes:** review the YouTube plan and approve the order above.
+4. Y0's video leg: up to 15 credits, the unused part of the 40 spike cap, or skip it.
+5. Task 15 and 16: owner enters API keys.
+6. Before Y8: approve up to 60 credits for Y8 and Y9, proposed inside the 300 cap.
+7. Before Task 19: approve up to 300 credits.

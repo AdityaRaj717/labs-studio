@@ -193,6 +193,8 @@ Cost and quota preview before spending. Resume after crash or reboot. Retry only
 
 ## 7. Scope
 
+**YouTube production (2026-11-02):** `docs/superpowers/specs/2026-11-02-youtube-production-design.md` adds reference sheets, stills, silent animations and per-item review, and moves the stitcher, voice selection and assembly to a Later phase L. The stitcher stays on the roadmap (section 2), and `stitch_video` in 6.4 isn't registered until then. It lifts the UI freeze only for its review list (R1).
+
 **In:** every Flow control that serves image and video: project lifecycle; agent settings; session reset; ingredients (upload, reuse, character, scene, across projects); text-to-video, first and last frames, ingredients to video, extend, Omni edit; Return silent videos; download sizes; upscale; asset info; trash for run cleanup; refusal, failure and quota states.
 
 **Later or out:** Flow Music, Flow TV, tool creator, share, flag output, collections, Avatars, Flow's own Voices, Scenebuilder, multi-account, parallel generation.
