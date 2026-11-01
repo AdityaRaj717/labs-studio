@@ -1,0 +1,267 @@
+
+===     0.2s url=/project/<id>
++ - link "Skip to main content":
++   - /url: "#main-content"
++ - main:
++   - navigation:
++     - button "Home"
++     - heading "spike-2026-11-02" [level=1]
++     - textbox "Editable text":
++       - /placeholder: ""
++       - text: spike-2026-11-02
++   - button "More options for the project"
++   - button "Search"
++   - textbox "Search"
++   - button "Filtering and sorting options"
++   - button "Add media menu"
++   - button "Product help"
++   - button "Settings"
++   - button "More options"
++   - button "Account details":
++     - text: PRO
++     - 'button "Google Account: <name> (<email>), Google membership"'
++   - navigation "Project navigation":
++     - button "All media"
++     - button "Images"
++     - button "Videos"
++     - button "Characters"
++     - button "Scenes"
++     - button "Uploads"
++     - separator
++     - link "Library Create collection":
++       - /url: /project/<id>
++       - text: Library
++       - button "Create collection"
++     - separator
++     - link "Tools":
++       - /url: /project/<id>/tools
++     - link "Create tool":
++       - /url: /project/<id>/create-tool
++     - link "Trash":
++       - /url: /project/<id>/trash
++     - button "Collapse"
++   - group "Paper boat drifting past lilies":
++     - img "Generated video thumbnail"
++   - group "Paper boat turns in water":
++     - img "Generated video thumbnail"
++   - group "Paper boat drifting on pond":
++     - img "Generated video thumbnail"
++     - text: 360p
++   - group "Red paper boat on lake":
++     - img "Tile displaying a user's image"
++   - group "Red paper boat on lake":
++     - img "Tile displaying a user's image"
++   - group "boat-1k.png":
++     - img "Tile displaying a user's image"
++   - group "Red paper boat on pond":
++     - img "Tile displaying a user's image"
++   - button "Start"
++   - button "Swap first and last frames"
++   - button "End"
++   - textbox "What do you want to create?":
++     - paragraph
++   - button "Agent"
++   - button "Settings trigger": Video · 360p · 4s x1
++   - button "Start generation" [disabled]
++   - paragraph: Google Flow can make mistakes, so double check it
++ - radiogroup:
++   - radio "Image"
++   - radio "Video" [checked]
++ - radiogroup:
++   - radio "Frames" [checked]
++   - radio "Ingredients"
++ - radiogroup:
++   - radio "16:9" [checked]
++   - radio "9:16"
++ - separator
++ - button "Select model family": Omni 1.1 Flash
++ - radiogroup:
++   - radio "360p 360p generates faster at lower resolution" [checked]:
++     - text: 360p
++     - img "360p generates faster at lower resolution": info
++   - radio "720p"
++ - radiogroup:
++   - radio "4s" [checked]
++   - radio "6s"
++   - radio "8s"
++   - radio "10s"
++ - radiogroup:
++   - radio "x1" [checked]
++   - radio "x2"
++   - radio "x3"
++   - radio "x4"
++ - text: Generating will use
++ - link "4 credits":
++   - /url: https://support.google.com/googleone?p=g1_ai_credit_menu
+
+===     2.3s url=/project/<id>
+- - radiogroup:
+-   - radio "Image"
+-   - radio "Video" [checked]
+- - radiogroup:
+-   - radio "Frames" [checked]
+-   - radio "Ingredients"
+- - radiogroup:
+-   - radio "16:9" [checked]
+-   - radio "9:16"
+- - separator
+- - button "Select model family": Omni 1.1 Flash
+- - radiogroup:
+-   - radio "360p 360p generates faster at lower resolution" [checked]:
+-     - img "360p generates faster at lower resolution": info
+-   - radio "720p"
+- - radiogroup:
+-   - radio "4s" [checked]
+-   - radio "6s"
+-   - radio "8s"
+-   - radio "10s"
+- - radiogroup:
+-   - radio "x1" [checked]
+-   - radio "x2"
+-   - radio "x3"
+-   - radio "x4"
+- - text: Generating will use
+- - link "4 credits":
+-   - /url: https://support.google.com/googleone?p=g1_ai_credit_menu
+
+===     6.4s url=/project/<id>
++ - heading "Select a frame image" [level=2]
++ - button "Close"
++ - progressbar "Loading…"
++ - tablist "Category navigation":
++   - tab "Images" [selected]
++   - tab "Uploads"
++ - button "Upload media"
++ - banner:
++   - textbox "Search assets"
++   - combobox "Sort assets": Recent
++ - listbox "Asset list":
++   - option "boat-1k.png" [selected]
++   - option "Red paper boat on lake"
++   - option "Red paper boat on lake"
++   - option "Red paper boat on pond"
++ - img "Preview of boat-1k.png"
++ - button "Add to prompt"
+
+===     8.5s url=/project/<id>
+- - progressbar "Loading…"
++ - combobox "Select project": spike-2026-11-02
+
+===    18.7s url=/project/<id>
+-   - option "boat-1k.png" [selected]
+-   - option "Red paper boat on pond"
+- - img "Preview of boat-1k.png"
++   - option "boat-1k.png"
++   - option "Red paper boat on pond" [selected]
++ - img "Preview of Red paper boat on pond"
+
+===    21.8s url=/project/<id>
+-   - button "Start"
+- - heading "Select a frame image" [level=2]
+- - button "Close"
+- - combobox "Select project": spike-2026-11-02
+- - tablist "Category navigation":
+-   - tab "Images" [selected]
+-   - tab "Uploads"
+- - button "Upload media"
+- - banner:
+-   - textbox "Search assets"
+-   - combobox "Sort assets": Recent
+- - listbox "Asset list":
+-   - option "boat-1k.png"
+-   - option "Red paper boat on lake"
+-   - option "Red paper boat on lake"
+-   - option "Red paper boat on pond" [selected]
+- - img "Preview of Red paper boat on pond"
+- - button "Add to prompt"
++   - button "Image ingredient"
++   - button "Clear prompt"
+
+===    22.8s url=/project/<id>
+-   - button "Image ingredient"
++   - button "Image ingredient":
++     - img "Ingredient image"
+
+===    24.8s url=/project/<id>
+-     - paragraph
+-   - button "Start generation" [disabled]
++     - paragraph: The
++   - button "Start generation"
+
+===    25.9s url=/project/<id>
+-     - paragraph: The
++     - paragraph: The paper boat slowly turns in the
+
+===    26.9s url=/project/<id>
+-     - paragraph: The paper boat slowly turns in the
++     - paragraph: The paper boat slowly turns in the water as gentle ripples spread.
+
+===    31.0s url=/project/<id>
+-   - button "Image ingredient":
+-     - img "Ingredient image"
+-   - button "Clear prompt"
+-     - paragraph: The paper boat slowly turns in the water as gentle ripples spread.
+-   - button "Start generation"
++   - group "The paper boat slowly turns in the water as gentle ripples spread.":
++     - text: The paper boat slowly turns in the water as gentle ripples spread.
++     - button "Reuse prompt"
++   - button "Start"
++     - paragraph
++   - button "Start generation" [disabled]
+
+===    37.1s url=/project/<id>
+-   - group "The paper boat slowly turns in the water as gentle ripples spread.":
+-     - text: The paper boat slowly turns in the water as gentle ripples spread.
++     - text: 0% The paper boat slowly turns in the water as gentle ripples spread.
+
+===    39.2s url=/project/<id>
+-     - text: 0% The paper boat slowly turns in the water as gentle ripples spread.
++     - text: 1% The paper boat slowly turns in the water as gentle ripples spread.
+
+===    41.2s url=/project/<id>
+-     - text: 1% The paper boat slowly turns in the water as gentle ripples spread.
++     - text: 3% The paper boat slowly turns in the water as gentle ripples spread.
+
+===    43.3s url=/project/<id>
+-     - text: 3% The paper boat slowly turns in the water as gentle ripples spread.
++     - text: 4% The paper boat slowly turns in the water as gentle ripples spread.
+
+===    44.3s url=/project/<id>
+-     - text: 4% The paper boat slowly turns in the water as gentle ripples spread.
++     - text: 5% The paper boat slowly turns in the water as gentle ripples spread.
+
+===    46.4s url=/project/<id>
+-     - text: 5% The paper boat slowly turns in the water as gentle ripples spread.
++     - text: 7% The paper boat slowly turns in the water as gentle ripples spread.
+
+===    48.4s url=/project/<id>
+-     - text: 7% The paper boat slowly turns in the water as gentle ripples spread.
++     - text: 8% The paper boat slowly turns in the water as gentle ripples spread.
+
+===    50.4s url=/project/<id>
+-     - text: 8% The paper boat slowly turns in the water as gentle ripples spread.
++     - text: 10% The paper boat slowly turns in the water as gentle ripples spread.
+
+===    51.5s url=/project/<id>
+-     - text: 10% The paper boat slowly turns in the water as gentle ripples spread.
++     - text: 11% The paper boat slowly turns in the water as gentle ripples spread.
+
+===    53.5s url=/project/<id>
+-     - text: 11% The paper boat slowly turns in the water as gentle ripples spread.
++     - text: 13% The paper boat slowly turns in the water as gentle ripples spread.
+
+===    55.5s url=/project/<id>
+-     - text: 13% The paper boat slowly turns in the water as gentle ripples spread.
++     - text: 14% The paper boat slowly turns in the water as gentle ripples spread.
+
+===    56.5s url=/project/<id>
+-     - text: 14% The paper boat slowly turns in the water as gentle ripples spread.
++     - text: 100% The paper boat slowly turns in the water as gentle ripples spread.
+
+===    57.6s url=/project/<id>
+-     - text: 100% The paper boat slowly turns in the water as gentle ripples spread.
++     - text: 360p The paper boat slowly turns in the water as gentle ripples spread.
+
+===    60.6s url=/project/<id>
+-     - text: 360p The paper boat slowly turns in the water as gentle ripples spread.
+-     - button "Reuse prompt"

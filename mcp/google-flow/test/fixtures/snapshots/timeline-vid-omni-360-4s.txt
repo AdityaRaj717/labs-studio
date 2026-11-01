@@ -1,0 +1,166 @@
+
+===     0.2s url=/project/<id>
++ - link "Skip to main content":
++   - /url: "#main-content"
++ - main:
++   - navigation:
++     - button "Home"
++     - heading "spike-2026-11-02" [level=1]
++     - textbox "Editable text":
++       - /placeholder: ""
++       - text: spike-2026-11-02
++   - button "More options for the project"
++   - button "Search"
++   - textbox "Search"
++   - button "Filtering and sorting options"
++   - button "Add media menu"
++   - button "Product help"
++   - button "Settings"
++   - button "More options"
++   - button "Account details":
++     - text: PRO
++     - 'button "Google Account: <name> (<email>), Google membership"'
++   - navigation "Project navigation":
++     - button "All media"
++     - button "Images"
++     - button "Characters"
++     - button "Scenes"
++     - button "Uploads"
++     - separator
++     - link "Library Create collection":
++       - /url: /project/<id>
++       - text: Library
++       - button "Create collection"
++     - separator
++     - link "Tools":
++       - /url: /project/<id>/tools
++     - link "Create tool":
++       - /url: /project/<id>/create-tool
++     - link "Trash":
++       - /url: /project/<id>/trash
++     - button "Collapse"
++   - group "Red paper boat on lake":
++     - img "Tile displaying a user's image"
++   - group "Red paper boat on lake":
++     - img "Tile displaying a user's image"
++   - group "boat-1k.png":
++     - img "Tile displaying a user's image"
++   - group "Red paper boat on pond":
++     - img "Tile displaying a user's image"
++   - button "Open session history"
++   - heading "Untitled session" [level=2]
++   - button "Start new session"
++   - button "Close"
++   - text: "Generate 1 video with Omni 1.1 Flash at 360p resolution, 4 seconds long, 16:9: a paper boat drifting slowly on a calm pond."
++   - paragraph: I'll generate 1 video of a paper boat drifting on a calm pond using Omni 1.1 Flash at 360p resolution (4 seconds, 16:9).
++   - paragraph: Would you like me to kick off this 1 video generation, costing 4 credits?
++   - radiogroup "Permission options":
++     - radio "Approve"
++     - radio "Always approve"
++     - radio "Reject"
++   - button "Good response"
++   - button "Bad response"
++   - button "Copy"
++   - button "Flag output"
++   - textbox "What do you want to create?":
++     - paragraph
++   - button "Add ingredients to the prompt box"
++   - button "Agent instructions"
++   - button "Settings"
++   - button "Start generation" [disabled]
++   - paragraph: Google Flow can make mistakes, so double check it
+
+===     4.3s url=/project/<id>
+-     - radio "Approve"
+-     - radio "Always approve"
+-     - radio "Reject"
+-   - button "Start generation" [disabled]
++     - radio "Approve" [checked] [disabled]
++     - radio "Always approve" [disabled]
++     - radio "Reject" [disabled]
++   - text: Approve
++   - status "Thinking"
++   - button "Stop"
+
+===     9.5s url=/project/<id>
+-   - status "Thinking"
++     - button "Videos"
++   - group "a paper boat drifting slowly on a calm pond":
++     - text: a paper boat drifting slowly on a calm pond
++     - button "Reuse prompt"
++   - group "Media options gallery":
++     - button "Open video in editor"
+
+===    15.6s url=/project/<id>
+-   - group "a paper boat drifting slowly on a calm pond":
+-     - text: a paper boat drifting slowly on a calm pond
+-     - button "Reuse prompt"
+-     - button "Open video in editor"
++   - group "Paper boat drifting on pond":
++     - text: Queued a paper boat drifting slowly on a calm pond
++     - button "Cancel"
++     - text: Queued
++     - button "Cancel"
+
+===    16.6s url=/project/<id>
+-     - text: Queued a paper boat drifting slowly on a calm pond
+-     - button "Cancel"
+-     - text: Queued
+-     - button "Cancel"
++     - text: 0% a paper boat drifting slowly on a calm pond
++     - button "Reuse prompt"
++     - button "Open video in editor"
+
+===    18.7s url=/project/<id>
+-     - text: 0% a paper boat drifting slowly on a calm pond
++     - text: 1% a paper boat drifting slowly on a calm pond
+
+===    20.7s url=/project/<id>
+-     - text: 1% a paper boat drifting slowly on a calm pond
++     - text: 3% a paper boat drifting slowly on a calm pond
++   - paragraph: Your video of a paper boat drifting on a calm pond has been scheduled and is waiting in the queue. Feel free to check back in a few minutes or ask me about its status anytime.
+
+===    22.8s url=/project/<id>
+-     - text: 3% a paper boat drifting slowly on a calm pond
+-   - button "Stop"
++     - text: 4% a paper boat drifting slowly on a calm pond
++   - button "Start generation" [disabled]
+
+===    23.8s url=/project/<id>
+-     - text: 4% a paper boat drifting slowly on a calm pond
++     - text: 6% a paper boat drifting slowly on a calm pond
+
+===    24.9s url=/project/<id>
+-     - text: 6% a paper boat drifting slowly on a calm pond
++     - text: 7% a paper boat drifting slowly on a calm pond
+
+===    26.9s url=/project/<id>
+-     - text: 7% a paper boat drifting slowly on a calm pond
++     - text: 8% a paper boat drifting slowly on a calm pond
+
+===    29.0s url=/project/<id>
+-     - text: 8% a paper boat drifting slowly on a calm pond
++     - text: 10% a paper boat drifting slowly on a calm pond
+
+===    30.0s url=/project/<id>
+-     - text: 10% a paper boat drifting slowly on a calm pond
++     - text: 100% a paper boat drifting slowly on a calm pond
+
+===    31.0s url=/project/<id>
+-     - text: 100% a paper boat drifting slowly on a calm pond
++     - img "Generated video thumbnail"
++     - text: 360p 100% a paper boat drifting slowly on a calm pond
+
+===    32.1s url=/project/<id>
+-     - text: 360p 100% a paper boat drifting slowly on a calm pond
++     - text: 360p a paper boat drifting slowly on a calm pond
+
+===    34.1s url=/project/<id>
+-     - text: 360p a paper boat drifting slowly on a calm pond
+-     - button "Reuse prompt"
++     - text: 360p
+
+===    35.1s url=/project/<id>
+-     - button "Open video in editor"
++     - button "Open video in editor":
++       - img "a paper boat drifting slowly on a calm pond"

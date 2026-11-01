@@ -1,0 +1,108 @@
+- link "Skip to main content":
+  - /url: "#main-content"
+- main:
+  - heading "Google Flow" [level=1]:
+    - link "Google Flow":
+      - /url: /
+  - link "Flow Music":
+    - /url: https://www.flowmusic.app/?utm_source=flow
+  - link "Flow TV":
+    - /url: https://labs.google/flow/tv
+  - link "Link to Google Labs Discord server":
+    - /url: https://discord.com/invite/googlelabs
+  - link "Link to Flow on Instagram":
+    - /url: https://www.instagram.com/googleflow
+  - link "Link to Flow on X (Twitter)":
+    - /url: https://x.com/FlowbyGoogle
+  - button "Product help"
+  - button "More options"
+  - button "Account details":
+    - text: PRO
+    - 'button "Google Account: <name> (<email>), Google membership"'
+  - region "Promotional banner":
+    - heading "Your Google AI plan now comes with 50 additional Flow credits daily." [level=2]
+    - paragraph
+    - button "Start Creating"
+    - button "Go to banner"
+    - button "Go to banner"
+    - button "Go to banner"
+    - button "Go to banner"
+    - button "Go to banner"
+    - button "Dismiss banner"
+  - link "Open project":
+    - /url: /project/<id>
+    - img "image thumbnail for a flow project"
+  - text: spike-2026-11-02
+  - button "Edit project title"
+  - button "Delete project"
+  - link "Open project":
+    - /url: /project/<id>
+  - text: Project Alpha Final
+  - button "Edit project title"
+  - button "Delete project"
+  - link "Open project":
+    - /url: /project/<id>
+    - img "image thumbnail for a flow project"
+  - text: Test Agent Control Project
+  - button "Edit project title"
+  - button "Delete project"
+  - link "Open project":
+    - /url: /project/<id>
+  - text: Oct 24 - 13:55
+  - button "Edit project title"
+  - button "Delete project"
+  - link "Open project":
+    - /url: /project/<id>
+  - text: Default
+  - button "Edit project title"
+  - button "Delete project"
+  - link "Open project":
+    - /url: /project/<id>
+    - img "image thumbnail for a flow project"
+  - text: Cyberpunk 2099
+  - button "Edit project title"
+  - button "Delete project"
+  - link "Open project":
+    - /url: /project/<id>
+  - text: Oct 19 - 00:37
+  - button "Edit project title"
+  - button "Delete project"
+  - link "Open project":
+    - /url: /project/<id>
+  - text: Oct 19 - 00:35
+  - button "Edit project title"
+  - button "Delete project"
+  - link "Open project":
+    - /url: /project/<id>
+  - text: Oct 19 - 00:27
+  - button "Edit project title"
+  - button "Delete project"
+  - link "Open project":
+    - /url: /project/<id>
+  - text: Oct 11 - 22:00
+  - button "Edit project title"
+  - button "Delete project"
+  - link "Open project":
+    - /url: /project/<id>
+    - img "image thumbnail for a flow project"
+  - text: Oct 11 - 19:47
+  - button "Edit project title"
+  - button "Delete project"
+  - link "Open project":
+    - /url: /project/<id>
+  - text: Oct 06 - 22:59
+  - button "Edit project title"
+  - button "Delete project"
+  - link "Open project":
+    - /url: /project/<id>
+    - img "image thumbnail for a flow project"
+  - text: Oct 06 - 17:49
+  - button "Edit project title"
+  - button "Delete project"
+  - link "Open project":
+    - /url: /project/<id>
+    - img "image thumbnail for a flow project"
+  - text: Sept 17 - 14:16
+  - button "Edit project title"
+  - button "Delete project"
+  - button "New project"

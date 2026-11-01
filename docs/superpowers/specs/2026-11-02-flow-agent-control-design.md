@@ -31,6 +31,10 @@ Priority: finish the main workflow first. **UI layout is frozen** until the owne
 | C8 | Audio results are saved and reachable through agents and folders, with no new app page yet | A new page is a UI change; add it during the overhaul |
 | C9 | CAPTCHA, "verify it's you", and limits always stop and hand over to the owner. No stealth, no solver, no retries past them | Retrying raises the account's risk. Project rule, and the terms page promises it |
 
+| C10 | **Drive Flow's direct composer (Agent toggle off), not its agent chat** | Found in the Task 2 spike. Real controls for every option, a live credit quote, and no agent to rephrase or ask questions. See `docs/flow-ui-findings.md`, which overrides any conflicting detail in sections 4.2-4.3 |
+| C11 | `silent: true` strips audio locally with FFmpeg and keeps the original | Spike: Flow's Return silent videos setting still returned audible audio |
+| C12 | Before Start, the engine reads Flow's quoted credits; above `max_credits` it stops with no spend, and the ledger records the quote | Replaces estimates with Flow's own number. The account panel gives the real balance |
+
 ## 4. What the investigation found
 
 ### 4.1 Code
@@ -66,7 +70,7 @@ The nine logged issues are all real but are a subset. The log's "100% passed" se
 - Video credits per generation, Pro: Veo Lite 10, Fast 20, Quality 100. Omni 720p 7, 10, 12, 15 for 4, 6, 8, 10s; Omni 360p 4, 5, 6, 7; Omni edit 40. 1080p upscale 0. 4K Ultra only.
 - 1,000 credits a month with no rollover, plus 50 a day.
 - Credits are deducted at start and returned within one hour on failure or safety block, and the shown balance can lag.
-- Model capability: Veo T2V and frames at 4, 6, 8s; Ingredients 8s, Lite and Fast only; Extend 8s, help says use Lite; Omni 4-10s with frames, ingredients, and edit.
+- Model capability: Veo T2V and frames at 4, 6, 8s (**live on Pro: 8s 720p only, no control**); Ingredients 8s, Lite and Fast only; Extend 8s, help says use Lite; Omni 4-10s with frames, ingredients, and edit.
 - The Flow agent's own queries are free but have a daily query limit.
 
 ### 4.4 Lessons from `gflow-cli` (MIT, active, adopted as reference only)
@@ -212,7 +216,8 @@ Live budget: spike at most 40 credits; acceptance at most 300 of the 1,000, leav
 
 - **Account:** a suspended account would also affect other Google services. Keep the dedicated profile and pacing. The owner accepted the risk.
 - **Drift:** Flow is mid-migration, so breakage will recur. Mitigation: one contract file, doctor, fake-Flow fixtures refreshed from live snapshots.
-- **Agent-in-the-middle:** Flow's agent can rephrase, ask questions, or spend its daily query limit. Mitigation: confirm Never, exact prompts, and result verification, plus `AGENT_NEEDS_CLARIFICATION`.
+- **Agent-in-the-middle:** removed by C10. If Flow drops the direct composer, `flow_doctor` reports it through the contract.
+- **Failed tile UI unseen:** a blocked generation's tile wasn't observed in the spike. A tile leaving the running state without finished media is treated as failed and its text kept; refine when seen live.
 - **Licence:** the vendored `LICENSE` calls the code MIT, but upstream's GitHub lists no licence. Fine for private use; settle before public distribution.
 - **Fish free tier:** limits undocumented. Stops with a clear error and never moves to the paid model on its own.
 
@@ -224,4 +229,4 @@ Live budget: spike at most 40 credits; acceptance at most 300 of the 1,000, leav
 - MCP: [versioning](https://modelcontextprotocol.io/specification/versioning.md), [progress](https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/progress.md), [tasks](https://modelcontextprotocol.io/extensions/tasks/overview.md), [Claude Code MCP](https://code.claude.com/docs/en/mcp.md), [writing tools for agents](https://www.anthropic.com/engineering/writing-tools-for-agents)
 - Prior art: [gflow-cli](https://github.com/ffroliva/gflow-cli), [host migration issue](https://github.com/ffroliva/gflow-cli/issues/639)
 
-**Unverified:** Flow's progress display, video menu, and duration control (Task 2); Fish free-tier numbers and commercial terms; Stable Audio licence wording; Cursor and Codex progress support; FFmpeg recipes until Task 18 tests them.
+**Unverified:** Flow's failed-tile display, Extend and Omni edit runs (Tasks 10, 19); Fish free-tier numbers and commercial terms; Stable Audio licence wording; Cursor and Codex progress support; FFmpeg recipes until Task 18 tests them.

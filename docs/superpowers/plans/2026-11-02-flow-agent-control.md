@@ -40,6 +40,19 @@ From the independent review of this plan:
 - **Scope details:** Task 9 owns session reset and asset info (read into verification). Tasks 9 and 10 own upscaling through download sizes. Run cleanup uses `flow_delete_project` with confirm; trash controls are out of this version. Task 1 adds the two testing docs where they are, with no move.
 - **Live coverage:** Task 19 also runs guide section 7 and 14 cross-project flows, rewritten section 11 video tests, and section 17 end-to-end scenarios, with section 12 removed.
 
+## Spike rulings (from Task 2, these override everything below; facts in `docs/flow-ui-findings.md`)
+
+- **Direct composer (C10):** generation closes the chat panel and turns the Agent toggle off, asserted each job. Replace `neverConfirm` with this. Drop `AGENT_NEEDS_CLARIFICATION` tests and the agent turn logic; keep the code in the enum only for Python mapping. Review Focus 3 becomes: wrong count or ratio is not success, and a job with no new tile in 60s fails without hanging.
+- **Quote gate (C12):** `applySettings` reads the settings back, then reads `link "N credits"`. Above `max_credits` is `BUDGET_EXCEEDED`, no spend. `quotedCredits` goes in the manifest and ledger. `getBalance(page)` reads the account panel; `flow_status` includes it.
+- **Observe tiles only:** a generation is identified by new tiles at the top versus the count before submit. `n%` text gives `progress` with `source: 'flow'`, and it isn't linear. Done is a finished media element. A tile leaving the running state without one is failed with its text saved.
+- **Capabilities:** Veo Lite, Fast, Quality accept `duration` 8 or omitted and `resolution` 720p or omitted; anything else is `COMBINATION_NOT_SUPPORTED`, and no control is touched. Extend only from Veo clips. Task 6's `ingredients with 4s Veo Lite rejected` stays true, and 4s on Veo is rejected in every mode.
+- **Silent (C11):** `silent: true` runs `ffmpeg -an -c copy` after download, keeps the original, and `verifyVideo` checks the copy has no audio stream. Replaces the toggle test in Task 10.
+- **FFmpeg path:** the engine setting `ffmpegPath`, env `FFMPEG_PATH`, default PATH then `D:\Apps\ffmpeg\ffmpeg-9.0.2-essentials_build\bin`. FFprobe sits beside it. Owner's PATH isn't changed.
+- **Images:** downloads are JPEG, extension from the suggested filename. Ratio tolerance 3%, duration tolerance 0.5s.
+- **Screenshots:** hard 10s timeout, never fail a job on one.
+- **C6 settled:** `grid-architect.js` is deleted in Task 4.
+- **`npm test`** is `node --test test/*.test.js`; bare `test/` fails on Node 22.
+
 ## Review Focus
 
 1. **Crash or reboot just after Start is clicked:** no second spend; the result is recovered from the project or marked `credits_at_risk`. Test in Task 5.
