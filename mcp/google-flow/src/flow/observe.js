@@ -7,7 +7,8 @@ import { contract, locate } from './contract.js';
 const POLL_MS = 1000;
 const NOT_RUNNING_POLLS = 3; // a tile can flip through an empty frame on its way to done
 const PREVIEW_MS = 10000;
-const PERCENT = /^\s*(\d+)%/;
+// Live tiles read "image 97% <prompt>", the kind word first.
+const PERCENT = /^\s*(?:[a-z]+\s+)?(\d+)%/i;
 const SETTLE_POLL_MS = 500;
 const SETTLE_MAX_MS = 5000;
 

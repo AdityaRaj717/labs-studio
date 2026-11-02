@@ -51,7 +51,8 @@ export async function readAssetInfo(page, tile) {
     const title = tile.getByRole(contract.keys['tile.moreOptions'].role, { name: await tile.getAttribute('aria-label', { timeout: INFO_MS }), exact: true });
     await tile.hover({ timeout: INFO_MS });
     await title.click({ timeout: INFO_MS });
-    const info = await page.getByText(new RegExp(contract.tile.assetInfo)).first().innerText({ timeout: INFO_MS });
+    // The date is its own element; the model and ratio are siblings of it.
+    const info = await page.getByText(new RegExp(contract.tile.assetInfo)).first().locator('..').innerText({ timeout: INFO_MS });
     await title.click({ timeout: INFO_MS });
     return info.trim();
   } catch (err) {

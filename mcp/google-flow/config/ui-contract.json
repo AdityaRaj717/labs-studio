@@ -115,7 +115,7 @@
     "pageSettings.clearPrompt": { "page": "pageSettings", "role": "switch", "name": "Clear prompt on submit toggle" }
   },
   "picker": { "uploading": "^Uploading " },
-  "tile": { "assetInfo": "^Created ", "noRetry": "polic|violat|safety|refus|prohibit|not allowed|inappropriate|can.t (generate|create)|unable to (generate|create)" },
+  "tile": { "assetInfo": "Created \\w+ \\d", "noRetry": "polic|violat|safety|refus|prohibit|not allowed|inappropriate|can.t (generate|create)|unable to (generate|create)" },
   "settingsGroups": {
     "kind": { "has": "settings.kind.image" },
     "image.ratio": { "has": "settings.ratio.1:1" },

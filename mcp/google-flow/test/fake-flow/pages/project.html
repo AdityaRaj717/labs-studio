@@ -112,7 +112,7 @@
 
   function tileBody(t) {
     if (t.state === 'character') return `<img alt="Character thumbnail" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">${t.label}`;
-    if (t.state === 'running') return `${t.pct}% ${t.prompt}`;
+    if (t.state === 'running') return `image ${t.pct}% ${t.prompt}`;
     if (t.state === 'failed') return t.text;
     return `<img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="Tile displaying a user's image" data-media-id="${t.id}">
       <button data-act="tileMenu" data-id="${t.id}" aria-label="More options"></button>
@@ -121,7 +121,7 @@
   function renderGrid() {
     document.getElementById('grid').innerHTML = s.tiles.map((t) =>
       `<flow-grid-tile-container role="group" aria-label="${t.label}">${tileBody(t)}</flow-grid-tile-container>`).join('');
-    document.getElementById('info').textContent = s.info;
+    document.getElementById('info').innerHTML = s.info;
     document.getElementById('notices').innerHTML = s.notice;
   }
 
@@ -208,7 +208,7 @@
     sizes: () => { s.sizesOpen = true; },
     info: (el) => {
       const t = s.tiles.find((x) => x.id === el.dataset.id);
-      s.info = s.info ? '' : `Created Nov 2, 2026 ${F.noModelInfo ? '' : t.model} ${t.ratio}`;
+      s.info = s.info ? '' : `<div> Created Nov 2, 2026 </div><div>${F.noModelInfo ? '' : t.model}</div><div>${t.ratio}</div>`;
     },
   };
   const NAMED_BUTTONS = {
