@@ -57,12 +57,13 @@ export async function legacyAdapter(job, ctx) {
     project_name: spec.project_name,
     output_folder: `${job.run.dir}/images`,
     wait_ms: LEGACY_WAIT_MS,
+    onProjectOpen: ctx.pinPage,
   });
   if (result.status !== 'success') throw createError(ErrorCodes.GENERATION_TIMEOUT, `Image job ended as ${result.status}`);
   return { outputs: result.files ?? [] };
 }
 
-export function createWorker({ adapter, session, pacer }) {
+export function createWorker({ adapter, session, pacer, settleMs = LEGACY_WAIT_MS }) {
   let paused = null;
   let current = null;
   let controller = null;
@@ -108,6 +109,19 @@ export function createWorker({ adapter, session, pacer }) {
     }
   }
 
+  // The old flow takes no signal and may still be clicking after its job ended, so the tab
+  // isn't handed on until it stops. One that never stops holds the queue for the owner.
+  async function waitForAdapter(running) {
+    let timer;
+    const expired = new Promise((resolve) => {
+      timer = setTimeout(resolve, settleMs, true);
+      timer.unref();
+    });
+    const stuck = await Promise.race([running.then(() => false, () => false), expired]);
+    clearTimeout(timer);
+    if (stuck) pause(ErrorCodes.INTERNAL_ERROR);
+  }
+
   async function runOne(job) {
     current = job;
     const control = new AbortController();
@@ -115,6 +129,7 @@ export function createWorker({ adapter, session, pacer }) {
     const { signal } = control;
     const cleanups = [];
     let page = null;
+    let running = null;
     let interrupt;
     const interrupted = new Promise((_, reject) => { interrupt = reject; });
     // stop and cancel; a lost or moved tab rejects with its own error first.
@@ -162,7 +177,8 @@ export function createWorker({ adapter, session, pacer }) {
         page = open.page;
         watchChrome(open.browser, open.page);
         if (job.state === 'queued') transition(job, 'preparing');
-        const result = await Promise.race([adapter(job, ctx), interrupted]);
+        running = adapter(job, ctx);
+        const result = await Promise.race([running, interrupted]);
         if (!job.submittedAt) throw createError(ErrorCodes.INTERNAL_ERROR, 'The job ended without reaching Flow');
         const steps = FINISH.slice(FINISH.indexOf(job.state) + 1);
         steps.forEach((state, i) => transition(job, state, i === steps.length - 1 ? { outputs: result?.outputs ?? [] } : undefined));
@@ -178,6 +194,7 @@ export function createWorker({ adapter, session, pacer }) {
     } finally {
       cleanups.forEach((fn) => fn());
       if (!signal.aborted) control.abort('done'); // the adapter's listeners must not outlive the job
+      if (running && !stopped) await waitForAdapter(running);
       current = null;
       controller = null;
     }

@@ -16,7 +16,7 @@ import { allRuns, enqueue, jobByKey, transition } from './job-store.js';
 import * as ledger from './ledger.js';
 import { createRun } from './run-folder.js';
 import { withTab } from './tab-lock.js';
-import { validateImage } from './validate.js';
+import { validateImage, validateVideo } from './validate.js';
 
 const MAX_WAIT_MS = 55000;
 const DEFAULT_WAIT_MS = 30000;
@@ -133,12 +133,13 @@ export function createRpc({ worker, session, hub }) {
 
   function generateImage(args) {
     const { auto_confirm, max_credits, idempotency_key, output_root, ...request } = args;
+    // First: a repeat must return its job whatever the budget says now.
+    const first = auto_confirm === true && idempotency_key && jobByKey(idempotency_key);
+    if (first) return { job_id: first.id, run_id: first.run.id, state: first.state, repeated: true };
     const spec = validateImage(request);
     const estimated = estimate([spec]);
     if (auto_confirm !== true) return { status: 'ready_for_confirmation', estimate: estimated, request: { ...spec, prompt: cut(spec.prompt) } };
     checkBudget(estimated, max_credits, ledger);
-    const first = idempotency_key && jobByKey(idempotency_key);
-    if (first) return { job_id: first.id, run_id: first.run.id, state: first.state, repeated: true };
     const run = createRun({ name: spec.prompt, outputRoot: output_root, flowProjectUrl: spec.project_url });
     const job = enqueue(run, spec, idempotency_key);
     worker.kick();
@@ -196,7 +197,13 @@ export function createRpc({ worker, session, hub }) {
     return { status: signIn ? 'oauth_required' : 'connected', account: check?.account ?? null, accountStatus: check?.status ?? 'unverified', url: page.url().split(/[?#]/)[0] };
   });
 
+  function estimateJobs({ jobs }) {
+    if (!Array.isArray(jobs) || jobs.length === 0) throw invalid('jobs must be a non-empty list');
+    return estimate(jobs.map((job) => (job?.kind === 'video' ? validateVideo(job) : validateImage(job))));
+  }
+
   const handlers = {
+    flow_estimate: estimateJobs,
     flow_connect: connect,
     flow_disconnect: () => withTab('disconnect', async () => {
       await closeBrowser();

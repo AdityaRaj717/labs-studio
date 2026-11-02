@@ -44,7 +44,9 @@ export const TOOLS = [
   tool('flow_doctor', 'Read-only check of the Flow page against the UI contract. Spends nothing.', READ),
   tool('flow_capabilities', 'Models, ratios, durations, sizes, costs, limits and the date they were verified.', LOCAL_READ),
 
-  tool('flow_estimate', 'Estimate credits and image quota for planned jobs. Free.', LOCAL_READ, OBJECT({ jobs: { type: 'array', items: { type: 'object' } } })),
+  tool('flow_estimate', 'Estimate credits and image quota for planned jobs. Free.', LOCAL_READ, OBJECT({
+    jobs: { type: 'array', description: 'Same arguments as the generate tools, plus kind: image (default) or video.', items: { type: 'object' } },
+  }, ['jobs'])),
   tool('flow_generate_image', 'Queue an image generation. Returns job_id at once; follow with flow_wait.', WRITE, OBJECT({
     prompt: { type: 'string' },
     model: { type: 'string', default: 'banana21', enum: ['banana21', 'bananaPro', 'banana2Lite'] },

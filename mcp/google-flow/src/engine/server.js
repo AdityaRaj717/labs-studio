@@ -64,12 +64,12 @@ function send(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
-export async function listenEngine({ adapter = legacyAdapter, session = chromeSession, pacer = realPacer, onShutdown } = {}) {
+export async function listenEngine({ adapter = legacyAdapter, session = chromeSession, pacer = realPacer, settleMs, onShutdown } = {}) {
   const token = randomBytes(32).toString('hex');
   const tokenDigest = digest(`Bearer ${token}`);
   const secrets = new Map();
   const hub = createHub();
-  const worker = createWorker({ adapter, session, pacer });
+  const worker = createWorker({ adapter, session, pacer, settleMs });
   const call = createRpc({ worker, session, hub });
   const startedAt = Date.now();
   const streams = new Set();
@@ -142,7 +142,10 @@ export async function listenEngine({ adapter = legacyAdapter, session = chromeSe
     if (!timingSafeEqual(digest(req.headers.authorization ?? ''), tokenDigest)) return send(res, 401, { ok: false, message: 'Bad or missing token' });
     const url = new URL(req.url, `http://${HOST}`);
     route(req, res, url, requestId).catch((err) => {
-      if (err.status === 413) res.setHeader('connection', 'close');
+      if (err.status === 413) {
+        res.setHeader('connection', 'close');
+        res.once('finish', () => req.destroy()); // stop reading whatever is left of the body
+      }
       if (!res.headersSent) send(res, err.status ?? 500, { ok: false, message: err.status ? err.message : 'Engine error' });
       if (!err.status) logger.error('Request failed', { event: 'request_failed', requestId, error: err.message });
     });

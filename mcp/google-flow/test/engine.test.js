@@ -180,6 +180,54 @@ test('a corrupt journal is a clear start-up error naming the file', { timeout: 6
   assert.ok(!fs.existsSync(engineFile()));
 });
 
+async function hangingPort() {
+  const server = http.createServer(() => {});
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  return server;
+}
+
+test('a live pid that does not answer in time keeps its lock and is a clear error', { timeout: 60000 }, async () => {
+  freshData();
+  const server = await hangingPort();
+  try {
+    const lock = JSON.stringify({ pid: process.pid, port: server.address().port, token: 't', version: '1.0.0' });
+    fs.writeFileSync(engineFile(), lock);
+    await assert.rejects(ensureEngine(), /alive but not answering/);
+    // A starter that got there anyway must leave too.
+    const starter = spawn(process.execPath, ['src/engine/start.js'], { cwd: root, env: process.env, stdio: 'ignore' });
+    children.push(starter);
+    const code = await new Promise((resolve) => starter.once('exit', resolve));
+    assert.equal(code, 0);
+    assert.equal(fs.readFileSync(engineFile(), 'utf8'), lock);
+    fs.rmSync(engineFile());
+  } finally {
+    server.closeAllConnections();
+    server.close();
+  }
+});
+
+test('a dead pid is stale even if its port hangs, and a refused port is stale even if the pid lives', { timeout: 60000 }, async () => {
+  freshData();
+  const server = await hangingPort();
+  const hung = server.address().port;
+  try {
+    fs.writeFileSync(engineFile(), JSON.stringify({ pid: 999999, port: hung, token: 't', version: '1.0.0' }));
+    await ensureEngine();
+    assert.notEqual(readLock().pid, 999999);
+  } finally {
+    server.closeAllConnections();
+    server.close();
+  }
+  await stopChildEngine();
+  freshData();
+  const closed = await hangingPort();
+  const port = closed.address().port;
+  await new Promise((resolve) => closed.close(resolve));
+  fs.writeFileSync(engineFile(), JSON.stringify({ pid: process.pid, port, token: 't', version: '1.0.0' }));
+  await ensureEngine();
+  assert.notEqual(readLock().pid, process.pid);
+});
+
 test('request without token is 401', async () => {
   const engine = await engineWith();
   assert.equal((await rawRequest(engine.port)).status, 401);
@@ -281,6 +329,71 @@ test('generate without auto_confirm is a dry run that starts nothing', async () 
   assert.equal(res.result.status, 'ready_for_confirmation');
   assert.equal(ran, 0);
   assert.equal(allRuns().length, 0);
+});
+
+test('a repeat with the same key returns the first job even when the budget would now refuse', { timeout: 20000 }, async () => {
+  const engine = await engineWith();
+  const first = await rpc(engine, 'flow_generate_image', image({ idempotency_key: 'k1' }));
+  const repeat = await rpc(engine, 'flow_generate_image', image({ idempotency_key: 'k1', max_credits: -1 }));
+  assert.ok(repeat.ok, JSON.stringify(repeat));
+  assert.equal(repeat.result.job_id, first.result.job_id);
+  assert.equal(repeat.result.repeated, true);
+  assert.equal(allRuns().length, 1);
+});
+
+test('flow_estimate adds up images and videos with no browser', async () => {
+  const engine = await engineWith();
+  const { result } = await rpc(engine, 'flow_estimate', { jobs: [{ prompt: 'a', kind: 'video', count: 2 }, { prompt: 'b' }] });
+  assert.equal(result.credits, 24);
+  assert.equal(result.imageQuota.banana21, 1);
+  assert.equal((await rpc(engine, 'flow_estimate', {})).error_code, 'INVALID_PARAMS');
+  assert.equal((await rpc(engine, 'flow_estimate', { jobs: [{ prompt: 'a', kind: 'video', duration: 3 }] })).error_code, 'COMBINATION_NOT_SUPPORTED');
+  assert.equal(allRuns().length, 0);
+});
+
+test('the next job waits until a cancelled job\'s adapter has really stopped', { timeout: 20000 }, async () => {
+  const release = gate();
+  const started = gate();
+  const ran = [];
+  const engine = await engineWith({
+    adapter: async (job, ctx) => {
+      ran.push(job.spec.prompt);
+      ctx.submit(0);
+      started.open();
+      if (ran.length === 1) await release.opened; // takes no signal, like the old image flow
+      return { outputs: [] };
+    },
+  });
+  const one = (await rpc(engine, 'flow_generate_image', image({ prompt: 'one' }))).result.job_id;
+  const two = (await rpc(engine, 'flow_generate_image', image({ prompt: 'two' }))).result.job_id;
+  await started.opened;
+  await rpc(engine, 'flow_job_control', { action: 'cancel', job_id: one });
+  await until(async () => (await stateOf(engine, one)) === 'cancelled');
+  await new Promise((r) => setTimeout(r, 200));
+  assert.deepEqual(ran, ['one']);
+  assert.equal(await stateOf(engine, two), 'queued');
+  release.open();
+  await until(async () => (await stateOf(engine, two)) === 'done');
+});
+
+test('an adapter that never stops holds the queue rather than sharing the tab', { timeout: 20000 }, async () => {
+  const started = gate();
+  const ran = [];
+  const engine = await engineWith({
+    settleMs: 100,
+    adapter: async (job, ctx) => {
+      ran.push(job.id);
+      ctx.submit(0);
+      started.open();
+      await new Promise(() => {});
+    },
+  });
+  const one = (await rpc(engine, 'flow_generate_image', image())).result.job_id;
+  await rpc(engine, 'flow_generate_image', image({ prompt: 'two' }));
+  await started.opened;
+  await rpc(engine, 'flow_job_control', { action: 'cancel', job_id: one });
+  await until(() => engine.worker.status().paused);
+  assert.equal(ran.length, 1);
 });
 
 test('invalid input fails before any queue or browser work', async () => {
@@ -464,11 +577,11 @@ let flow;
 before(async () => { flow = await startFakeFlow(); });
 after(() => flow.close());
 
-async function browserEngine(adapter) {
+async function browserEngine(adapter, options = {}) {
   const browser = await chromium.launch({ channel: 'chrome', headless: true });
   const page = await browser.newPage();
   await page.goto(`${flow.url}/project/one`);
-  const engine = await engineWith({ adapter, session: { ensure: async () => ({ browser, page }), peek: () => page } });
+  const engine = await engineWith({ adapter, session: { ensure: async () => ({ browser, page }), peek: () => page }, ...options });
   return { browser, page, engine };
 }
 
@@ -479,7 +592,7 @@ test('Chrome closing mid-batch fails the current job with BROWSER_NOT_CONNECTED 
     calls++;
     ctx.submit(0);
     started.open();
-    await new Promise(() => {}); // generation never finishes: only the worker's watch can end this
+    await new Promise((resolve) => { ctx.signal.addEventListener('abort', resolve); }); // generation never finishes: only the worker's watch can end this
   });
   const one = (await rpc(engine, 'flow_generate_image', image())).result.job_id;
   const two = (await rpc(engine, 'flow_generate_image', image({ prompt: 'two' }))).result.job_id;
@@ -526,6 +639,32 @@ test('page navigated by a person yields a clear failure, not a wrong download', 
     assert.equal(downloaded, 0);
     assert.equal(await stateOf(engine, two), 'queued');
   } finally {
+    await engine.stop();
+    await browser.close();
+  }
+});
+
+test('the old image flow, once in its project, fails clearly when a person navigates away', { timeout: 90000 }, async () => {
+  const { legacyAdapter } = await import('../src/engine/worker.js');
+  const { setPage, setConnected } = await import('../src/browser/connect.js');
+  const { browser, page, engine } = await browserEngine(legacyAdapter, { settleMs: 100 });
+  setPage(page);
+  setConnected(true);
+  process.env.FLOW_TEST_HOST = new URL(flow.url).host;
+  try {
+    const one = (await rpc(engine, 'flow_generate_image', image())).result.job_id;
+    const two = (await rpc(engine, 'flow_generate_image', image({ prompt: 'two' }))).result.job_id;
+    await until(() => page.listenerCount('framenavigated') > 0, 30000); // pinned: the flow is in its project
+    await page.goto(`${flow.url}/`);
+    await until(async () => (await stateOf(engine, one)) === 'failed');
+    const failed = (await rpc(engine, 'flow_job_status', { job_id: one })).result;
+    assert.equal(failed.error.error_code, 'FLOW_PAGE_NOT_FOUND');
+    assert.equal(await stateOf(engine, two), 'queued');
+    assert.ok(engine.worker.status().paused);
+  } finally {
+    delete process.env.FLOW_TEST_HOST;
+    setConnected(false);
+    setPage(null);
     await engine.stop();
     await browser.close();
   }

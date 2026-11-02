@@ -4,7 +4,7 @@ import { spawnSync } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import { setTimeout as sleep } from 'timers/promises';
-import { engineFile, health, readLock, startErrorFile, VERSION } from '../shim/client.js';
+import { engineFile, probe, readLock, startErrorFile, VERSION } from '../shim/client.js';
 import { getDataDir } from '../utils/config.js';
 import { closeLog, logger } from '../utils/logger.js';
 import { listenEngine } from './server.js';
@@ -32,7 +32,7 @@ async function claim(engine) {
       } catch (err) {
         if (err.code !== 'EEXIST') throw err;
         const lock = readLock();
-        if (lock && await health(lock)) return false;
+        if (lock && (await probe(lock)).state !== 'stale') return false;
         // Re-read at the last moment: another starter may just have replaced the stale file.
         if (readLock()?.pid === lock?.pid) fs.rmSync(file, { force: true });
       }

@@ -336,6 +336,7 @@ async function runGenerateImage(job, args) {
     const characters = [...(args.characters || []), ...(args.scenes || [])];
 
     await openProject(page, args);
+    args.onProjectOpen?.(page); // the flow stays in this project from here on
     await applyAgentSettings(page, { ratio, count, model, neverConfirm: autoConfirm });
 
     // The chat can be collapsed to just the prompt box; its reply bubbles only render when
@@ -459,7 +460,7 @@ export async function handleGenerateImage(args) {
 
   const budgetMs = Number(args.wait_ms) || get('toolResponseBudgetMs', 40000);
   const pending = Symbol('pending');
-  const outcome = await Promise.race([run, new Promise(r => setTimeout(() => r(pending), budgetMs))]);
+  const outcome = await Promise.race([run, new Promise(r => setTimeout(() => r(pending), budgetMs).unref())]);
   if (outcome === pending) {
     return {
       status: 'running',

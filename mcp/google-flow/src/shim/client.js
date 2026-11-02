@@ -12,6 +12,7 @@ export const startErrorFile = () => path.join(getDataDir(), 'engine-error.json')
 const START_SCRIPT = fileURLToPath(new URL('../engine/start.js', import.meta.url));
 const START_TIMEOUT_MS = 20000;
 const STOP_TIMEOUT_MS = 10000;
+const HEALTH_TIMEOUT_MS = 2000;
 const POLL_MS = 100;
 const RPC_TIMEOUT_MS = 300000; // legacy project tools can take minutes; flow_wait is capped at 55s
 
@@ -27,14 +28,25 @@ export function readLock() {
   }
 }
 
-// null means nobody useful answered, which is what makes a lock stale.
-export async function health(lock) {
+const pidAlive = (pid) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err.code === 'EPERM'; // exists, but isn't ours to signal
+  }
+};
+
+// stale: only a dead pid or a refused port. A live pid that is slow may be driving a paid job,
+// and replacing it would put two engines on one Chrome, so that is 'stalled', never stale.
+export async function probe(lock) {
+  if (!pidAlive(lock.pid)) return { state: 'stale' };
   try {
     const conn = connOf(lock);
-    const res = await fetch(`${conn.url}/health`, { headers: headers(conn), signal: AbortSignal.timeout(2000) });
-    return res.ok ? await res.json() : null;
-  } catch {
-    return null;
+    const res = await fetch(`${conn.url}/health`, { headers: headers(conn), signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS) });
+    return res.ok ? { state: 'up', ...(await res.json()) } : { state: 'stalled' };
+  } catch (err) {
+    return { state: err.cause?.code === 'ECONNREFUSED' ? 'stale' : 'stalled' };
   }
 }
 
@@ -47,7 +59,7 @@ async function retire(lock) {
     });
   }
   const end = Date.now() + STOP_TIMEOUT_MS;
-  while (Date.now() < end && await health(lock)) await sleep(POLL_MS);
+  while (Date.now() < end && (await probe(lock)).state === 'up') await sleep(POLL_MS);
 }
 
 async function launch() {
@@ -57,7 +69,7 @@ async function launch() {
   const end = Date.now() + START_TIMEOUT_MS;
   while (Date.now() < end) {
     const lock = readLock();
-    if (lock?.version === VERSION && (await health(lock))?.ready) return connOf(lock);
+    if (lock?.version === VERSION && (await probe(lock)).ready) return connOf(lock);
     if (fs.existsSync(startErrorFile())) {
       const { code, message, details } = JSON.parse(fs.readFileSync(startErrorFile(), 'utf8'));
       throw new FlowError(code, message, details);
@@ -71,8 +83,13 @@ async function launch() {
 
 export async function ensureEngine() {
   const lock = readLock();
-  const state = lock && await health(lock);
-  if (state?.ready) {
+  const found = lock && await probe(lock);
+  if (found?.state === 'stalled') {
+    throw createError(ErrorCodes.INTERNAL_ERROR, `Engine pid ${lock.pid} is alive but not answering on port ${lock.port}`, {
+      next_action: `It may be mid-job, so it was not replaced. Try again shortly; if it stays stuck, end process ${lock.pid} yourself.`,
+    });
+  }
+  if (found?.ready) {
     if (lock.version === VERSION) return connOf(lock);
     await retire(lock);
   }
