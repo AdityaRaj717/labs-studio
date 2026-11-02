@@ -186,9 +186,19 @@ export const TOOLS = [
     mine: { type: 'boolean', default: false, description: 'Only your own voices.' },
     limit: { type: 'number', default: 20, maximum: 100 },
   })),
-  tool('audio_stable_generate', 'Generate music or sound effects with Stability.', WRITE, OBJECT({
-    kind: { type: 'string', enum: ['music', 'sfx'] }, prompt: { type: 'string' },
-  }, ['kind', 'prompt'])),
+  tool('audio_stable_generate', 'Generate music or sound effects with Stable Audio 3 and save them in the run\'s bgm or sfx folder. Waits for the file. 8 Stability credits each: without auto_confirm it only returns that estimate.', WRITE, OBJECT({
+    kind: { type: 'string', enum: ['music', 'sfx'] },
+    prompt: { type: 'string', description: 'English only.' },
+    duration: { type: 'number', minimum: 1, maximum: 380, description: 'Seconds.' },
+    seed: { type: 'number', minimum: 0, maximum: 4294967294 },
+    steps: { type: 'integer', minimum: 4, maximum: 8, default: 8 },
+    cfg_scale: { type: 'number', minimum: 1, maximum: 25, default: 1 },
+    output_format: { type: 'string', enum: ['wav', 'mp3'], default: 'wav' },
+    run_id: { type: 'string', description: 'Run to save in. Default a new run.' },
+    name: { type: 'string' },
+    auto_confirm: { type: 'boolean', default: false },
+    output_root: SPEND.output_root,
+  }, ['kind', 'prompt', 'duration'])),
 
   tool('flow_screenshot', 'Save a screenshot of the Flow tab. Never waits on a running job.', hints(true, false, false), OBJECT({ name: { type: 'string', default: 'manual' } })),
 ];

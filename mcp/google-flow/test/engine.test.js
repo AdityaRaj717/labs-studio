@@ -562,11 +562,8 @@ test('audio without a key is MISSING_API_KEY through the engine', async () => {
   }
 });
 
-test('unbuilt tools return NOT_IMPLEMENTED and unknown tools are refused', async () => {
+test('an unregistered tool is refused', async () => {
   const engine = await engineWith();
-  for (const name of ['audio_stable_generate']) {
-    assert.equal((await rpc(engine, name, {})).error_code, 'NOT_IMPLEMENTED', name);
-  }
   assert.equal((await rpc(engine, 'stitch_video', {})).error_code, 'INVALID_PARAMS');
 });
 

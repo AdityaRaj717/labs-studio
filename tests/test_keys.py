@@ -27,31 +27,31 @@ class FakeKeyring:
 def test_set_get_clear_roundtrip():
     ring = FakeKeyring()
     keys = KeyStore(ring, environ={})
-    assert keys.get("gemini") == "" and keys.source("gemini") == "none"
-    keys.set("gemini", "  abc123  ")
-    assert ring.data[(SERVICE, "gemini")] == "abc123"
-    assert keys.get("gemini") == "abc123" and keys.source("gemini") == "keyring"
-    keys.clear("gemini")
-    assert keys.get("gemini") == "" and keys.source("gemini") == "none"
-    keys.clear("gemini")  # clearing twice is harmless
+    assert keys.get("fish") == "" and keys.source("fish") == "none"
+    keys.set("fish", "  abc123  ")
+    assert ring.data[(SERVICE, "fish")] == "abc123"
+    assert keys.get("fish") == "abc123" and keys.source("fish") == "keyring"
+    keys.clear("fish")
+    assert keys.get("fish") == "" and keys.source("fish") == "none"
+    keys.clear("fish")  # clearing twice is harmless
 
 
 def test_env_fallback_and_priority():
     ring = FakeKeyring()
-    keys = KeyStore(ring, environ={"GOOGLE_API_KEY": "from-google", "GEMINI_API_KEY": ""})
-    assert keys.get("gemini") == "from-google" and keys.source("gemini") == "env"
-    assert keys.env_var("gemini") == "GOOGLE_API_KEY"
-    keys = KeyStore(ring, environ={"GOOGLE_API_KEY": "g", "GEMINI_API_KEY": "gem"})
-    assert keys.get("gemini") == "gem"
-    keys.set("gemini", "stored")
-    assert keys.get("gemini") == "stored" and keys.source("gemini") == "keyring"
+    keys = KeyStore(ring, environ={"FISH_API_KEY": ""})
+    assert keys.get("fish") == "" and keys.source("fish") == "none"
+    keys = KeyStore(ring, environ={"FISH_API_KEY": "gem"})
+    assert keys.get("fish") == "gem" and keys.source("fish") == "env"
+    assert keys.env_var("fish") == "FISH_API_KEY"
+    keys.set("fish", "stored")
+    assert keys.get("fish") == "stored" and keys.source("fish") == "keyring"
 
 
 def test_empty_set_clears_and_backend_failure_is_no_key():
     ring = FakeKeyring()
     keys = KeyStore(ring, environ={})
-    keys.set("gemini", "x")
-    keys.set("gemini", "   ")
-    assert keys.source("gemini") == "none"
-    broken = KeyStore(FakeKeyring(fail=True), environ={"GEMINI_API_KEY": "env-key"})
-    assert broken.get("gemini") == "env-key" and broken.source("gemini") == "env"
+    keys.set("fish", "x")
+    keys.set("fish", "   ")
+    assert keys.source("fish") == "none"
+    broken = KeyStore(FakeKeyring(fail=True), environ={"FISH_API_KEY": "env-key"})
+    assert broken.get("fish") == "env-key" and broken.source("fish") == "env"

@@ -1,7 +1,6 @@
 """What the app shows (Phase 14b).
 
-Only the Google Flow web path works end to end. The API keys tab stays hidden until
-something uses a key. One switch shows it:
+Only the Google Flow web path works end to end. One switch widens what the Characters page says:
 
 - setting ``features.flow_only`` (default ``True``) in settings.json, or
 - environment ``LABS_STUDIO_FEATURES=all`` (or ``flow``), which wins over the setting.
@@ -14,9 +13,7 @@ import os
 ENV = "LABS_STUDIO_FEATURES"
 
 # Hidden in Flow-only mode -> why (checked by name in the UI code).
-HIDDEN: dict[str, str] = {
-    "settings:api_keys": "API keys tab: nothing shown uses a key",
-}
+HIDDEN: dict[str, str] = {}
 
 
 def flow_only() -> bool:

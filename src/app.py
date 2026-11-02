@@ -91,6 +91,8 @@ def main(argv: list[str] | None = None) -> int:
         flow_mcp().data_dir, parent=window, client=EngineClient(flow_mcp().data_dir),
         page_lookup=lambda project, key: window.pages.get(key) if project is store.active else None)
     window.run_mirror.start(store)
+    from src.ui.pages.settings_page import push_keys_if_running
+    push_keys_if_running()
     if settings.get("webhook.autostart", False):  # Phase 10
         window.page("webhook").start_server()
     window.show()

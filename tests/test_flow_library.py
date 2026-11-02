@@ -331,12 +331,12 @@ def test_flow_only_switch(monkeypatch, tmp_path):
     assert features.flow_only()  # the default
     assert features.page_shown("flow_video") and features.page_shown("flow_image")
     assert features.page_shown("scenes") and features.page_shown("characters") and features.page_shown("projects")
-    assert not features.shown("settings:api_keys")
+    assert features.shown("settings:api_keys")  # audio uses keys now
     assert features.visible_pages(("flow_image", "flow_video")) == ("flow_image", "flow_video")
     config.set("features.flow_only", False)
-    assert features.shown("settings:api_keys")
+    assert not features.flow_only()
     monkeypatch.setenv(features.ENV, "flow")
-    assert not features.shown("settings:api_keys")
+    assert features.flow_only()
 
 
 def test_app_in_flow_only_mode_shows_only_working_features(qapp, monkeypatch, tmp_path):
@@ -355,7 +355,7 @@ def test_app_in_flow_only_mode_shows_only_working_features(qapp, monkeypatch, tm
         img_page = window.page("flow_image")
         assert isinstance(img_page.provider, WebFlowImageProvider) and img_page.provider_combo is None
         tabs = window.page("settings").tabs
-        assert [tabs.tabText(i) for i in range(tabs.count())] == ["Web Sessions"]
+        assert [tabs.tabText(i) for i in range(tabs.count())] == ["Web Sessions", "API keys"]
         wh = window.page("webhook")
         assert wh.backend.page_keys == ("flow_image", "flow_video")
         wh.shutdown()

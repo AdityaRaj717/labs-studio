@@ -85,7 +85,16 @@ class FlowMcp:
                 except (OSError, ValueError, KeyError):
                     version = ""
                 self._client = self.client_factory(self.data_dir, self.command(), self.mcp_dir, self.env(), version)
+                self._client.on_launch = self._push_keys
             return self._client
+
+    def _push_keys(self, lock: dict[str, Any]) -> None:
+        from src.keys_push import pushKeys
+
+        try:
+            pushKeys(self._client, lock=lock)
+        except Exception as exc:  # noqa: BLE001 - audio tools then answer MISSING_API_KEY; Flow work is unaffected
+            log.info("No audio keys sent to the engine: %s", type(exc).__name__)
 
     def close(self) -> None:
         """Forget the engine connection. The engine keeps running, with any job it has."""

@@ -48,6 +48,7 @@ class EngineClient:
         self.data_dir = Path(data_dir)
         self.command, self.cwd, self.env, self.version = command, cwd, env, version
         self._lock = threading.Lock()
+        self.on_launch = None  # callable(lock), told when this client has just started the engine
 
     # ---- finding or starting the engine ------------------------------
     def _read_lock(self) -> dict[str, Any] | None:
@@ -114,6 +115,8 @@ class EngineClient:
             if lock:
                 health = self._health(lock)
                 if health and health.get("ready") and (not self.version or lock.get("version") == self.version):
+                    if self.on_launch:
+                        self.on_launch(lock)
                     return lock
             if error_file.exists():
                 raise EngineError(json.loads(error_file.read_text(encoding="utf-8")).get("message", "start failed"))
