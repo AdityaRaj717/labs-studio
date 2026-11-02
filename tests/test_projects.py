@@ -222,18 +222,18 @@ def test_webhook_project_field(qapp, installed, tmp_path):
 
 # ---- Flow project per app project --------------------------------------
 def test_flow_project_created_once_and_used_for_jobs(installed, tmp_path):
-    from tests.test_mcp_client import make_flow
+    from tests.test_engine_client import make_flow, tools
 
     _, store = installed
-    flow, clients, _ = make_flow(tmp_path)
-    flow.generate_image({"prompt": "a"}, timeout=60)
-    flow.generate_image({"prompt": "b"}, timeout=60)
-    calls = clients[0].calls
-    assert [n for n, _ in calls] == ["flow_connect", "flow_open_project", "flow_generate_image",
-                                     "flow_generate_image"]
-    assert calls[1][1] == {"name": "Default", "create_if_missing": True}
+    flow, clients = make_flow(tmp_path)
+    flow.run_job("flow_generate_image", {"prompt": "a"}, 60)
+    flow.run_job("flow_generate_image", {"prompt": "b"}, 60)
+    calls = dict(clients[0].calls)
+    assert tools(clients[0]) == ["flow_open_project", "flow_generate_image", "flow_generate_image"]
+    assert calls["flow_open_project"] == {"name": "Default", "create_if_missing": True}
     url = store.active.flow_url
-    assert url.startswith("https://flow.google.com/project/") and calls[2][1]["project_url"] == url
+    assert url.startswith("https://flow.google.com/project/") and calls["flow_generate_image"]["project_url"] == url
+    assert calls["flow_generate_image"]["output_root"] == str(store.active.output_dir)
     assert json.loads(store.active.file.read_text())["flow"]["url"] == url
 
     other = store.create("Other")
@@ -247,16 +247,16 @@ def test_flow_project_created_once_and_used_for_jobs(installed, tmp_path):
 
 
 def test_flow_project_gone_is_recreated(installed, tmp_path):
-    from tests.test_mcp_client import make_flow
+    from tests.test_engine_client import make_flow, tools
 
     _, store = installed
-    flow, clients, _ = make_flow(tmp_path)
+    flow, clients = make_flow(tmp_path)
     flow.ensure_project(store.active)
-    clients[0].fail_next = ["PROJECT_NOT_FOUND"]  # deleted in Flow after it was opened
-    assert flow.generate_image({"prompt": "a"}, timeout=60)["status"] == "success"
-    names = [n for n, _ in clients[0].calls]
-    assert names == ["flow_connect", "flow_open_project", "flow_generate_image", "flow_open_project",
-                     "flow_generate_image"]
+    clients[0].fail_queue = ["PROJECT_NOT_FOUND"]  # deleted in Flow after it was opened
+    assert flow.run_job("flow_generate_image", {"prompt": "a", "idempotency_key": "k"}, 60)["state"] == "done"
+    assert tools(clients[0]) == ["flow_open_project", "flow_generate_image", "flow_open_project", "flow_generate_image"]
+    keys = [args["idempotency_key"] for tool, args in clients[0].calls if tool == "flow_generate_image"]
+    assert keys[0] != keys[1]  # the first job failed for good: the repeat must not return it
 
 
 def test_flow_mcp_defaults_to_repo_copy_and_passes_env(tmp_path):

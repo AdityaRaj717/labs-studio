@@ -47,8 +47,13 @@ class Job:
     cast: list[str] = field(default_factory=list)  # more character ids in the shot (Phase 14b)
     scenes: list[str] = field(default_factory=list)  # scene (place) ids (Phase 14b)
     scene_refs: list[Path] = field(default_factory=list)  # the refs in ``refs`` the scenes brought
+    preview: Path | None = None  # shown until ``outputs`` exist
+    progress_source: str = ""  # "flow": Flow's own percent; "phase": only the engine's stage
+    engine_key: str = ""  # idempotency key of the engine job this row is waiting on
 
     def reset(self) -> None:
         self.status = JobStatus.PENDING
         self.progress = 0.0
+        self.preview = None
+        self.progress_source = ""
         self.error = ""

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from pathlib import Path
 
 from PySide6.QtCore import QObject, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
@@ -14,10 +15,11 @@ from PySide6.QtWidgets import (
 
 from src import config
 from src.i18n import tr
-from src.web.adapters import SITE_TITLES
-from src.web.pacing import Pacer
+from src.web.engine_client import uses_today
 
 log = logging.getLogger(__name__)
+
+SITE_TITLES = {"flow": "Google Flow"}
 
 
 class _Bridge(QObject):
@@ -55,7 +57,6 @@ class SiteRow(QGroupBox):
         self.site = site
         self.store = store
         self.run_async = run_async
-        self.pacer = Pacer(site, store)
 
         self.status = QLabel(tr("web_status_unknown"))
         self.status.setWordWrap(True)
@@ -63,7 +64,7 @@ class SiteRow(QGroupBox):
         self.cap = QSpinBox()
         self.cap.setRange(0, 1000)
         self.cap.setSpecialValueText(tr("web_cap_none"))
-        self.cap.setValue(self.pacer.cap)
+        self.cap.setValue(int(store.get(f"web.caps.{site}", 0) or 0))
         self.cap.valueChanged.connect(self._set_cap)
 
         self.btn_launch = QPushButton(tr("web_launch"))
@@ -91,8 +92,9 @@ class SiteRow(QGroupBox):
         self.refresh_usage()
 
     def refresh_usage(self) -> None:
-        cap = self.pacer.cap
-        self.usage.setText(tr("web_usage", used=self.pacer.used_today(),
+        cap = int(self.store.get(f"web.caps.{self.site}", 0) or 0)
+        data_dir = Path(self.store.get("web.diag_dir", r"D:\glabs_web\diag")).parent / "flow-mcp"
+        self.usage.setText(tr("web_usage", used=uses_today(data_dir),
                               cap=cap if cap else tr("web_cap_none")))
 
     def set_busy(self, busy: bool) -> None:
@@ -170,17 +172,14 @@ class WebSessionsTab(QWidget):
         self.bridge.done.emit(site, action, result)
 
     def do_action(self, site: str, action: str):
-        from src.web.adapters import page_status
-
         if action == "launch":
-            self.session.open_site(site)
-            return self.session.run(site, lambda page: page_status(page, site), timeout=60)
+            return self.session.open_site(site)
         if action == "check":
-            return self.session.run(site, lambda page: page_status(page, site), timeout=60)
+            return self.session.login_state(site)
         if action == "diagnose":
             from src.web.diagnose import diagnose
 
-            return diagnose(site, self.session)
+            return diagnose(site, self.session.backend)
         raise ValueError(action)
 
     def _on_done(self, site: str, action: str, result) -> None:

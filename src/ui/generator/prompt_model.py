@@ -124,10 +124,14 @@ class PromptTableModel(QAbstractTableModel):
                 return job.error
             if col == COL_OUTPUT and job.outputs:
                 return "\n".join(str(p) for p in job.outputs)
+            if col == COL_PROGRESS and job.progress_source == "flow":
+                return tr("gen_progress_flow", percent=int(round(job.progress * 100)))
+            if col == COL_PROGRESS and job.progress_source == "phase":
+                return tr("gen_progress_phase")
         elif role == Qt.ItemDataRole.ForegroundRole and col in (COL_STATUS, COL_OUTPUT):
             return QColor(STATUS_COLORS[job.status])
-        elif role == Qt.ItemDataRole.DecorationRole and col == COL_OUTPUT and job.outputs:
-            return self._thumb(job.outputs[0])
+        elif role == Qt.ItemDataRole.DecorationRole and col == COL_OUTPUT and (job.outputs or job.preview):
+            return self._thumb(job.outputs[0] if job.outputs else job.preview)
         elif role == Qt.ItemDataRole.TextAlignmentRole and col in (COL_INDEX, COL_REFS):
             return Qt.AlignmentFlag.AlignCenter
         return None

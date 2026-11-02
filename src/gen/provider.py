@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable
 
 from src.gen.models import Job, OutputFile
@@ -47,6 +48,8 @@ class RunContext:
 
     progress: Callable[[float], None]
     should_stop: Callable[[], bool]
+    partial: Callable[[Path], None] = lambda path: None  # a first look at the result (sets ``Job.preview``)
+    note: Callable[[str], None] = lambda source: None  # whose number ``progress`` is: "flow" or "phase"
 
 
 class Provider:

@@ -597,6 +597,15 @@ test('flow_capabilities answers without a browser; doctor and screenshot need on
   assert.equal((await rpc(engine, 'flow_doctor', {})).error_code, 'BROWSER_NOT_CONNECTED');
 });
 
+test('app-only calls: pacing is checked and set, and neither is listed to agents', async () => {
+  const engine = await engineWith();
+  assert.equal((await rpc(engine, 'flow_bring_to_front', {})).error_code, 'BROWSER_NOT_CONNECTED');
+  assert.equal((await rpc(engine, 'flow_set_pacing', { dailyCap: 1, minGapMs: 5, maxGapMs: 1 })).error_code, 'INVALID_PARAMS');
+  assert.equal((await rpc(engine, 'flow_set_pacing', { dailyCap: 0, minGapMs: 0, maxGapMs: 0 })).ok, true);
+  const { TOOLS } = await import('../src/shim/tools.js');
+  assert.ok(!TOOLS.some(({ name }) => ['flow_bring_to_front', 'flow_set_pacing'].includes(name)));
+});
+
 test('concise response stays under 2,000 tokens for a 200-job run', { timeout: 60000 }, async () => {
   const engine = await engineWith({ adapter: async () => new Promise(() => {}) });
   engine.worker.pause('test');

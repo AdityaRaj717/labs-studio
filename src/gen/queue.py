@@ -201,12 +201,20 @@ class JobQueue:
             job.progress = max(0.0, min(1.0, float(p)))
             self.on_update(job)
 
-        ctx = RunContext(progress=progress, should_stop=self._stop.is_set)
+        def partial(path: Path) -> None:
+            job.preview = path
+            self.on_update(job)
+
+        def note(source: str) -> None:
+            job.progress_source = source
+
+        ctx = RunContext(progress=progress, should_stop=self._stop.is_set, partial=partial, note=note)
         try:
             files = self.provider.generate(job, self.options, ctx)
             paths = self.saver(job, files)
             with self._lock:
                 job.outputs = paths
+                job.preview = None
                 job.progress = 1.0
                 job.status = JobStatus.DONE
         except StopRequested:

@@ -1,4 +1,5 @@
 import { closeBrowser } from '../browser/connect.js';
+import config from '../utils/config.js';
 import { readAccountStatus } from '../browser/account-check.js';
 import { navigateToFlow } from '../browser/launch-profile.js';
 import { downloadAgain, downloadLatest, listProjectAssets } from '../flow/reconcile.js';
@@ -25,6 +26,8 @@ import { createRun } from './run-folder.js';
 import { withTab } from './tab-lock.js';
 import { validateImage, validateVideo } from './validate.js';
 
+// The app's own calls, not listed to agents: an agent has no business moving the cap.
+const APP_ONLY = ['flow_bring_to_front', 'flow_set_pacing'];
 const MAX_WAIT_MS = 55000;
 const DEFAULT_WAIT_MS = 30000;
 const FULL_PAGE = 50;
@@ -306,6 +309,24 @@ export function createRpc({ worker, session, hub }) {
     flow_import_character: onTab(handleImportCharacter),
     flow_create_scene: onTab(handleCreateScene),
     flow_list_scenes: onTab(handleListScenes),
+    // Never waits on the tab lock: the owner must see a block while a job holds the tab.
+    async flow_bring_to_front() {
+      const page = session.peek() ?? (await session.ensure()).page;
+      if (!page) throw createError(ErrorCodes.BROWSER_NOT_CONNECTED, 'Chrome is not connected');
+      try {
+        const cdp = await page.context().newCDPSession(page);
+        const { windowId } = await cdp.send('Browser.getWindowForTarget');
+        await cdp.send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'normal' } });
+        await cdp.detach();
+      } catch { /* some window managers refuse; focusing the tab still helps */ }
+      await page.bringToFront();
+      return { status: 'ok' };
+    },
+    flow_set_pacing({ dailyCap, minGapMs, maxGapMs }) {
+      if (![dailyCap, minGapMs, maxGapMs].every((n) => Number.isFinite(n) && n >= 0) || minGapMs > maxGapMs) throw invalid('dailyCap, minGapMs and maxGapMs must be numbers, with min <= max');
+      Object.assign(config, { dailyCap, minGapMs, maxGapMs });
+      return { dailyCap, minGapMs, maxGapMs };
+    },
     async flow_screenshot({ name = 'manual' }) {
       const page = session.peek();
       if (!page) throw createError(ErrorCodes.BROWSER_NOT_CONNECTED, 'Chrome is not connected');
@@ -313,7 +334,7 @@ export function createRpc({ worker, session, hub }) {
     },
   };
 
-  const known = new Set(TOOLS.map((t) => t.name));
+  const known = new Set([...TOOLS.map((t) => t.name), ...APP_ONLY]);
 
   async function call(tool, args = {}) {
     try {

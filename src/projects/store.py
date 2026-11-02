@@ -55,6 +55,7 @@ def job_to_row(job: Job) -> dict[str, Any]:
         "status": job.status.value,
         "outputs": [str(p) for p in job.outputs],
         "error": job.error,
+        "engine_key": job.engine_key,
     }
 
 
@@ -72,6 +73,7 @@ def row_to_job(row: dict[str, Any], index: int) -> Job:
         progress=1.0 if status is JobStatus.DONE else 0.0,
         outputs=[Path(p) for p in row.get("outputs", [])],
         error=str(row.get("error", "")),
+        engine_key=str(row.get("engine_key", "")),
         character=str(row.get("character", "")),
         character_refs=[Path(p) for p in row.get("character_refs", [])],
         cast=[str(c) for c in row.get("cast", [])],
