@@ -1,6 +1,6 @@
 # Labs Studio — Agent Control Testing Issue Log & Verification Report
 
-> **Guide Source**: [`agent_control_testing_guide.md`](file:///c:/Users/ankit/.gemini/antigravity-ide/brain/1f1cb3e4-bc5c-417f-9395-7ea0d241fedd/agent_control_testing_guide.md)  
+> **Guide Source**: [`agent_control_testing_guide.md`](agent_control_testing_guide.md) (rewritten for the current MCP; test IDs below are from the old guide, the "Status" lines under each issue were added by code reading, not by new test runs)  
 > **Server Under Test**: `google-flow` MCP Server (`d:/Prog/Labs Studio/mcp/google-flow`)  
 > **Authenticated User**: `cypherx9572@gmail.com` (Google AI Pro subscription active)  
 > **Chrome Debug Port**: 9333 (`D:\glabs_web\chrome-profile`)  
@@ -31,6 +31,7 @@
 ## Detailed Issue Registry (Actual Codebase Bugs)
 
 ### Issue #1: `page.goto` Timeout with `waitUntil: 'networkidle'` on Google Flow Navigation
+* **Status (Task 19 review)**: OBSOLETE in the current MCP: no `networkidle` wait remains in `mcp/google-flow/src` (grep). Not re-tested live.
 * **Affected Files**:
   * [`mcp/google-flow/src/browser/launch-profile.js#L42`](file:///d:/Prog/Labs%20Studio/mcp/google-flow/src/browser/launch-profile.js#L42)
   * [`mcp/google-flow/src/tools/flow-open.js#L17`](file:///d:/Prog/Labs%20Studio/mcp/google-flow/src/tools/flow-open.js#L17)
@@ -46,6 +47,7 @@
 ---
 
 ### Issue #2: Domain URL Check Omits `flow.google.com` (Hardcoded to `labs.google`)
+* **Status (Task 19 review)**: OBSOLETE in the current MCP: `flow-status.js` now uses `isFlowHost`. Not re-tested live.
 * **Affected Files**:
   * [`mcp/google-flow/src/tools/flow-open.js#L27`](file:///d:/Prog/Labs%20Studio/mcp/google-flow/src/tools/flow-open.js#L27)
   * [`mcp/google-flow/src/tools/flow-status.js#L26`](file:///d:/Prog/Labs%20Studio/mcp/google-flow/src/tools/flow-status.js#L26)
@@ -59,6 +61,7 @@
 ---
 
 ### Issue #3: Hardcoded French UI Selectors Break Video & Tools Navigation
+* **Status (Task 19 review)**: OBSOLETE as written: the French strings `Nouveau projet` and `Outils` no longer appear in `mcp/google-flow/src`, and `flow_open_tools_gallery`, `flow_use_tool` and the grid tool no longer exist. Whether `flow_generate_video` and project creation work on an English UI is open: guide T-7.3 and T-11.2 test it.
 * **Affected Files**:
   * [`mcp/google-flow/src/navigation/project-navigator.js#L95-121`](file:///d:/Prog/Labs%20Studio/mcp/google-flow/src/navigation/project-navigator.js#L95-121)
   * [`mcp/google-flow/src/tools/generate-video.js#L86`](file:///d:/Prog/Labs%20Studio/mcp/google-flow/src/tools/generate-video.js#L86)
@@ -74,6 +77,7 @@
 ---
 
 ### Issue #4: Missing Upfront Validation for Empty or Missing Prompts
+* **Status (Task 19 review)**: OBSOLETE in the current MCP: `validate.js` rejects a blank prompt with `INVALID_PARAMS` before any browser work. Guide T-16.1 asserts it.
 * **Affected File**:
   * [`mcp/google-flow/src/tools/generate-image.js#L318-360`](file:///d:/Prog/Labs%20Studio/mcp/google-flow/src/tools/generate-image.js#L318-360)
 * **Severity**: **Medium**
@@ -86,6 +90,7 @@
 ---
 
 ### Issue #5: `flow_status({ full: true })` Does Not Return Screenshot
+* **Status (Task 19 review)**: OBSOLETE in the current MCP: `flow_status` handles `full: true` and sets `screenshot`. Guide T-1.3 asserts the file exists.
 * **Affected File**:
   * [`mcp/google-flow/src/tools/flow-status.js#L9-39`](file:///d:/Prog/Labs%20Studio/mcp/google-flow/src/tools/flow-status.js#L9-39)
 * **Severity**: **Low**
@@ -95,6 +100,7 @@
 ---
 
 ### Issue #6: `flow_delete_project` Race Condition on Card Count
+* **Status (Task 19 review)**: OPEN: `open-project.js` still exists and the old fix was not checked. Guide T-7.6 and T-14.1 exercise delete on a project the test created.
 * **Affected File**:
   * [`mcp/google-flow/src/tools/open-project.js#L182-190`](file:///d:/Prog/Labs%20Studio/mcp/google-flow/src/tools/open-project.js#L182-190)
 * **Severity**: **Medium**
@@ -104,6 +110,7 @@
 ---
 
 ### Issue #7: Reference Image File Paths Not Validated Before Navigation
+* **Status (Task 19 review)**: OBSOLETE in the current MCP: `validate.js` checks every ingredient path before queuing (`INVALID_PARAMS`). Guide T-16.5 asserts it.
 * **Affected File**:
   * [`mcp/google-flow/src/tools/generate-image.js#L335-338`](file:///d:/Prog/Labs%20Studio/mcp/google-flow/src/tools/generate-image.js#L335-338)
 * **Severity**: **Low / Performance**
@@ -113,6 +120,7 @@
 ---
 
 ### Issue #8: `flow_discover_ui` Uses Deprecated URL and `networkidle`
+* **Status (Task 19 review)**: OBSOLETE: `flow_discover_ui` is removed. `flow_doctor` replaces it (guide T-15.1).
 * **Affected File**:
   * [`mcp/google-flow/src/tools/discover-ui.js#L20-73`](file:///d:/Prog/Labs%20Studio/mcp/google-flow/src/tools/discover-ui.js#L20-73)
 * **Severity**: **High**
@@ -122,6 +130,7 @@
 ---
 
 ### Issue #9: Google Flow Error Bubble Not Captured in `flow-a2ui-text`
+* **Status (Task 19 review)**: OPEN: `generate-image.js` is gone and the engine reports `FLOW_GENERATION_FAILED`, but how an on-page error is captured has not been tested. Not claimed fixed.
 * **Affected File**:
   * [`mcp/google-flow/src/tools/generate-image.js#L48-52, L117-133`](file:///d:/Prog/Labs%20Studio/mcp/google-flow/src/tools/generate-image.js#L48-52)
 * **Severity**: **Medium**

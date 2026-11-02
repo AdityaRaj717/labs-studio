@@ -45,9 +45,9 @@ export const TOOLS = [
   tool('flow_capabilities', 'Models, ratios, durations, sizes, costs, limits and the date they were verified.', LOCAL_READ),
 
   tool('flow_estimate', 'Estimate credits and image quota for planned jobs. Free.', LOCAL_READ, OBJECT({
-    jobs: { type: 'array', description: 'Same arguments as the generate tools, plus kind: image (default) or video.', items: { type: 'object' } },
+    jobs: { type: 'array', description: 'Same arguments as the generate tools, plus kind: image (default) or video. Each needs a prompt; any short text will do. Image count is 1-4 per job, so split larger numbers.', items: { type: 'object' } },
   }, ['jobs'])),
-  tool('flow_generate_image', 'Queue an image generation. Returns job_id at once; follow with flow_wait.', WRITE, OBJECT({
+  tool('flow_generate_image', 'Queue an image generation. Without auto_confirm: true it is a free dry run that touches nothing. Returns job_id at once; follow with flow_wait.', WRITE, OBJECT({
     prompt: { type: 'string' },
     model: { type: 'string', default: 'banana21', enum: ['banana21', 'bananaPro', 'banana2Lite'] },
     ratio: { type: 'string', default: '16:9', enum: ['16:9', '4:3', '1:1', '3:4', '9:16'] },
@@ -57,7 +57,7 @@ export const TOOLS = [
     max_generation_retries: { type: 'integer', default: 1, description: 'How many times a generation Flow failed is tried again by itself. Each try spends.' },
     ...SPEND,
   }, ['prompt'])),
-  tool('flow_generate_video', 'Queue a video generation. CREDITS.', WRITE, OBJECT({
+  tool('flow_generate_video', 'Queue a video generation. CREDITS with auto_confirm: true; without it a free dry run that touches nothing.', WRITE, OBJECT({
     prompt: { type: 'string' },
     model: { type: 'string', default: 'omni', enum: ['omni', 'veoLite', 'veoFast', 'veoQuality'] },
     duration: { type: 'number', default: 8, description: 'Seconds. Veo takes only 8.' },
@@ -90,7 +90,7 @@ export const TOOLS = [
     moodboard_path: { type: 'string' },
     prompts_path: { type: 'string' },
     plan: { type: 'object', description: 'A whole plan { name, style, ratio, references: [{ id, kind, name, prompt }], shots: [{ id, kind: still or animation, refs, prompt }] }, for free-form files. Validated like parsed input.' },
-    overrides: { type: 'object', description: '{ references: [{ id, kind, name, sheet_prompt, reuse, split_from }], shots: { <id>: { refs, start, reuse } } }.' },
+    overrides: { type: 'object', description: '{ references: [{ id, kind, name, sheet_prompt, reuse, split_from }], shots: { <id>: { refs, start, reuse } } }. Split a row: give each half a new id with split_from, then set refs on the Shots that used it.' },
     defaults: { type: 'object', description: 'Animation defaults { model, duration, resolution }. Default omni, 6, 720p.' },
     name: { type: 'string' },
   })),
@@ -152,7 +152,7 @@ export const TOOLS = [
   tool('flow_open_project', 'Open a Flow project, creating it when missing. Free.', SAME, OBJECT({
     url: { type: 'string' }, name: { type: 'string' }, create_if_missing: { type: 'boolean', default: true },
   })),
-  tool('flow_list_projects', 'List Flow projects: [{ title, url }]. Free.', READ, OBJECT({ query: { type: 'string' } })),
+  tool('flow_list_projects', 'List Flow projects: [{ title, url }]. Free. Needs the Flow tab, so JOB_IN_PROGRESS means wait for the running job.', READ, OBJECT({ query: { type: 'string' } })),
   tool('flow_rename_project', 'Set a Flow project\'s title. Free.', SAME, OBJECT({ url: { type: 'string' }, name: { type: 'string' } }, ['url', 'name'])),
   tool('flow_delete_project', 'PERMANENT. Deletes a Flow project and its clips. Acts only with confirm: true, after the owner agreed.', DELETE, OBJECT({
     url: { type: 'string' }, confirm: { type: 'boolean', default: false },

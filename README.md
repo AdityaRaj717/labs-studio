@@ -137,6 +137,9 @@ falls back to these environment variables:
 python -m pytest
 ```
 
+The Node engine suite is `cd mcp\google-flow && npm ci && npm test`. CI
+(`.github/workflows/test.yml`) runs both offline suites on Windows.
+
 Tests run offline: HTTP is mocked, subprocesses are faked, no browser is started,
 and the Webhook tests only use 127.0.0.1.
 
@@ -153,7 +156,10 @@ Each image has a spec in `help/en/img/specs/` naming the widgets to point at.
 ## Use the Flow MCP from your own agent
 
 `help/en/mcp-agents.md` has setup steps and config for Claude Code, Claude
-Desktop, Cursor and Codex.
+Desktop, Cursor and Codex, the Production prompt-file format, and a recovery
+guide. Agents must use the app's `FLOW_DATA_DIR` (default
+`D:\glabs_web\flow-mcp`) so they share its single engine. See
+`docs/adr/0001-flow-engine.md` and `GLOSSARY.md`.
 
 ## Webhook API
 

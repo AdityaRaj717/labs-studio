@@ -34,7 +34,7 @@ const emptyFrames = (page) => locate(page, 'project.chip.empty').count();
 async function openPicker(page, opener = 'project.addIngredients') {
   await closeOverlay(page);
   await locate(page, opener).click();
-  await locate(page, 'picker.upload').waitFor({ timeout: PICKER_MS });
+  await locate(page, 'picker.upload').or(locate(page, 'picker.search')).first().waitFor({ timeout: PICKER_MS });
 }
 
 async function search(page, text) {

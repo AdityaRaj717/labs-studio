@@ -1,21 +1,10 @@
 # Session state
 
-**Goal:** Labs Studio as an agent-controlled Google Flow MCP (image, video, batch), YouTube production with per-item review, Fish Audio, Stable Audio 3. UI frozen except YouTube spec R1. Owner wants every Flow task and the YouTube automation proven live through the MCP.
-
-**Spec:** docs/superpowers/specs/2026-11-02-flow-agent-control-design.md; YouTube spec beside it.
-**Plan:** docs/superpowers/plans/2026-11-02-flow-agent-control.md (read Spike rulings and YouTube section); docs/superpowers/plans/2026-11-02-youtube-production.md.
-**Findings:** docs/flow-ui-findings.md (including Y0).
-**Ledger (authoritative, read its last 10 lines first):** .superpowers/sdd/2026-11-02-flow-agent-control/progress.md; constraints.md beside it.
-**Execution:** superpowers:subagent-driven-development on feat/flow-agent-control; implementers executor, reviewers general-purpose, re-reviews may use sonnet-worker. /ponytail once per session. Controller alone touches live Flow. Each resume of an implementer is costly: small live fixes by controller with Edit, then reviewed.
-
-**Credits:** owner lifted test caps 2026-11-02 ("i dont care how many credits"). Spend what live tests need, report totals. Balance 967 before one extend. Test project 065acc3b-852c-4cf2-84c6-80359d0543bd (y0-2026-11-02), holds Character "y0 narrator".
-**Baseline:** pytest 387, npm test 197 pass at b260ac8. FFmpeg at D:\Apps\ffmpeg\ffmpeg-9.0.2-essentials_build\bin (not on PATH, by decision).
-**Chrome:** start with --remote-debugging-port=9333 --user-data-dir=D:\glabs_web\chrome-profile; signed in, currently running.
-
-**Status:** Phases 0-2, Y0, Task 9 done. Task 10 partly done and live-proven; extend, edit, first+last frames open. Not pushed. App Flow image generation broken until Task 13: do not merge before it. Owner ruling: nothing against fake Flow, real page only.
-
-**Next action:** see the ledger's last lines: finish extend from scene 8187e58a, then edit, then Task 11.
-
-**Open:** owner enters API keys at Tasks 15, 16. Failed-tile UI and block wording unobserved live. Video ingredient limit unknown (Y8).
-
-**Decisions:** spec sections 2, 3; C10 direct composer; C11 local silent; C12 quote gate; referenceMode ingredient (Y0); Y0 ran after Task 8. 300k context ceiling: save, then offer a new session.
+**Goal:** Labs Studio as agent-controlled Flow MCP; every task proven on the real Flow page. Afterward owner gives a full UI/UX revamp brief.
+**Plans:** docs/superpowers/plans/2026-11-02-flow-agent-control.md, 2026-11-02-youtube-production.md. Ledger .superpowers/sdd/2026-11-02-flow-agent-control/progress.md.
+**Run:** Chrome port 9333. FLOW_DATA_DIR=D:\glabs_web\flow-mcp. Harness tools/flow_spike (win_driver.py + wcmd.sh for the real window, out/ is gitignored). Audio env names are FISH_API_KEY, STABILITY_API_KEY; load scratchpad audio.env into the process that starts the engine, never print. Owner wants speed: 30-45 min target. Do not reinstall gitleaks or osv-scanner (global rule).
+**Done:** last_frame, window checks, Y8 (docs/production-live-acceptance.md), open live items, docs and CI written, tests/evals harness, 14 non-live evals scored (all met their must/never; e3 and m4 blocked by the classifier, y5 removed: agents may not start spending tools).
+**Uncommitted:** docs, CI, tests/evals, tests/live/run_acceptance.mjs, tools.js descriptions, picker fix in src/flow/contract.js and ingredients.js. Run trail check, commit.
+**Task 19 open:** accept.jsonl first pass 44/13; rerun with fixes in tools/flow_spike/out/accept3.log. Known: 7.6 delete "still listed" not diagnosed. Create-character from image with auto_confirm false seems to leave "Untitled character" in the project: check. Write docs/flow-live-acceptance.md from accept*.jsonl.
+**Next:** read accept3 result; 3 live evals in tests/evals/prompts.json (live1-3, run by controller or one cold agent); npm test (1 known failure: fake Flow contract key) and pytest; /code-review; update ledger; final report with credits. Balance 796 before accept3 (start of session 847).
+**Not forceable live:** quote drift, quota stop. Open decisions: stitch_video 280s cap; amber review bar vs R1; flow_list_assets omits audio.
