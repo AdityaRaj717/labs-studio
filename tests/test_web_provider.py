@@ -204,7 +204,7 @@ def test_queue_saves_flow_images(store, tmp_path):
 
 
 def test_image_page_provider_picker(qapp, store, tmp_path):
-    from src.gen.fake_provider import FakeProvider
+    from fake_provider import FakeProvider
     from src.ui.generator.page import GeneratorPage
 
     flow, _, _ = make_provider(store, tmp_path)

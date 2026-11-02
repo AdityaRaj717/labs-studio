@@ -27,7 +27,7 @@ LAN_HOST = "0.0.0.0"
 MAX_LOG = 200
 
 
-def curl_example(url: str, token: str, page: str = "demo", prompt: str = "a red fox in the snow") -> str:
+def curl_example(url: str, token: str, page: str = "flow_image", prompt: str = "a red fox in the snow") -> str:
     """A cmd.exe-friendly curl line that submits one job."""
     body = json.dumps({"page": page, "prompt": prompt}).replace('"', '\\"')
     auth = f' -H "Authorization: Bearer {token}"' if token else ""
@@ -189,12 +189,8 @@ class WebhookPage(QWidget):
         self.btn_toggle = QPushButton()
         self.btn_toggle.setObjectName("PrimaryButton")
         self.btn_toggle.clicked.connect(self.toggle_server)
-        self.btn_demo = QPushButton(tr("wh_open_demo"))
-        self.btn_demo.clicked.connect(lambda: self.switch_page and self.switch_page("demo"))
         buttons = QHBoxLayout()
         buttons.addWidget(self.btn_toggle)
-        buttons.addWidget(self.btn_demo)
-        self.btn_demo.setVisible(features.shown("webhook:demo"))
         buttons.addStretch(1)
 
         self.example = QPlainTextEdit()
@@ -288,7 +284,7 @@ class WebhookPage(QWidget):
             self.status.setText(self._error or tr("wh_stopped"))
         token = self.server.token if on else self.token.text().strip()
         self.example.setPlainText(
-            curl_example(self.url, token, self.backend.page_keys[0] if self.backend.page_keys else "demo") + "\n\n" + tr("wh_example_status", url=self.url))
+            curl_example(self.url, token, self.backend.page_keys[0] if self.backend.page_keys else "flow_image") + "\n\n" + tr("wh_example_status", url=self.url))
 
     def _log_request(self, rec: RequestRecord) -> None:
         self._append_log(f"{rec.client}  {rec.method} {rec.path}  → {rec.status}")

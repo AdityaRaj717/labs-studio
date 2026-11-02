@@ -149,10 +149,6 @@ def setup_projects(window, page) -> None:
     page.table.selectRow(0)
 
 
-def setup_settings_api(window, page) -> None:
-    page.tabs.setCurrentIndex(0)
-
-
 def setup_settings_web(window, page) -> None:
     from src.ui.pages.web_sessions_tab import WebSessionsTab
 
@@ -173,25 +169,12 @@ def setup_log(window, page) -> None:
         log.info(line)
 
 
-def setup_workflow(window, page) -> None:
-    from PySide6.QtCore import Qt
-
-    view = page.view
-    rect = view.scene().itemsBoundingRect().adjusted(-60, -60, 60, 60)
-    view.fitInView(rect, Qt.AspectRatioMode.KeepAspectRatio)
-    if view.transform().m11() > 1.0:  # never blow the nodes up
-        view.resetTransform()
-    view.centerOn(rect.center())
-
-
 SETUPS = {
     "demo_rows": setup_demo_rows,
     "characters": setup_characters,
     "projects": setup_projects,
-    "settings_api": setup_settings_api,
     "settings_web": setup_settings_web,
     "log": setup_log,
-    "workflow": setup_workflow,
 }
 
 

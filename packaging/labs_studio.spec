@@ -14,10 +14,8 @@ from PyInstaller.utils.hooks import collect_submodules
 ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
 
 # Loaded by name at runtime, so PyInstaller cannot see them by itself:
-# languages (src/i18n.py), workflow node modules (src/workflow/registry.py),
-# and keyring's Windows Credential Locker backend.
+# languages (src/i18n.py) and keyring's Windows Credential Locker backend.
 hidden = (collect_submodules("src.languages")
-          + collect_submodules("src.workflow.nodes")
           + collect_submodules("keyring.backends"))
 
 # Qt modules the app never imports; dropping them saves well over 100 MB.

@@ -20,8 +20,7 @@ from src.webhook.server import ApiError
 log = logging.getLogger(__name__)
 
 # Pages the API may submit to, in the order GET /api/pages lists them.
-# "demo" is a hidden page on the offline FakeProvider (no key, no network).
-GENERATOR_PAGES = ("flow_image", "flow_video", "grok", "openai_image", "demo")
+GENERATOR_PAGES = ("flow_image", "flow_video")
 
 GUI_TIMEOUT = 15.0
 

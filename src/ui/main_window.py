@@ -23,23 +23,16 @@ PageFactory = Callable[[], QWidget]
 
 # Pages whose settings, rows and output folder belong to the active project; they are
 # rebuilt when the project changes (Phase 12).
-PROJECT_PAGES = ("flow_image", "flow_video", "grok", "openai_image", "demo", "upscaler", "video_cut")
+PROJECT_PAGES = ("flow_image", "flow_video")
 
 # Page key -> help topic (help/en/<topic>.md) its "?" button opens (Phase 15).
 PAGE_TOPICS: dict[str, str] = {
     "flow_image": "flow-image",
-    "flow_video": "api-generators",
-    "grok": "api-generators",
-    "openai_image": "api-generators",
+    "flow_video": "flow-image",
     "projects": "projects",
     "characters": "characters-and-scenes",
     "scenes": "characters-and-scenes",
-    "workflow": "workflow",
-    "video_editor": "video-editor",
-    "upscaler": "video-tools",
-    "video_cut": "video-tools",
     "webhook": "webhook-api",
-    "demo": "webhook-api",
     "log": "troubleshooting",
     "settings": "google-flow-sign-in",
 }
@@ -133,7 +126,7 @@ class MainWindow(QMainWindow):
         self._update_title()
 
     def is_busy(self) -> bool:
-        """True while any page runs a batch (generator/tool queue or a workflow)."""
+        """True while any page runs a batch."""
         for page in list(self.pages.values()):
             for w in (page, *page.findChildren(QWidget)):
                 queue = getattr(w, "queue", None)

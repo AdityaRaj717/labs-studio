@@ -268,7 +268,7 @@ def test_parse_submit_characters_and_scenes():
 
 
 def test_webhook_attaches_characters_and_scenes(qapp, tmp_path, libs):
-    from src.gen.fake_provider import FakeProvider
+    from fake_provider import FakeProvider
     from src.ui.generator.page import GeneratorPage
     from src.ui.webhook.backend import PageBackend
     from src.webhook.server import ApiError
@@ -295,7 +295,7 @@ def test_webhook_attaches_characters_and_scenes(qapp, tmp_path, libs):
 
 # ---- UI ---------------------------------------------------------------------
 def test_scene_column_and_menu_actions(qapp, tmp_path, libs):
-    from src.gen.fake_provider import FakeProvider
+    from fake_provider import FakeProvider
     from src.ui.generator.page import GeneratorPage
     from src.ui.generator.prompt_model import COL_CHARACTER, COL_SCENE
 
@@ -327,7 +327,7 @@ def test_scenes_page_and_setup_in_flow(qapp, libs, img):
     page = CharactersPage(scenes, kind="scene", flow_setup=lambda kind, eid: (
         seen.append((kind, eid)), scenes.set_flow(eid, A, "Bunker")))
     sid = page.new_character()
-    assert scenes.get(sid).name == "New scene" and not page.voice_row_shown
+    assert scenes.get(sid).name == "New scene"
     page.add_images([img])
     page.name_edit.setText("Bunker")  # unsaved: setting up in Flow saves it first
     page.setup_in_flow()
@@ -346,14 +346,14 @@ def test_flow_only_switch(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "_settings", Settings(tmp_path / "s.json"))
     monkeypatch.delenv(features.ENV, raising=False)
     assert features.flow_only()  # the default
-    assert not features.page_shown("grok") and features.page_shown("flow_image")
+    assert not features.page_shown("flow_video") and features.page_shown("flow_image")
     assert features.page_shown("scenes") and features.page_shown("characters") and features.page_shown("projects")
-    assert not features.shown("provider:gemini_image") and not features.shown("settings:api_keys")
-    assert features.visible_pages(("flow_image", "flow_video", "demo")) == ("flow_image",)
+    assert not features.shown("settings:api_keys")
+    assert features.visible_pages(("flow_image", "flow_video")) == ("flow_image",)
     config.set("features.flow_only", False)
-    assert features.page_shown("grok") and features.shown("settings:api_keys")
+    assert features.page_shown("flow_video") and features.shown("settings:api_keys")
     monkeypatch.setenv(features.ENV, "flow")
-    assert not features.page_shown("grok")
+    assert not features.page_shown("flow_video")
 
 
 def test_app_in_flow_only_mode_shows_only_working_features(qapp, monkeypatch, tmp_path):
@@ -373,9 +373,8 @@ def test_app_in_flow_only_mode_shows_only_working_features(qapp, monkeypatch, tm
         assert isinstance(img_page.provider, WebFlowImageProvider) and img_page.provider_combo is None
         tabs = window.page("settings").tabs
         assert [tabs.tabText(i) for i in range(tabs.count())] == ["Web Sessions"]
-        assert not window.page("characters").voice_row_shown
         wh = window.page("webhook")
-        assert wh.backend.page_keys == ("flow_image",) and wh.btn_demo.isHidden()
+        assert wh.backend.page_keys == ("flow_image",)
         wh.shutdown()
     finally:
         window.close()

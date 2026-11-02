@@ -109,9 +109,6 @@ class SettingsPage(QWidget):
         self.keys_tab = ApiKeysTab(keys or default_store())
         if features.shown("settings:api_keys"):  # Phase 14b: hidden in Flow-only mode
             self.tabs.addTab(self.keys_tab, tr("settings_tab_keys"))
-        if features.shown("settings:tools"):
-            from src.ui.tools.settings_tab import ToolsTab  # Phase 7
-            self.tabs.addTab(ToolsTab(), tr("settings_tab_tools"))
         from src.ui.pages.web_sessions_tab import WebSessionsTab  # Phase 11
         self.web_tab = WebSessionsTab()
         self.tabs.addTab(self.web_tab, tr("settings_tab_web"))

@@ -1,7 +1,7 @@
 """CharactersPage: list of saved characters on the left, the selected one's editor on the right.
 
 Phase 14b: the same page with ``kind="scene"`` is the Scenes page (reusable places:
-name, description, images, no voice). Both show where the entry is set up in
+name, description, images). Both show where the entry is set up in
 Google Flow and can set it up in the active project's Flow project.
 """
 
@@ -11,23 +11,22 @@ import logging
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QSize, Qt, QUrl, Signal
-from PySide6.QtGui import QDesktopServices, QIcon, QPixmap
+from PySide6.QtCore import QObject, QSize, Qt, Signal
+from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
-    QAbstractItemView, QComboBox, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
+    QAbstractItemView, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
     QListWidget, QListWidgetItem, QMessageBox, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget,
 )
 
 from src import features
 from src.characters.store import CharacterStore, default_store, scene_store
-from src.characters.voices import VOICES, preview_voice, voice_label
+from src.characters.voices import voice_label
 from src.gen.refmatch import IMAGE_EXTS
 from src.i18n import tr
 
 log = logging.getLogger(__name__)
 
 THUMB = 96
-PREVIEW_TEXT = "Hello! This is how this voice sounds in Labs Studio."
 ROLE_ID = Qt.ItemDataRole.UserRole
 
 
@@ -40,7 +39,6 @@ def _thumb(path: Path, size: int = THUMB) -> QIcon:
 
 
 class _PreviewSignals(QObject):
-    done = Signal(str, str)  # (wav path, error)
     flow_done = Signal(str, str)  # (entry id, error) after a Flow setup
 
 
@@ -103,12 +101,8 @@ class CharactersPage(QWidget):
         prefix = "scene" if kind == "scene" else "char"
         self._k = lambda key: f"{prefix}_{key}"  # the kind's own string for "new", "empty"...
         flow_only = features.flow_only()
-        self._key_source = key_source
-        self._transport = transport
         self._current: str = ""
-        self._player = None
         self._signals = _PreviewSignals(self)
-        self._signals.done.connect(self._preview_done)
         self._signals.flow_done.connect(self._flow_done)
 
         heading = QLabel(tr("nav_scenes" if kind == "scene" else "nav_characters"))
@@ -135,16 +129,6 @@ class CharactersPage(QWidget):
 
         # Right: editor.
         self.name_edit = QLineEdit()
-        self.voice_combo = QComboBox()
-        self.voice_combo.addItem(tr("char_voice_none"), "")
-        for name, _style in VOICES:
-            self.voice_combo.addItem(voice_label(name), name)
-        self.btn_preview = QPushButton(tr("char_preview"))
-        self.btn_preview.setToolTip(tr("char_preview_tip"))
-        self.btn_preview.clicked.connect(lambda: self.preview())
-        voice_row = QHBoxLayout()
-        voice_row.addWidget(self.voice_combo, 1)
-        voice_row.addWidget(self.btn_preview)
         self.notes_edit = QPlainTextEdit()
         self.notes_edit.setPlaceholderText(tr(
             "scene_notes_hint" if kind == "scene" else "char_notes_flow_hint" if flow_only else "char_notes_hint"))
@@ -171,13 +155,6 @@ class CharactersPage(QWidget):
 
         form = QFormLayout()
         form.addRow(tr("char_name"), self.name_edit)
-        # Voices need a Gemini key (TTS); places have none.
-        self.voice_row_shown = kind != "scene" and features.shown("characters:voice")
-        if self.voice_row_shown:
-            form.addRow(tr("char_voice"), voice_row)
-        else:
-            for w in (self.voice_combo, self.btn_preview):
-                w.setVisible(False)
         form.addRow(tr("scene_notes" if kind == "scene" else "char_notes"), self.notes_edit)
         form.addRow(tr("char_flow"), flow_row)
         ref_buttons = QHBoxLayout()
@@ -237,8 +214,6 @@ class CharactersPage(QWidget):
         if not char:
             return
         self.name_edit.setText(char.name)
-        idx = self.voice_combo.findData(char.voice)
-        self.voice_combo.setCurrentIndex(max(idx, 0))
         self.notes_edit.setPlainText(char.notes)
         self._fill_refs()
         self._fill_flow()
@@ -296,8 +271,7 @@ class CharactersPage(QWidget):
         if other and other.id != self._current:
             self.status.setText(tr(self._k("name_taken"), name=name))
             return
-        self.store.update(self._current, name=name, notes=self.notes_edit.toPlainText(),
-                          voice=self.voice_combo.currentData() or "")
+        self.store.update(self._current, name=name, notes=self.notes_edit.toPlainText())
         self.reload(self._current)
         self.status.setText(tr("char_saved"))
         log.info(tr(self._k("saved_log"), name=name))
@@ -365,51 +339,3 @@ class CharactersPage(QWidget):
             log.info(tr("char_flow_done", name=char.name))
         if entry_id == self._current:
             self._fill_flow()
-
-    # ---- voice preview -------------------------------------------------
-    def _preview_path(self, voice: str) -> Path:
-        return self.store.root / "_previews" / f"{voice}.wav"
-
-    def preview(self) -> None:
-        voice = self.voice_combo.currentData() or ""
-        if not voice:
-            self.status.setText(tr("char_pick_voice"))
-            return
-        cached = self._preview_path(voice)
-        if cached.is_file():
-            self._play(cached)
-            return
-        self.btn_preview.setEnabled(False)
-        self.status.setText(tr("char_preview_running", voice=voice))
-
-        def work() -> None:
-            try:
-                wav = preview_voice(voice, PREVIEW_TEXT, self._key_source, self._transport)
-                cached.parent.mkdir(parents=True, exist_ok=True)
-                cached.write_bytes(wav)
-                self._signals.done.emit(str(cached), "")
-            except Exception as exc:  # noqa: BLE001 - shown to the user
-                self._signals.done.emit("", str(exc))
-
-        threading.Thread(target=work, name="voice-preview", daemon=True).start()
-
-    def _preview_done(self, path: str, error: str) -> None:
-        self.btn_preview.setEnabled(True)
-        if error:
-            self.status.setText(error)
-            log.error(tr("char_preview_failed", error=error))
-            return
-        self.status.setText("")
-        self._play(Path(path))
-
-    def _play(self, path: Path) -> None:
-        try:
-            from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
-
-            if self._player is None:
-                self._player = QMediaPlayer(self)
-                self._player.setAudioOutput(QAudioOutput(self._player))
-            self._player.setSource(QUrl.fromLocalFile(str(path)))
-            self._player.play()
-        except ImportError:
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))

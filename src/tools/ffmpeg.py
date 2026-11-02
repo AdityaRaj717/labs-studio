@@ -134,7 +134,7 @@ def parse_probe(text: str) -> MediaInfo:
 
 
 def probe(ffprobe: Path, src: Path, run: Callable[[list[str]], str]) -> MediaInfo:
-    """``run(cmd) -> stdout``; see ``tools.tasks._capture``."""
+    """``run(cmd) -> stdout``; see ``tools.runner.capture``."""
     return parse_probe(run(probe_cmd(ffprobe, src)))
 
 

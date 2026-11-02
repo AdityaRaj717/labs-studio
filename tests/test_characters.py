@@ -18,9 +18,6 @@ from PIL import Image
 
 from src.characters import attach as char_attach
 from src.characters.store import CharacterStore
-from src.characters.voices import (
-    VOICE_NAMES, VOICES, as_wav, build_preview_request, parse_audio, preview_voice, voice_label,
-)
 from src.config import Settings
 from src.gen.models import Job
 from src.gen.provider import ProviderError
@@ -145,67 +142,8 @@ def _gen_store(tmp_path, key):
     return s
 
 
-def test_character_refs_reach_gemini_request(qapp, tmp_path, store, images):
-    from src.gen.gemini_image import GeminiImageProvider
-    from src.ui.generator.page import GeneratorPage
-    from src.ui.generator.prompt_model import COL_CHARACTER, COL_REFS
-
-    sent: list[dict] = []
-    out_png = base64.b64encode(images[0].read_bytes()).decode()
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        sent.append(json.loads(request.content))
-        return httpx.Response(200, json={"candidates": [{"content": {"parts": [
-            {"inlineData": {"mimeType": "image/png", "data": out_png}}]}, "finishReason": "STOP"}]})
-
-    mia = store.add("Mia", images=images)
-    provider = GeminiImageProvider(key_source=lambda: "k", transport=httpx.MockTransport(handler))
-    page = GeneratorPage("t_gem", provider, store=_gen_store(tmp_path, "t_gem"), characters=store)
-    page.add_prompts(["Mia on a beach", "an empty room"])
-    page.set_character([0], mia.id)
-    assert page.model.data(page.model.index(0, COL_REFS)) == "2"
-    assert page.model.data(page.model.index(0, COL_CHARACTER)) == "Mia"
-
-    assert page.start() == 2
-    assert run_until(qapp, lambda: not page.queue.is_running() and len(sent) == 2)
-    page.shutdown()
-
-    by_prompt = {}
-    for body in sent:
-        parts = body["contents"][0]["parts"]
-        text = next(p["text"] for p in parts if "text" in p)
-        by_prompt[text] = [p for p in parts if "inlineData" in p or "inline_data" in p]
-    want = {base64.b64encode(p.read_bytes()).decode() for p in images}
-    got = {(p.get("inlineData") or p.get("inline_data"))["data"] for p in by_prompt["Mia on a beach"]}
-    assert got == want
-    assert by_prompt["an empty room"] == []
-
-
-def test_match_characters_button_and_openai_edit(qapp, tmp_path, store, images):
-    from src.gen.openai_image import OpenAIImageProvider
-    from src.ui.generator.page import GeneratorPage
-
-    calls: list[httpx.Request] = []
-    b64 = base64.b64encode(images[0].read_bytes()).decode()
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        calls.append(request)
-        return httpx.Response(200, json={"created": 1, "output_format": "png", "data": [{"b64_json": b64}]})
-
-    store.add("Mia", images=images[1:])
-    provider = OpenAIImageProvider(key_source=lambda: "k", transport=httpx.MockTransport(handler))
-    page = GeneratorPage("t_oai", provider, store=_gen_store(tmp_path, "t_oai"), characters=store)
-    page.add_prompts(["portrait of Mia"])
-    assert page.match_characters() == 1
-    assert page.start() == 1
-    assert run_until(qapp, lambda: not page.queue.is_running() and calls)
-    page.shutdown()
-    assert calls[0].url.path.endswith("/images/edits")
-    assert images[1].read_bytes() in calls[0].content
-
-
 def test_table_context_signal_detaches(qapp, tmp_path, store, images):
-    from src.gen.fake_provider import FakeProvider
+    from fake_provider import FakeProvider
     from src.ui.generator.page import GeneratorPage
 
     mia = store.add("Mia", images=images)
@@ -219,68 +157,18 @@ def test_table_context_signal_detaches(qapp, tmp_path, store, images):
     page.shutdown()
 
 
-# ---- voices ----------------------------------------------------------
-def test_voice_list():
-    assert len(VOICES) == 30 and len(set(VOICE_NAMES)) == 30
-    assert voice_label("Kore") == "Kore (Firm)"
-    url, body = build_preview_request("hi", "Kore")
-    assert url.endswith("/interactions")
-    assert body["generation_config"]["speech_config"] == [{"voice": "Kore"}]
-    assert body["response_format"] == {"type": "audio"}
-    with pytest.raises(ValueError):
-        build_preview_request("hi", "Nobody")
-
-
-def test_pcm_gets_wav_header():
-    pcm = struct.pack("<4h", 0, 1000, -1000, 0)
-    wav = as_wav(pcm, "audio/l16")
-    with wave.open(io.BytesIO(wav)) as w:
-        assert (w.getframerate(), w.getnchannels(), w.readframes(4)) == (24000, 1, pcm)
-    assert as_wav(wav, "audio/wav") == wav
-    with pytest.raises(ProviderError):
-        parse_audio({"outputs": [{"type": "text", "text": "no"}]})
-
-
-def _wav_reply():
-    wav = as_wav(b"\x00\x00" * 10, "audio/l16")
-    return {"status": "completed", "outputs": [
-        {"type": "audio", "mime_type": "audio/wav", "data": base64.b64encode(wav).decode()}]}
-
-
-def test_preview_voice_mocked():
-    seen = []
-
-    def handler(request):
-        seen.append(request)
-        return httpx.Response(200, json=_wav_reply())
-
-    wav = preview_voice("Puck", "hello", key_source=lambda: "k", transport=httpx.MockTransport(handler))
-    assert wav[:4] == b"RIFF"
-    assert seen[0].headers["x-goog-api-key"] == "k" and "k" not in str(seen[0].url)
-    with pytest.raises(ProviderError):
-        preview_voice("Puck", "hello", key_source=lambda: "")
-
-
 # ---- page ------------------------------------------------------------
 def test_characters_page_create_edit_delete(qapp, store, images):
     from src.ui.characters.page import CharactersPage
 
-    calls = []
-
-    def handler(request):
-        calls.append(request)
-        return httpx.Response(200, json=_wav_reply())
-
-    page = CharactersPage(store, key_source=lambda: "k", transport=httpx.MockTransport(handler))
-    page._play = lambda path: calls.append(path)  # no audio device in tests
+    page = CharactersPage(store)
     assert page.empty.isVisibleTo(page) and page.list.count() == 0
 
     cid = page.new_character()
     page.name_edit.setText("Mia")
     page.notes_edit.setPlainText("red jacket")
-    page.voice_combo.setCurrentIndex(page.voice_combo.findData("Kore"))
     page.save_current()
-    assert store.get(cid).name == "Mia" and store.get(cid).voice == "Kore"
+    assert store.get(cid).name == "Mia"
     assert page.add_images(images) == 2 and page.refs.count() == 2
 
     page.refs.item(0).setSelected(True)
@@ -292,14 +180,7 @@ def test_characters_page_create_edit_delete(qapp, store, images):
     page.save_current()
     assert store.get(other).name != "mia" and "already" in page.status.text()
 
-    # Preview: one mocked TTS call, then the cached file is reused.
     page.reload(cid)
-    page.preview()
-    assert run_until(qapp, lambda: len(calls) == 2)
-    assert (store.root / "_previews" / "Kore.wav").is_file()
-    page.preview()
-    assert len([c for c in calls if isinstance(c, httpx.Request)]) == 1
-
     page.delete_current(confirm=False)
     assert store.get(cid) is None and page.list.count() == 1
 

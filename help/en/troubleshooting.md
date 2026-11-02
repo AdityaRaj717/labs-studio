@@ -29,14 +29,13 @@ Start with the **Detailed Log** page. It shows everything the app does, and **Op
 | What you see | What to do |
 |---|---|
 | "No … API key" | Add the key in **Settings → API keys**. See [Getting started](getting-started.md) |
-| The key is refused, or "refused the request" (403) | Check the key on the provider's site. Some OpenAI image models need a verified organization |
+| The key is refused, or "refused the request" (403) | Check the key on the provider's site |
 | Rate limited (429), server errors | Retried by themselves up to **Auto retries**. Lower **Concurrent threads** |
 
 ## Tools and editor
 
 | What you see | What to do |
 |---|---|
-| "ffmpeg not found" or "Real-ESRGAN not found" | Install it and put it on PATH, or set its path in **Settings → Tools** (the Video Editor has its own ffmpeg box). See [Video Cut and Image Upscaler](video-tools.md) |
 | Export fails on a long timeline | Use ffmpeg 7 or newer |
 
 ## Other

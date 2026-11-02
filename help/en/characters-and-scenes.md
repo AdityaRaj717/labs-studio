@@ -39,5 +39,4 @@ It remembers where each one is set up. If you delete a character in Flow, the ap
 - Characters and scenes share Flow's Characters section, so don't give a scene the same name as a character.
 - Changing an entry's images or notes later doesn't update the copy already in Flow. Delete it in Flow and the app makes it again.
 - **Detach character** clears every character on the row. There's no "remove just one" yet.
-- Character voices (Gemini text-to-speech) are hidden in Flow-only mode because they need a Gemini API key. See [Getting started](getting-started.md).
 - The [Webhook API](webhook-api.md) takes `characters` and `scenes` by name.

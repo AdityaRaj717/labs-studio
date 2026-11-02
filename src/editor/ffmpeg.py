@@ -1,7 +1,7 @@
 """ffmpeg for the editor: find the binary, probe media, build the export command from a
 ``Project``, and run it with progress and cancel.
 
-ffmpeg is external: found at the path saved in settings (``editor.ffmpeg_path``) or on
+ffmpeg is external: found at the path saved in settings (``tools.ffmpeg_path``) or on
 PATH, never downloaded or bundled. ``subprocess`` entry points are injectable so tests
 mock them. (Phase 7 may carry its own helper; reconcile the two at merge time.)
 """
@@ -24,7 +24,7 @@ from src.editor.subtitles import build_ass, write_srt
 
 log = logging.getLogger(__name__)
 
-SETTINGS_KEY = "editor.ffmpeg_path"
+SETTINGS_KEY = "tools.ffmpeg_path"
 ASS_NAME = "subs.ass"
 GRAPH_NAME = "graph.txt"
 GRAPH_INLINE_LIMIT = 6000  # longer graphs go through `-/filter_complex <file>` (ffmpeg 7+)

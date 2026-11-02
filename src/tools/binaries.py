@@ -1,7 +1,7 @@
 """Find the external binaries the tools need.
 
-Nothing is downloaded or bundled. A binary is taken from the path set in
-Settings → Tools (``tools.<name>_path``, a file or the folder holding it), and
+Nothing is downloaded or bundled. A binary is taken from the setting
+``tools.<name>_path`` (a file or the folder holding it), and
 otherwise from PATH. ffprobe also looks next to a configured ffmpeg.
 """
 
@@ -15,7 +15,6 @@ from pathlib import Path
 EXE_NAMES: dict[str, tuple[str, ...]] = {
     "ffmpeg": ("ffmpeg",),
     "ffprobe": ("ffprobe",),
-    "realesrgan": ("realesrgan-ncnn-vulkan", "realesrgan"),
 }
 
 TOOL_IDS = tuple(EXE_NAMES)
@@ -50,7 +49,7 @@ def _resolve_configured(raw: str, tool: str) -> Path | None:
 
 
 def find_binary(tool: str, store=None, which=shutil.which) -> Path | None:
-    """Return the binary for ``tool`` (``ffmpeg``/``ffprobe``/``realesrgan``) or None."""
+    """Return the binary for ``tool`` (``ffmpeg``/``ffprobe``) or None."""
     if tool not in EXE_NAMES:
         raise KeyError(tool)
     store = _store(store)

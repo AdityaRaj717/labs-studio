@@ -1,4 +1,4 @@
-"""Offline provider for tests and the demo page. Makes no network calls.
+"""Offline provider for tests. Makes no network calls.
 
 Prompts containing ``[fail]`` always fail; ``[flaky]`` fails on the first
 attempt with a retryable error.

@@ -8,7 +8,7 @@ from openpyxl import Workbook
 from PySide6.QtCore import Qt
 
 from src.config import Settings
-from src.gen.fake_provider import FakeProvider
+from fake_provider import FakeProvider
 from src.gen.models import JobStatus
 from src.ui.generator.config_panel import ConfigPanel, COMMON_FIELDS
 from src.ui.generator.page import GeneratorPage
