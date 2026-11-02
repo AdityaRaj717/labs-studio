@@ -22,7 +22,7 @@ export function findSettingsGroup(page, key) {
   return group.hasNot ? found.filter({ hasNot: locate(page, group.hasNot) }) : found;
 }
 
-const OPEN_MARKS = ['overlay.menu', 'overlay.dialog', 'settings.kind.image', 'picker.assetList'];
+const OPEN_MARKS = ['overlay.menu', 'overlay.dialog', 'settings.kind.image', 'picker.upload'];
 const isShown = (page, key) => locate(page, key).first().isVisible();
 
 async function anyOverlayOpen(page) {
@@ -39,7 +39,7 @@ async function closeTopLayer(page) {
     return locate(page, 'overlay.backdrop').last().click({ position: { x: 5, y: 5 }, timeout: 2000 });
   }
   if (await isShown(page, 'settings.kind.image')) return locate(page, 'project.settingsTrigger').click({ timeout: 2000 });
-  if (await isShown(page, 'picker.assetList')) return locate(page, 'project.addIngredients').click({ timeout: 2000 });
+  if (await isShown(page, 'picker.upload')) return locate(page, 'project.addIngredients').click({ timeout: 2000 });
   return undefined;
 }
 

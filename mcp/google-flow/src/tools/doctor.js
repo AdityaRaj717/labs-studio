@@ -6,7 +6,8 @@ import { locate, closeOverlay } from '../flow/contract.js';
 // Only what shows in every mode. Chips, resolution and the like depend on current settings.
 const PROJECT_KEYS = ['project.agent', 'project.settingsTrigger', 'project.start', 'project.prompt'];
 const SETTINGS_KEYS = ['settings.kind.image', 'settings.kind.video', 'settings.ratio.16:9', 'settings.count.x1', 'settings.modelFamily', 'settings.credits'];
-const PICKER_KEYS = ['picker.tab.all', 'picker.upload', 'picker.assetList', 'picker.addToPrompt'];
+// A new project's picker has no asset list, and Add to prompt shows only after a pick (both live).
+const PICKER_KEYS = ['picker.tab.all', 'picker.upload'];
 
 const isVisibleSoon = (page, key) =>
   locate(page, key).first().waitFor({ state: 'visible', timeout: 2000 }).then(() => true, () => false);

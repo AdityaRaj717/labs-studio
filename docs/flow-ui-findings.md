@@ -119,3 +119,9 @@ Live in project `y0-2026-11-02` (065acc3b-852c-4cf2-84c6-80359d0543bd). Credits:
 - Extend done marker: the new timeline clip gains a `flow-thumbnail-strip` with an image; a pending one is a grey block. No percent, and `Total duration` already counts it. Only `Extend (Veo 3.1 - Lite)` is offered, whichever Veo model made the source. `Download scene` shows `Exporting your scene…`, then `Your scene has been downloaded!` (15s for two clips); joined clips run a little short (two 8s clips, 14.9s).
 - Edit stays on `/edit/<id>`, adds a new version to the clip's history, greys `Download media`, and shows `n% <prompt>`, 85s total. Omni Flash edited a Veo clip. After an edit, Extend is unavailable on that clip's page.
 - Neither view shows a credit quote. Balance moved 967 to 887 over 3 extends, 1 Veo frames job and 2 edits, 40 below listed prices (120), and did not move on a third edit even on a later read. Later the panel caught up: an edit costs 20 credits (help page said 40), and the balance lags by minutes.
+
+## Production, live (2026-11-02)
+- A new project's picker shows `No assets found.` with no `Asset list`, and it has no backdrop, so "picker open" is judged by `Upload media`.
+- After a reload the new tile can take seconds to appear: a job with no tile yet is not lost until the 60s no-tile window ends.
+- Filled Start and End frame chips survive a killed job, and a filled chip has no `Start` button to click.
+- Uploaded files appear in the grid as tiles labelled with their filename, ahead of the baseline taken before Start.

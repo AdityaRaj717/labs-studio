@@ -38,10 +38,13 @@ export async function reconcile(page, job, signal) {
   await baselineTiles(page); // only to let the grid finish loading
   const timeoutMs = job.spec.kind === 'video' ? get('videoTimeoutMs', 900000) : get('generationTimeoutMs', 300000);
   const query = { prompt: job.spec.prompt, before, count: job.spec.count ?? 1 };
+  // Live: a kill seconds after Start reopened a grid with no tile yet, and the clip appeared after.
+  const noTileEnd = Date.now() + get('noTileTimeoutMs', 60000);
   for (const end = Date.now() + timeoutMs; ;) {
     signal?.throwIfAborted();
     const { running, assets } = matchTiles(await readTiles(page), query);
-    if (!running.length || assets.length >= query.count || Date.now() > end) return { found: assets.length > 0, assets };
+    const tooSoon = !running.length && !assets.length && Date.now() < noTileEnd;
+    if (!tooSoon && (!running.length || assets.length >= query.count || Date.now() > end)) return { found: assets.length > 0, assets };
     await page.waitForTimeout(POLL_MS);
   }
 }

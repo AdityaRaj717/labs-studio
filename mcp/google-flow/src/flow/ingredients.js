@@ -22,8 +22,9 @@ export async function assertChips(page, expected) {
 }
 
 // Chips clear after a job and on reload (Y0), so one still here is left from something else and must not reach this Shot.
-export async function clearChips(page) {
-  if (await chipCount(page) === 0) return;
+// Frames left by a job killed before Start stay filled, and their empty chip is what addFrame clicks. A frames job always starts clean.
+export async function clearChips(page, frames = false) {
+  if (!frames && await chipCount(page) === 0) return;
   await page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 });
   await locate(page, 'project.prompt').first().waitFor({ state: 'visible', timeout: PICKER_MS * 2 });
 }
@@ -33,7 +34,7 @@ const emptyFrames = (page) => locate(page, 'project.chip.empty').count();
 async function openPicker(page, opener = 'project.addIngredients') {
   await closeOverlay(page);
   await locate(page, opener).click();
-  await locate(page, 'picker.assetList').waitFor({ timeout: PICKER_MS });
+  await locate(page, 'picker.upload').waitFor({ timeout: PICKER_MS });
 }
 
 async function search(page, text) {

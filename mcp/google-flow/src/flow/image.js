@@ -171,7 +171,7 @@ export async function runGeneration(ctx, job, how) {
   try {
     await openProject(page, job.state === 'downloading' && job.data.projectUrl && !page.url().startsWith(job.data.projectUrl) ? { project_url: job.data.projectUrl } : job.spec);
     ctx.pinPage(page);
-    if (job.state !== 'downloading') await clearChips(page);
+    if (job.state !== 'downloading') await clearChips(page, Boolean(job.spec.start_frame ?? job.spec.end_frame));
     await resetSession(page);
     const media = job.state === 'downloading' ? job.data.media : await generate(ctx, job, how);
     return await finish(ctx, job, media, job.data.tileText, how);
