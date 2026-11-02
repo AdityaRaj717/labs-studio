@@ -3,8 +3,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
+import config from '../src/utils/config.js';
 import { createStable } from '../src/audio/stable.js';
 
+config.dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'audio-data-'));
 const KEY = 'test-value-not-a-real-key';
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stable-'));
 const accepted = () => new Response(JSON.stringify({ id: 'gen1' }), { status: 202 });

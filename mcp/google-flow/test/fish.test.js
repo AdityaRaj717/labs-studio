@@ -3,8 +3,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
+import config from '../src/utils/config.js';
 import { createFish, splitText } from '../src/audio/fish.js';
 
+config.dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'audio-data-'));
 const KEY = 'test-value-not-a-real-key';
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fish-'));
 const audio = (text = 'x', status = 200) => new Response(text, { status });

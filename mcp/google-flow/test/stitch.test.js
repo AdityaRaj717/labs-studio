@@ -4,12 +4,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
+import config from '../src/utils/config.js';
 import { registerRun } from '../src/engine/job-store.js';
 import { autoSpec, lastFrame, stitchVideo } from '../src/engine/stitch.js';
 import { createRun } from '../src/engine/run-folder.js';
 import { tool } from '../src/flow/silent.js';
 
-process.env.FLOW_DATA_DIR ??= fs.mkdtempSync(path.join(os.tmpdir(), 'stitch-data-'));
+config.dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stitch-data-'));
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stitch-'));
 
 function runWith(jobs = [], audio = []) {
