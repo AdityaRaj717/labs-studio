@@ -171,6 +171,17 @@ export function createRpc({ worker, session, hub }) {
 
   function control({ action, job_id, run_id, max_credits, accept_quote }) {
     if (action === 'resume' || action === 'retry_failed') worker.assertSettled(); // before any job moves
+    if (run_id && orchestrator.forRun(run_id) && action === 'set_budget') {
+      const production = orchestrator.setBudget({ run_id, max_credits });
+      worker.resume();
+      return { action, production, ...worker.status() };
+    }
+    if (run_id && orchestrator.forRun(run_id) && action === 'retry_failed') {
+      return orchestrator.retryFailed(run_id).then((result) => {
+        worker.resume();
+        return { action, ...result, ...worker.status() };
+      });
+    }
     if (action === 'resume' && !job_id && !run_id) {
       const productions_resumed = orchestrator.resumeAll();
       worker.resume();
@@ -251,6 +262,8 @@ export function createRpc({ worker, session, hub }) {
     flow_production_plan: buildPlan,
     flow_production_start: (args) => orchestrator.start(args),
     flow_production_status: (args) => orchestrator.status(args),
+    flow_production_review: (args) => orchestrator.review(args),
+    flow_production_regenerate: (args) => orchestrator.regenerate(args),
     flow_batch_start(args) {
       const started = startBatch(args, ledger);
       if (started.run_id) worker.kick();

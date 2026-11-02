@@ -15,6 +15,7 @@ const STOP_TIMEOUT_MS = 10000;
 const HEALTH_TIMEOUT_MS = 2000;
 const POLL_MS = 100;
 const RPC_TIMEOUT_MS = 300000; // legacy project tools can take minutes; flow_wait is capped at 55s
+const ACTOR_TOOLS = ['flow_production_review', 'flow_production_regenerate'];
 
 const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 const headers = ({ token }) => ({ authorization: `Bearer ${token}`, 'content-type': 'application/json' });
@@ -121,6 +122,9 @@ async function followEvents(conn, since, onEvent, signal) {
   }
 }
 
+// Spec R8: whatever an agent sends, its verdicts are recorded as an agent's. The app calls /rpc itself with actor app.
+export const asAgent = (name, args) => (ACTOR_TOOLS.includes(name) ? { ...args, actor: 'agent' } : args);
+
 // onProgress is set only when the MCP client sent a progress token.
 export async function callTool(getConn, name, args = {}, onProgress) {
   const conn = await getConn();
@@ -129,12 +133,12 @@ export async function callTool(getConn, name, args = {}, onProgress) {
     let progress = 0;
     followEvents(conn, 0, (event) => {
       if (event.state && (event.jobId === args.job_id || event.runId === args.run_id)) {
-        onProgress({ progress: ++progress, message: `${event.jobId}: ${event.state}` });
+        onProgress({ progress: ++progress, message: `${event.item ?? event.jobId}: ${event.state}` });
       }
     }, stop.signal).catch(() => {}); // progress is optional: the call's own result still arrives
   }
   try {
-    const { ok, result, ...failure } = await rpc(conn, name, args);
+    const { ok, result, ...failure } = await rpc(conn, name, asAgent(name, args));
     return { content: [{ type: 'text', text: JSON.stringify(ok ? result : { ok, ...failure }) }], ...(ok ? {} : { isError: true }) };
   } finally {
     stop.abort();

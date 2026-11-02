@@ -21,6 +21,9 @@ A folder with a moodboard file and a prompts file becomes References, then Still
 4. Loop `flow_wait` on `run_id`. `production` in the reply has the status and `next_action`. It finishes at `waiting_review`, `needs_action`, `paused`, `cancelled` or `complete`.
 5. At `waiting_review`, tell the owner. Never approve unless the owner told you to.
 6. A stop for quota or verification pauses it, and `flow_job_control` `resume` with `run_id` goes on. A quote above an estimate stops it as `quote_drift`: `resume` with `accept_quote: true` only if that price is acceptable.
+7. `flow_production_review` names each Take: `items: [{id: "IMG_01", take: 2}]`, `action: approve` or `reject`. It works with Chrome closed. Your verdicts are recorded as `agent`.
+8. `flow_production_regenerate` makes a new Take of one Item: no `prompt` retries, a `prompt` modifies. Pass `expected_take`, so a repeat after a timeout returns the running Take and spends nothing. For an Animation, call with `dry_run: true`, then `auto_confirm: true`. If it no longer fits, `flow_job_control` `set_budget` raises the cap, only if the owner agreed.
+9. An approved Item built from an old Take is listed in `stale`. Nothing changes by itself: ask the owner whether to regenerate it.
 
 ## Rules
 

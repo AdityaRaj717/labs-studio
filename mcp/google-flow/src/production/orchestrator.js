@@ -13,7 +13,7 @@ import { logger } from '../utils/logger.js';
 import { composeJob, takeKey } from './compose.js';
 import { loadPlan, productionConfig } from './plan.js';
 import * as realStore from './store.js';
-import { depsFor, newProduction, nextItem, staleItems, summary } from './state.js';
+import { depsFor, newProduction, nextItem, staleItems, summary, waitingOn } from './state.js';
 
 const KEY = /^prod:([^:]+):(.+):take:(\d+)$/;
 const REUSE_DIRS = { reference: 'references', still: 'images' };
@@ -22,6 +22,10 @@ const ENDS = ['done', 'failed', 'cancelled', 'needs_user', 'paused'];
 const REFERENCE_MODES = ['ingredient', 'character'];
 const PAGE = 50;
 const MAX_TEXT = 120;
+const REVIEW_VERDICTS = { approve: 'approved', reject: 'rejected' };
+const ACTORS = ['agent', 'app'];
+const CAN_REGENERATE = ['pending_review', 'approved', 'rejected', 'failed'];
+const conflict = (message, details) => createError(ErrorCodes.REVIEW_CONFLICT, message, details);
 
 const invalid = (message, details) => createError(ErrorCodes.INVALID_PARAMS, message, details);
 const cut = (text, max = MAX_TEXT) => (text?.length > max ? `${text.slice(0, max)}...` : text);
@@ -335,6 +339,90 @@ export function createOrchestrator({ jobs, store = realStore, flow }) {
     if (!entry.production.cancelled) record(entry, { type: 'cancelled' });
   }
 
+  // Needs no Chrome: the verdict is on disk before this returns. Next jobs follow from the queue.
+  function review({ production_id, items, action, note, actor }) {
+    if (!REVIEW_VERDICTS[action]) throw invalid('action must be approve or reject');
+    if (!ACTORS.includes(actor)) throw invalid(`actor must be one of: ${ACTORS.join(', ')}`);
+    if (!Array.isArray(items) || !items.length) throw invalid('items must be a non-empty list of { id, take }');
+    if (items.some(({ take }) => !Number.isInteger(take))) throw invalid('Every item names its take: a verdict never means "the latest"');
+    const entry = entryOf(production_id);
+    record(entry, { type: 'reviewed', items: items.map(({ id, take }) => ({ id, take })), verdict: REVIEW_VERDICTS[action], actor, note: note ?? null, at: new Date().toISOString() });
+    pump(entry);
+    const { status, next_action, credits, stale } = summary(entry.production);
+    return {
+      items: items.map(({ id }) => {
+        const { state, approved_take } = itemOf(entry, id);
+        return { id, state, approved_take };
+      }),
+      summary: { status, next_action, credits },
+      stale,
+    };
+  }
+
+  // A queued job has not spent yet, but its quote is coming, so it counts with the planned ones.
+  const notYetSpent = (item) => item.state === 'planned' || (['generating', 'regenerating'].includes(item.state) && !latestOf(item)?.spent_attempt);
+  const remaining = ({ budget: { max_credits: cap, spent }, items }) => cap - spent - items.filter(notYetSpent).reduce((sum, { estimate }) => sum + estimate, 0);
+
+  // Spec section 7's order: a repeat first, then anything else during a regeneration, then a stale expected_take.
+  async function regenerate({ production_id, item: id, prompt, expected_take, auto_confirm, dry_run, actor }) {
+    const entry = entryOf(production_id);
+    const { production } = entry;
+    const item = itemOf(entry, id);
+    const latest = latestOf(item);
+    if (prompt !== undefined && !String(prompt).trim()) throw invalid('prompt must not be empty');
+    if (item.state === 'regenerating') {
+      if ((prompt === undefined || prompt === latest.prompt) && (expected_take === undefined || expected_take === latest.of_take)) {
+        return { take: latest.n, job_id: latest.job_id, state: item.state, estimated_credits: item.estimate, repeated: true };
+      }
+      throw conflict(`${id} is already regenerating as take ${latest.n}`, { item: id, current_take: latest.n });
+    }
+    if (!CAN_REGENERATE.includes(item.state)) throw conflict(`${id} is ${item.state}, it can't regenerate`, { item: id, state: item.state });
+    if (expected_take !== undefined && expected_take !== latest.n) throw conflict(`${id}: the latest take is ${latest.n}, not ${expected_take}`, { item: id, current_take: latest.n });
+    if (production.cancelled || production.paused) throw conflict(`The Production is ${production.cancelled ? 'cancelled' : 'paused'}`, { paused: production.paused });
+    const waiting = waitingOn(production, id);
+    if (waiting.length) throw conflict(`${id} waits on ${waiting.join(', ')}`, { item: id, waiting_on: waiting });
+    const cost = item.estimate;
+    const left = remaining(production);
+    if (item.stage === 'animation' && production.budget.max_credits !== null && cost > left) {
+      throw createError(ErrorCodes.BUDGET_EXCEEDED, `${id} would cost ${cost} credits and ${left} are left after what is planned`, { credits: cost, remaining: left, next_action: 'Raise the cap with flow_job_control set_budget.' });
+    }
+    const ready = { take: latest.n + 1, job_id: null, state: item.state, estimated_credits: cost };
+    if (dry_run === true) return ready;
+    if (item.stage === 'animation' && auto_confirm !== true) return { ...ready, status: 'ready_for_confirmation' };
+    logger.info('Regenerate', { event: 'production_regenerate', id: production.id, item: id, actor });
+    if (missingCharacters(entry, id).length) await ensureCharacters(entry, id);
+    const job = startTake(entry, id, { of_take: latest.n, prompt });
+    const now = itemOf(entry, id);
+    return { take: latestOf(now).n, job_id: job?.id ?? null, state: now.state, estimated_credits: cost };
+  }
+
+  function setBudget({ run_id, max_credits }) {
+    if (!Number.isFinite(max_credits) || max_credits < 0) throw invalid('max_credits must be a number, 0 or more');
+    const entry = forRun(run_id);
+    record(entry, { type: 'budget_set', max_credits });
+    if (entry.production.paused?.reason === 'budget') record(entry, { type: 'resumed' });
+    pump(entry);
+    return summary(entry.production);
+  }
+
+  // Current prompts, and only what fits: the rest stay failed and are named.
+  async function retryFailed(runId) {
+    const entry = forRun(runId);
+    const changed = [];
+    const skipped = [];
+    for (const { id, state } of entry.production.items) {
+      if (state !== 'failed') continue;
+      try {
+        await regenerate({ production_id: entry.production.id, item: id, auto_confirm: true, actor: 'agent' });
+        changed.push(id);
+      } catch (err) {
+        if (err.code !== ErrorCodes.BUDGET_EXCEEDED && err.code !== ErrorCodes.REVIEW_CONFLICT) throw err;
+        skipped.push({ id, error_code: err.code, message: cut(err.message) });
+      }
+    }
+    return { changed, skipped };
+  }
+
   // Job store first: its recover() has rebuilt the runs from disk.
   function recover() {
     for (const run of allRuns()) {
@@ -360,6 +448,10 @@ export function createOrchestrator({ jobs, store = realStore, flow }) {
     resumeAll,
     hold,
     cancel,
+    review,
+    regenerate,
+    setBudget,
+    retryFailed,
     onJobEvent,
     recover,
     forRun,

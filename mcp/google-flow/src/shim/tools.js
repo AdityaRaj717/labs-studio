@@ -114,6 +114,21 @@ export const TOOLS = [
     limit: { type: 'integer', default: 50, maximum: 50 },
   })),
 
+  tool('flow_production_review', 'Approve or reject named Takes. Needs no browser. All or nothing: one illegal item changes none and is named. Only when the owner told you to.', hints(false, false, true, false), OBJECT({
+    production_id: { type: 'string' },
+    items: { type: 'array', description: '[{ id, take }]: a verdict names its Take, never "the latest".', items: { type: 'object' } },
+    action: { type: 'string', enum: ['approve', 'reject'] },
+    note: { type: 'string' },
+  }, ['production_id', 'items', 'action'])),
+  tool('flow_production_regenerate', 'Make a new Take of one Item, with its own prompt or a new one. Other Items and files are untouched. An Animation spends: dry_run shows the cost, auto_confirm: true spends. A repeat with the same expected_take returns the running Take.', SAME, OBJECT({
+    production_id: { type: 'string' },
+    item: { type: 'string' },
+    prompt: { type: 'string', description: 'Omit to retry with the same prompt. The source files are never changed.' },
+    expected_take: { type: 'integer', description: 'The latest Take you saw. Makes a repeat safe.' },
+    auto_confirm: { type: 'boolean', default: false },
+    dry_run: { type: 'boolean', default: false },
+  }, ['production_id', 'item'])),
+
   tool('flow_job_status', 'State of a job or a run. Concise by default.', LOCAL_READ, OBJECT({
     ...TARGET,
     detail: { type: 'string', enum: ['concise', 'full'], default: 'concise' },
@@ -123,10 +138,10 @@ export const TOOLS = [
     ...TARGET,
     wait_ms: { type: 'integer', default: 30000, minimum: 0, maximum: 55000 },
   })),
-  tool('flow_job_control', 'pause, resume, cancel or retry_failed. retry_failed may spend again. resume with no target restarts a stopped queue.', WRITE, OBJECT({
-    action: { type: 'string', enum: ['pause', 'resume', 'cancel', 'retry_failed'] },
+  tool('flow_job_control', 'pause, resume, cancel, retry_failed or set_budget. retry_failed may spend again. resume with no target restarts a stopped queue. set_budget raises a Production\'s cap, by run_id.', WRITE, OBJECT({
+    action: { type: 'string', enum: ['pause', 'resume', 'cancel', 'retry_failed', 'set_budget'] },
     ...TARGET,
-    max_credits: { type: 'number', default: 30, description: 'retry_failed: refuse if the regenerations estimate above this.' },
+    max_credits: { type: 'number', default: 30, description: 'retry_failed: refuse if the regenerations estimate above this. set_budget: the new cap.' },
     accept_quote: { type: 'boolean', description: 'resume of a Production stopped on quote_drift: proceed at the price Flow quoted.' },
   }, ['action'])),
   tool('flow_list_runs', 'The most recent runs with job counts.', LOCAL_READ, OBJECT({ limit: { type: 'integer', default: 20, maximum: 50 } })),
