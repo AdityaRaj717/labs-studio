@@ -8,6 +8,7 @@ import { runDoctor } from '../tools/doctor.js';
 import { handleFlowStatus } from '../tools/flow-status.js';
 import { handleImportCharacter } from '../tools/import-character.js';
 import { handleDeleteProject, handleListProjects, handleOpenProject, handleRenameProject } from '../tools/open-project.js';
+import { buildPlan } from '../production/plan.js';
 import { TOOLS } from '../shim/tools.js';
 import { createError, ERROR_CLASSES, ErrorCodes, toErrorPayload } from '../utils/errors.js';
 import { takeScreenshot } from '../utils/screenshots.js';
@@ -215,6 +216,7 @@ export function createRpc({ worker, session, hub }) {
 
   const handlers = {
     flow_estimate: estimateJobs,
+    flow_production_plan: buildPlan,
     flow_batch_start(args) {
       const started = startBatch(args, ledger);
       if (started.run_id) worker.kick();

@@ -36,6 +36,12 @@ export const ErrorCodes = {
   INTERNAL_ERROR: 'INTERNAL_ERROR',
   JOURNAL_CORRUPT: 'JOURNAL_CORRUPT',
   NOT_IMPLEMENTED: 'NOT_IMPLEMENTED',
+  PROMPT_FILE_INVALID: 'PROMPT_FILE_INVALID',
+  ANALYSIS_REQUIRED: 'ANALYSIS_REQUIRED',
+  PLAN_CHANGED: 'PLAN_CHANGED',
+  PRODUCTION_NOT_FOUND: 'PRODUCTION_NOT_FOUND',
+  ITEM_NOT_FOUND: 'ITEM_NOT_FOUND',
+  REVIEW_CONFLICT: 'REVIEW_CONFLICT',
 };
 
 const inClass = (cls) => (next_action) => ({ class: cls, next_action });
@@ -82,6 +88,12 @@ export const ERROR_CLASSES = {
   MISSING_API_KEY: caller('Set the API key in the app settings.'),
   FFMPEG_NOT_FOUND: caller('Set the ffmpegPath setting or the FFMPEG_PATH environment variable.'),
   JOB_NOT_FOUND: caller('Check the job id against flow_status.'),
+  PROMPT_FILE_INVALID: caller('Fix the named file and line, or pass the whole plan as JSON, then call flow_production_plan again.'),
+  ANALYSIS_REQUIRED: caller('Read both files, answer analysis_needed through overrides, and call flow_production_plan again.'),
+  PLAN_CHANGED: caller('Call flow_production_plan again and start with its new plan_id.'),
+  PRODUCTION_NOT_FOUND: caller('Check the id against flow_production_status or flow_list_runs.'),
+  ITEM_NOT_FOUND: caller('Check the item id against flow_production_status.'),
+  REVIEW_CONFLICT: caller('Read the current state with flow_production_status, then decide again.'),
 
   FLOW_PAGE_NOT_FOUND: retry('Open the Flow home page in the Chrome window and retry.'),
   GENERATION_BUTTON_DISABLED: job('Check the prompt and settings in the Flow tab, then submit a new job.'),

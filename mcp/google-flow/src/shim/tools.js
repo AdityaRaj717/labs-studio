@@ -85,6 +85,16 @@ export const TOOLS = [
     output_root: SPEND.output_root,
   })),
 
+  tool('flow_production_plan', 'Dry-run a Production from a moodboard file and a prompts file: parsed Cast and Shots, errors, what needs your judgement, estimate. Free, no browser.', LOCAL_READ, OBJECT({
+    folder: { type: 'string', description: 'Holds *moodboard*.md and *animation*.md, *still*.md or *image*.md.' },
+    moodboard_path: { type: 'string' },
+    prompts_path: { type: 'string' },
+    plan: { type: 'object', description: 'A whole plan { name, style, ratio, references: [...], shots: [...] }, for free-form files. Validated like parsed input.' },
+    overrides: { type: 'object', description: '{ references: [{ id, kind, name, sheet_prompt, reuse, split_from }], shots: { <id>: { refs, start, reuse } } }.' },
+    defaults: { type: 'object', description: 'Animation defaults { model, duration, resolution }. Default omni, 6, 720p.' },
+    name: { type: 'string' },
+  })),
+
   tool('flow_job_status', 'State of a job or a run. Concise by default.', LOCAL_READ, OBJECT({
     ...TARGET,
     detail: { type: 'string', enum: ['concise', 'full'], default: 'concise' },

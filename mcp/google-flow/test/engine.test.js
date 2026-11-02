@@ -506,6 +506,7 @@ test('on restart a job past submitted is never run again, held jobs stay held, p
 const SPEC_TOOLS = [
   'flow_connect', 'flow_disconnect', 'flow_status', 'flow_doctor', 'flow_capabilities',
   'flow_estimate', 'flow_generate_image', 'flow_generate_video', 'flow_batch_start',
+  'flow_production_plan',
   'flow_job_status', 'flow_wait', 'flow_job_control', 'flow_list_runs',
   'flow_list_assets', 'flow_download',
   'flow_open_project', 'flow_list_projects', 'flow_rename_project', 'flow_delete_project',
@@ -555,6 +556,18 @@ test('unbuilt tools return NOT_IMPLEMENTED and unknown tools are refused', async
     assert.equal((await rpc(engine, name, {})).error_code, 'NOT_IMPLEMENTED', name);
   }
   assert.equal((await rpc(engine, 'stitch_video', {})).error_code, 'INVALID_PARAMS');
+});
+
+test('flow_production_plan never touches the page', async () => {
+  let touched = 0;
+  const session = { ensure: async () => { touched++; return {}; }, peek: () => null };
+  const engine = await engineWith({ session });
+  const folder = path.join(root, '..', '..', 'samples', 'zombie-bunker');
+  const res = await rpc(engine, 'flow_production_plan', { folder });
+  assert.equal(res.ok, true);
+  assert.deepEqual(res.result.counts, { references: 4, stills: 8, animations: 0 });
+  assert.equal(touched, 0);
+  assert.ok(TOOLS.some((t) => t.name === 'flow_production_plan' && t.annotations.readOnlyHint && t.annotations.idempotentHint));
 });
 
 test('flow_delete_project without confirm doesn\'t touch the page', async () => {
