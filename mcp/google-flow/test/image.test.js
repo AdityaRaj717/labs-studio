@@ -159,6 +159,75 @@ test('a failed image retries once by default and counts each paid attempt', { ti
   assert.deepEqual(Object.keys(saved.spends).sort(), [`${id}#1`, `${id}#2`]);
 });
 
+test('x2 with one failed tile saves the good file and does not respend', { timeout: 60000 }, async () => {
+  const { generate, settled, startClicks } = await setup('partialFail');
+  const view = await settled(await generate({ count: 2 }), 'failed');
+  assert.equal(view.error.error_code, 'RESULT_MISMATCH');
+  assert.match(view.error.message, /Something went wrong/);
+  assert.equal(view.outputs.length, 1);
+  assert.equal(fs.existsSync(view.outputs[0].file), true);
+  assert.equal(view.attempt, 1);
+  assert.equal(await startClicks(), 1);
+});
+
+test('a refusal tile is not retried', { timeout: 60000 }, async () => {
+  const { generate, settled, startClicks } = await setup('refuseTile');
+  const view = await settled(await generate(), 'failed');
+  assert.equal(view.error.error_code, 'FLOW_GENERATION_FAILED');
+  assert.equal(await startClicks(), 1);
+});
+
+test('the same tile text twice stops retrying whatever the allowance', { timeout: 60000 }, async () => {
+  const { generate, settled, startClicks } = await setup('failTile');
+  const id = await generate({ max_generation_retries: 5 });
+  await until(async () => (await startClicks()) === 2);
+  await settled(id, 'failed');
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(await startClicks(), 2);
+});
+
+test('flow_wait does not return during an automatic retry', { timeout: 60000 }, async () => {
+  const { generate, engine, startClicks } = await setup('failOnce');
+  const id = await generate();
+  for (let i = 0; i < 4; i++) {
+    const { result } = await rpc(engine, 'flow_wait', { job_id: id, wait_ms: 30000 });
+    if (result.finished) {
+      assert.equal(result.state, 'done');
+      assert.equal(await startClicks(), 2);
+      return;
+    }
+  }
+  assert.fail('never finished');
+});
+
+test('an older tile loading late is not a result', { timeout: 60000 }, async () => {
+  const { generate, settled } = await setup('lateOldTile');
+  config.noTileTimeoutMs = 1500;
+  const view = await settled(await generate(), 'failed');
+  assert.equal(view.error.error_code, 'GENERATION_TIMEOUT');
+  assert.equal(view.outputs, undefined);
+});
+
+test('asset info with no model label passes and is recorded', { timeout: 60000 }, async () => {
+  const { generate, settled } = await setup('noModelInfo');
+  const view = await settled(await generate(), 'done');
+  assert.match(view.outputs[0].observed, /^Created /);
+});
+
+test('a job queued on a paused queue says so, as does flow_wait', { timeout: 60000 }, async () => {
+  const { generate, settled, engine } = await setup('quotaToast');
+  await settled(await generate(), 'paused');
+  const { result } = await rpc(engine, 'flow_generate_image', { prompt: 'two', auto_confirm: true, output_root: path.join(tmp, 'outp') });
+  assert.equal(result.state, 'queued');
+  assert.equal(result.queue_paused.reason, 'GOOGLE_LIMIT_REACHED');
+  assert.match(result.queue_paused.next_action, /resume/);
+  const t0 = Date.now();
+  const waited = (await rpc(engine, 'flow_wait', { job_id: result.job_id, wait_ms: 30000 })).result;
+  assert.ok(Date.now() - t0 < 5000, 'does not wait out a paused queue');
+  assert.equal(waited.finished, false);
+  assert.equal(waited.queue_paused.reason, 'GOOGLE_LIMIT_REACHED');
+});
+
 test('a job with no new tile fails without hanging, and a saved Character is no result', { timeout: 60000 }, async () => {
   const { generate, settled } = await setup('noTile');
   config.noTileTimeoutMs = 800;
@@ -336,6 +405,7 @@ test('verifyImage applies the 3% ratio tolerance and checks the shown model', ()
   assert.match(verifyImage(file, { ratio: '1:1' }).mismatches[0], /ratio/);
   assert.match(verifyImage(file, { ratio: '16:9', model: 'bananaPro', info: 'Created 🍌 Nano Banana 2.1 16:9' }).mismatches[0], /model/);
   assert.equal(verifyImage(file, { ratio: '16:9', model: 'banana21', info: 'Created 🍌 Nano Banana 2.1 16:9' }).ok, true);
+  assert.equal(verifyImage(file, { ratio: '16:9', model: 'bananaPro', info: 'Created Nov 2, 2026 16:9' }).ok, true);
   fs.writeFileSync(file, 'not an image');
   assert.equal(verifyImage(file, { ratio: '16:9' }).ok, false);
 });

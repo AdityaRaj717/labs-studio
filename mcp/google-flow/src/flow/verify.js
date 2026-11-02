@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { modelPattern } from './settings.js';
+import { contract } from './contract.js';
 
 const RATIO_TOLERANCE = 0.03; // 16:9 images come back 1.79:1
 
@@ -17,6 +17,8 @@ function jpegSize(buffer) {
   return null;
 }
 
+const labelShown = (key, info) => new RegExp(contract.keys[key].name.regex.replace(/\$$/, '')).test(info);
+
 // request: { ratio, model?, info? }, info being the text Flow shows for the asset.
 export function verifyImage(file, { ratio, model, info }) {
   const size = jpegSize(fs.readFileSync(file));
@@ -29,9 +31,10 @@ export function verifyImage(file, { ratio, model, info }) {
     const got = size.width / size.height;
     if (Math.abs(got - wanted) / wanted > RATIO_TOLERANCE) mismatches.push(`ratio ${size.width}x${size.height} is not ${ratio}`);
   }
-  if (info && model) {
-    const label = new RegExp(modelPattern('image', model).source.replace(/\$$/, ''));
-    if (!label.test(info)) mismatches.push(`model: Flow reports "${info}", not ${model}`);
+  // Only a different recognised model is a mismatch; text with no model label is just recorded by the caller.
+  if (info && model && !labelShown(`settings.model.image.${model}`, info)) {
+    const other = Object.keys(contract.keys).find((key) => key.startsWith('settings.model.') && labelShown(key, info));
+    if (other) mismatches.push(`model: Flow reports "${info}", not ${model}`);
   }
   return { ok: mismatches.length === 0, mismatches, ...size };
 }

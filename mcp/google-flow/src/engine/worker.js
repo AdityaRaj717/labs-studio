@@ -1,6 +1,7 @@
 import { closeBrowser, getBrowser, getPage, isBrowserConnected } from '../browser/connect.js';
 import { launchFlowChrome } from '../browser/launch-profile.js';
 import { detectBlock } from '../flow/blocks.js';
+import { contract } from '../flow/contract.js';
 import { runImageJob } from '../flow/image.js';
 import { createError, ERROR_CLASSES, ErrorCodes, toErrorPayload } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
@@ -41,6 +42,14 @@ export const flowAdapter = (job, ctx) => {
 
 // Spec 6.5: a failed generation retries by itself only within this allowance, since each retry spends.
 const retriesAllowed = ({ spec }) => spec.max_generation_retries ?? (spec.kind === 'image' ? 1 : 0);
+
+// Spending again can't help a refusal, or a tile that just failed the same way.
+function shouldAutoRetry(job, { error_code: code, details }) {
+  if (code !== ErrorCodes.FLOW_GENERATION_FAILED || (job.attempt ?? 1) > retriesAllowed(job)) return false;
+  const text = details?.tile_text;
+  if (!text) return true;
+  return !new RegExp(contract.tile.noRetry, 'i').test(text) && !job.history?.some(({ error }) => error?.details?.tile_text === text);
+}
 
 export function createWorker({ adapter, session, pacer, settleMs = SETTLE_MS }) {
   let paused = null;
@@ -85,12 +94,14 @@ export function createWorker({ adapter, session, pacer, settleMs = SETTLE_MS }) 
       if (job.state !== 'queued') transition(job, 'paused', { error: payload });
       pause(code);
     } else {
+      const retrying = shouldAutoRetry(job, payload);
+      // Not journaled: flow_wait must not take this passing failed for the end of the job.
+      Object.defineProperty(job, 'retrying', { value: retrying, configurable: true });
       transition(job, 'failed', { error: payload });
       if (STOPS_QUEUE.includes(code)) pause(code);
       // Through the store, so the attempt is counted and the ledger keys a new spend.
-      if (code === ErrorCodes.FLOW_GENERATION_FAILED && (job.attempt ?? 1) <= retriesAllowed(job)) {
-        transition(job, 'queued', undefined, { retry: true });
-      }
+      if (retrying) transition(job, 'queued', undefined, { retry: true });
+      Object.defineProperty(job, 'retrying', { value: false, configurable: true });
     }
   }
 

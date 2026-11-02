@@ -8,6 +8,8 @@ const POLL_MS = 1000;
 const NOT_RUNNING_POLLS = 3; // a tile can flip through an empty frame on its way to done
 const PREVIEW_MS = 10000;
 const PERCENT = /^\s*(\d+)%/;
+const SETTLE_POLL_MS = 500;
+const SETTLE_MAX_MS = 5000;
 
 const css = (key) => contract.keys[key].css;
 
@@ -22,9 +24,19 @@ function readTiles(page) {
     })), { character: css('tile.character'), image: css('tile.image') });
 }
 
-// Taken right before Start: anything finished now is not a result of this job.
+const mediaIds = (tiles) => tiles.flatMap(({ mediaId }) => (mediaId ? [mediaId] : []));
+
+// Taken right before Start, once the grid stops changing: anything finished now is not a result of this job.
 export async function baselineTiles(page) {
-  return (await readTiles(page)).flatMap(({ mediaId }) => (mediaId ? [mediaId] : []));
+  let ids = mediaIds(await readTiles(page));
+  for (const end = Date.now() + SETTLE_MAX_MS; Date.now() < end;) {
+    await page.waitForTimeout(SETTLE_POLL_MS);
+    const next = mediaIds(await readTiles(page));
+    const same = next.length === ids.length && next.every((id, i) => id === ids[i]);
+    ids = next;
+    if (same) break;
+  }
+  return ids;
 }
 
 export const tileOf = (page, mediaId) => locate(page, 'project.tile')
@@ -70,10 +82,13 @@ export async function observeGeneration(page, { before, count, previewDir, onUpd
     }
     if (block) return { status: 'blocked', images: [], text: block.text, error: block.code };
 
-    const images = tiles.flatMap(({ mediaId }) => (mediaId && !known.has(mediaId) ? [mediaId] : [])).slice(0, count);
     const running = tiles.filter(({ mediaId, text }) => !mediaId && PERCENT.test(text));
     running.forEach(({ label }) => runningLabels.add(label));
     peak = Math.max(peak, running.length);
+    // New results come in at the top. Until a tile was seen running, an unknown id lower down may be an older tile loading late.
+    const firstKnown = tiles.findIndex(({ mediaId }) => known.has(mediaId));
+    const candidates = peak || firstKnown < 0 ? tiles : tiles.slice(0, firstKnown);
+    const images = mediaIds(candidates).filter((id) => !known.has(id)).slice(0, count);
 
     const percent = running.length ? Number(PERCENT.exec(running[0].text)[1]) : null;
     let previewPath = null;

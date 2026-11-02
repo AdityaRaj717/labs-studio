@@ -154,6 +154,7 @@
     s.chips = 0;
     if (F.quotaToast) s.notice = '<div><span>You have reached your daily limit</span><button>Dismiss</button></div>';
     if (F.captcha) s.notice = "<p>Please verify you're human to continue</p>";
+    if (F.lateOldTile) setTimeout(() => { s.tiles.push({ id: 'old-late', label: 'Older still', state: 'done', model: s.model, ratio: s.ratio }); renderGrid(); }, 200);
     if (F.noTile || F.quotaToast || F.captcha) return;
     const count = F.oneImage ? 1 : Number(s.count.slice(1));
     const failing = F.failTile || failuresLeft-- > 0;
@@ -162,11 +163,11 @@
     }));
     s.tiles.unshift(...batch);
     const timer = setInterval(() => {
-      for (const t of batch) {
+      for (const [i, t] of batch.entries()) {
         t.pct += 25;
         if (t.pct < 100) continue;
         clearInterval(timer);
-        Object.assign(t, failing ? { state: 'failed', text: 'Something went wrong with this generation' } : { state: 'done', label: 'A finished title' });
+        Object.assign(t, failing || (F.partialFail && i === 0) ? { state: 'failed', text: F.failText || 'Something went wrong with this generation' } : { state: 'done', label: 'A finished title' });
       }
       renderGrid();
     }, F.genTickMs || 100);
@@ -207,7 +208,7 @@
     sizes: () => { s.sizesOpen = true; },
     info: (el) => {
       const t = s.tiles.find((x) => x.id === el.dataset.id);
-      s.info = s.info ? '' : `Created Nov 2, 2026 ${t.model} ${t.ratio}`;
+      s.info = s.info ? '' : `Created Nov 2, 2026 ${F.noModelInfo ? '' : t.model} ${t.ratio}`;
     },
   };
   const NAMED_BUTTONS = {

@@ -81,9 +81,10 @@ async function saveAll(ctx, job, media) {
   return outputs;
 }
 
-function assertAsRequested(job, outputs) {
+function assertAsRequested(job, outputs, tileText) {
   const { count } = job.spec;
   const mismatches = outputs.flatMap((out) => out.mismatches);
+  if (tileText) mismatches.push(`a tile failed: ${tileText}`);
   if (outputs.length !== count) mismatches.unshift(`count: ${outputs.length} of ${count} images`);
   if (mismatches.length) throw createError(ErrorCodes.RESULT_MISMATCH, `Result is not what was asked for: ${mismatches.join('; ')}`, { mismatches });
 }
@@ -99,10 +100,10 @@ async function noteBalance(page) {
   }
 }
 
-async function finish(ctx, job, media) {
+async function finish(ctx, job, media, tileText) {
   const outputs = await saveAll(ctx, job, media);
   transition(job, 'verifying', { outputs, saved: null });
-  assertAsRequested(job, outputs);
+  assertAsRequested(job, outputs, tileText);
   await noteBalance(ctx.page);
   return { outputs };
 }
@@ -139,8 +140,10 @@ async function generate(ctx, job) {
     },
   });
   signal.throwIfAborted();
-  if (result.status !== 'done') throw failureOf(result);
-  transition(job, 'downloading', { media: result.images });
+  // Some tiles finished and some failed: keep the good files and stop, since a retry would spend on the full count again.
+  const partial = result.status === 'failed' && result.images.length > 0;
+  if (result.status !== 'done' && !partial) throw failureOf(result);
+  transition(job, 'downloading', { media: result.images, ...(partial ? { tileText: result.text || 'no message shown' } : {}) });
   return result.images;
 }
 
@@ -152,7 +155,7 @@ export async function runImageJob(ctx, job) {
     ctx.pinPage(page);
     await resetSession(page);
     const media = job.state === 'downloading' ? job.data.media : await generate(ctx, job);
-    return await finish(ctx, job, media);
+    return await finish(ctx, job, media, job.data.tileText);
   } catch (err) {
     if (err instanceof FlowError || err.name !== 'TimeoutError') throw err;
     throw createError(ErrorCodes.UNKNOWN_UI_CHANGE, `Flow did not respond as expected: ${err.message.split('\n')[0]}`);

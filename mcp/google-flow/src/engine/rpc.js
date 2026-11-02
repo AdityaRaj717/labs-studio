@@ -8,7 +8,7 @@ import { handleFlowStatus } from '../tools/flow-status.js';
 import { handleImportCharacter } from '../tools/import-character.js';
 import { handleDeleteProject, handleListProjects, handleOpenProject, handleRenameProject } from '../tools/open-project.js';
 import { TOOLS } from '../shim/tools.js';
-import { createError, ErrorCodes, toErrorPayload } from '../utils/errors.js';
+import { createError, ERROR_CLASSES, ErrorCodes, toErrorPayload } from '../utils/errors.js';
 import { takeScreenshot } from '../utils/screenshots.js';
 import { checkBudget, estimate } from './budget.js';
 import { getCapabilities } from './capabilities.js';
@@ -100,6 +100,13 @@ export function createRpc({ worker, session, hub }) {
   };
   const onTab = (handler) => (args) => tab(() => handler(args));
 
+  // A queued job does not move while this holds, so every caller waiting on one must be told.
+  function queuePaused() {
+    const reason = worker.status().paused;
+    if (!reason) return {};
+    return { queue_paused: { reason, next_action: `${ERROR_CLASSES[reason].next_action} Then flow_job_control with action resume runs the queue.` } };
+  }
+
   function view({ job_id, run_id, detail, offset = 0 }) {
     if (job_id) return jobView(findJob(job_id));
     if (!run_id) throw invalid('Pass job_id or run_id');
@@ -114,8 +121,9 @@ export function createRpc({ worker, session, hub }) {
     const { wait_ms = DEFAULT_WAIT_MS } = args;
     if (!Number.isInteger(wait_ms) || wait_ms < 0 || wait_ms > MAX_WAIT_MS) throw invalid(`wait_ms must be 0 to ${MAX_WAIT_MS}`);
     const jobs = targetOf(args);
-    const finished = () => jobs.every((job) => SETTLED.includes(job.state));
-    if (!finished()) {
+    const finished = () => jobs.every((job) => SETTLED.includes(job.state) && !job.retrying);
+    // Nothing will move on a paused queue, so waiting would only hide that.
+    if (!finished() && !(worker.status().paused && !worker.busy())) {
       await new Promise((resolve) => {
         let unsubscribe;
         const done = () => {
@@ -128,14 +136,14 @@ export function createRpc({ worker, session, hub }) {
       });
     }
     const { paused } = worker.status();
-    return { ...view(args), finished: finished(), ...(paused ? { paused } : {}) };
+    return { ...view(args), finished: finished(), ...(paused ? { paused } : {}), ...queuePaused() };
   }
 
   function generateImage(args) {
     const { auto_confirm, max_credits, idempotency_key, output_root, ...request } = args;
     // First: a repeat must return its job whatever the budget says now.
     const first = auto_confirm === true && idempotency_key && jobByKey(idempotency_key);
-    if (first) return { job_id: first.id, run_id: first.run.id, state: first.state, repeated: true };
+    if (first) return { job_id: first.id, run_id: first.run.id, state: first.state, repeated: true, ...queuePaused() };
     const spec = validateImage(request);
     const estimated = estimate([spec]);
     if (auto_confirm !== true) return { status: 'ready_for_confirmation', estimate: estimated, request: { ...spec, prompt: cut(spec.prompt) } };
@@ -143,7 +151,7 @@ export function createRpc({ worker, session, hub }) {
     const run = createRun({ name: spec.prompt, outputRoot: output_root, flowProjectUrl: spec.project_url });
     const job = enqueue(run, { ...spec, max_credits }, idempotency_key);
     worker.kick();
-    return { job_id: job.id, run_id: run.id, state: job.state, estimate: estimated };
+    return { job_id: job.id, run_id: run.id, state: job.state, estimate: estimated, ...queuePaused() };
   }
 
   // A held job past the credit line lost its watcher, so it is settled rather than run again.
