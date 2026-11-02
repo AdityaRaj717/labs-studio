@@ -89,7 +89,7 @@ export const TOOLS = [
     folder: { type: 'string', description: 'Holds *moodboard*.md and *animation*.md, *still*.md or *image*.md.' },
     moodboard_path: { type: 'string' },
     prompts_path: { type: 'string' },
-    plan: { type: 'object', description: 'A whole plan { name, style, ratio, references: [...], shots: [...] }, for free-form files. Validated like parsed input.' },
+    plan: { type: 'object', description: 'A whole plan { name, style, ratio, references: [{ id, kind, name, prompt }], shots: [{ id, kind: still or animation, refs, prompt }] }, for free-form files. Validated like parsed input.' },
     overrides: { type: 'object', description: '{ references: [{ id, kind, name, sheet_prompt, reuse, split_from }], shots: { <id>: { refs, start, reuse } } }.' },
     defaults: { type: 'object', description: 'Animation defaults { model, duration, resolution }. Default omni, 6, 720p.' },
     name: { type: 'string' },

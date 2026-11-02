@@ -20,6 +20,7 @@ const REUSE_DIRS = { reference: 'references', still: 'images' };
 const STOPS_PRODUCTION = [ErrorCodes.BROWSER_NOT_CONNECTED, ErrorCodes.FLOW_PAGE_NOT_FOUND];
 const ENDS = ['done', 'failed', 'cancelled', 'needs_user', 'paused'];
 const REFERENCE_MODES = ['ingredient', 'character'];
+const TAB_BUSY_RETRY_MS = 5000;
 const PAGE = 50;
 const MAX_TEXT = 120;
 const REVIEW_VERDICTS = { approve: 'approved', reject: 'rejected' };
@@ -192,8 +193,10 @@ export function createOrchestrator({ jobs, store = realStore, flow }) {
         }
       } while (entry.again);
     } catch (err) {
-      // Another run holds the tab: the next finished job pumps again.
-      if (err.code !== ErrorCodes.JOB_IN_PROGRESS) {
+      // Another job holds the tab, or the one that just finished has not let go: no later job need come, so try again.
+      if (err.code === ErrorCodes.JOB_IN_PROGRESS) {
+        setTimeout(() => pump(entry), TAB_BUSY_RETRY_MS).unref();
+      } else {
         logger.warn('Production stopped', { event: 'production_stopped', id: entry.production.id, code: err.code, error: err.message });
         pauseFor(entry, { reason: 'error', code: err.code ?? ErrorCodes.INTERNAL_ERROR });
       }

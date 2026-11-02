@@ -133,6 +133,7 @@ function resolve(input, { defaults, limits, overrides }) {
   };
   const references = applyReferenceOverrides(input.references, overrides.references ?? [], fail);
   const shots = applyShotOverrides(input.shots, overrides.shots ?? {}, fail);
+  for (const { id, kind } of shots) if (!['still', 'animation'].includes(kind)) fail(`Shot ${id} needs kind: still or animation`);
 
   const ids = new Map();
   for (const item of [...references, ...shots]) {
