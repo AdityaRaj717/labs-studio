@@ -1,9 +1,10 @@
+import { EventEmitter } from 'events';
 import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'crypto';
 import { createError, ErrorCodes } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
-import { appendEvent, readEvents } from './journal.js';
+import { appendEvent, corruptJournal, readEvents } from './journal.js';
 import { runsRegistry, writeManifest } from './run-folder.js';
 
 const HOLDS = ['needs_user', 'paused'];
@@ -26,8 +27,14 @@ const MOVES = {
 };
 
 let byKey = null;
+const runs = new Map(); // by dir: one Run object per folder, or two would hand out the same seq
 
-function isLegal(job, to) {
+// Every enqueue and transition, for the engine's event stream.
+export const jobEvents = new EventEmitter();
+
+function isLegal(job, to, retry) {
+  // Going back behind the credit line spends again, so it takes an explicit retry.
+  if (job.state === 'failed' && to === 'queued' && job.submittedAt && !retry) return false;
   if (HOLDS.includes(job.state) && to === job.heldFrom) return true;
   // Only a job that really reached Flow has anything to download.
   if (job.state === 'failed' && to === 'downloading' && !job.submittedAt) return false;
@@ -37,8 +44,14 @@ function isLegal(job, to) {
 // Shared by live transitions and journal replay, so both reach the same job state.
 function apply(job, { to, data, ts }) {
   if (to === 'submitted') job.submittedAt ??= ts;
-  // queued is only reachable again through an explicit retry, which clears the credit line.
-  if (to === 'queued') delete job.submittedAt;
+  // A new paid attempt: the old one moves to history, and job.attempt keys the ledger.
+  if (to === 'queued' && job.submittedAt) {
+    const attempt = job.attempt ?? 1;
+    (job.history ??= []).push({ attempt, submittedAt: job.submittedAt, error: job.data.error });
+    job.attempt = attempt + 1;
+    delete job.submittedAt;
+    delete job.data.error;
+  }
   if (HOLDS.includes(to)) job.heldFrom = job.state;
   else delete job.heldFrom;
   job.state = to;
@@ -63,7 +76,7 @@ function saveManifest(run) {
   }
 }
 
-function loadRun(dir) {
+function loadRun(dir, known) {
   const file = path.join(dir, 'events.jsonl');
   if (!fs.existsSync(file)) {
     logger.warn('Run folder missing, skipped in recovery', { dir });
@@ -73,49 +86,73 @@ function loadRun(dir) {
   const created = events.find((e) => e.type === 'run.created');
   if (!created) return [];
   const { id, name, flowProjectUrl, createdAt } = created;
-  const run = { id, name, dir, flowProjectUrl, createdAt, seq: events.at(-1).seq, jobs: [] };
+  const run = known.get(dir) ?? { id, name, dir, flowProjectUrl, createdAt, jobs: [] };
+  run.seq = events.at(-1).seq;
+  run.jobs.length = 0;
+  runs.set(dir, run);
   const jobs = new Map();
   for (const event of events) {
     if (event.type === 'job.enqueued') jobs.set(event.jobId, addJob(run, event));
-    else if (event.type === 'job.transition') apply(jobs.get(event.jobId), event);
+    else if (event.type === 'job.transition') {
+      const job = jobs.get(event.jobId);
+      if (!job) throw corruptJournal(file, `transition at seq ${event.seq} for a job never enqueued`);
+      apply(job, event);
+    }
   }
   return run.jobs;
 }
 
 function load() {
   byKey = new Map();
+  // Live objects from enqueue stay the ones in use; anything off the registry is gone.
+  const known = new Map(runs);
+  runs.clear();
   const registry = runsRegistry();
   if (!fs.existsSync(registry)) return [];
   // shortcut: replays every run ever made on each load, prune the registry if startup slows.
-  return readEvents(registry).flatMap(({ dir }) => loadRun(dir));
+  return readEvents(registry).flatMap(({ dir }) => loadRun(dir, known));
 }
 
+export const jobByKey = (key) => {
+  if (!byKey) load();
+  return byKey.get(key);
+};
+
 export function enqueue(run, jobSpec, idempotencyKey) {
+  runs.set(run.dir, run);
   if (!byKey) load();
   const existing = idempotencyKey && byKey.get(idempotencyKey);
   if (existing) return existing;
   const event = appendEvent(run, { type: 'job.enqueued', jobId: randomUUID(), spec: jobSpec, idempotencyKey });
   const job = addJob(run, event);
   saveManifest(run);
+  jobEvents.emit('event', { type: 'job.enqueued', runId: run.id, jobId: job.id, state: job.state });
   return job;
 }
 
 // Durable on return: the caller clicks Start only after transition(job, 'submitted') comes back.
-export function transition(job, state, data) {
-  if (!isLegal(job, state)) {
-    throw createError(ErrorCodes.INVALID_PARAMS, `Illegal job move ${job.state} -> ${state}`, { jobId: job.id, from: job.state, to: state });
+// retry: true is the explicit call that lets a job past the credit line spend again.
+export function transition(job, state, data, { retry = false } = {}) {
+  if (!isLegal(job, state, retry)) {
+    const hint = job.state === 'failed' && state === 'queued' ? ' without an explicit retry' : '';
+    throw createError(ErrorCodes.INVALID_PARAMS, `Illegal job move ${job.state} -> ${state}${hint}`, { jobId: job.id, from: job.state, to: state });
   }
   const event = appendEvent(job.run, { type: 'job.transition', jobId: job.id, from: job.state, to: state, data });
   apply(job, event);
   saveManifest(job.run);
+  jobEvents.emit('event', { type: 'job.transition', runId: job.run.id, jobId: job.id, from: event.from, state });
   return job;
 }
 
-// Rebuilds all state from disk. Past the credit line a job only ever goes to reconcile.
+export const allRuns = () => [...runs.values()];
+
+// Rebuilds all state from disk. Past the credit line a running job only ever goes to reconcile; a held one waits for its owner.
 export function recover() {
   const open = load().filter((job) => !TERMINAL.includes(job.state));
+  const running = open.filter((job) => !HOLDS.includes(job.state));
   return {
-    resumable: open.filter((job) => !job.submittedAt),
-    reconcile: open.filter((job) => job.submittedAt),
+    resumable: running.filter((job) => !job.submittedAt),
+    reconcile: running.filter((job) => job.submittedAt),
+    held: open.filter((job) => HOLDS.includes(job.state)),
   };
 }

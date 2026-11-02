@@ -88,3 +88,9 @@ test('never overwrites: an existing name moves to the next version', () => {
 test('an empty extension is rejected', () => {
   assert.throws(() => assetName(1, 'boat', 1, '...', dir), { code: 'INVALID_PARAMS' });
 });
+
+test('assetName rejects a seq that is not an integer', () => {
+  for (const seq of [1.5, '1', NaN, undefined, -1]) {
+    assert.throws(() => assetName(seq, 'p', 1, 'mp4', os.tmpdir()), /seq/);
+  }
+});

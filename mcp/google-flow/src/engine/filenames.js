@@ -18,6 +18,7 @@ function cut(text, max) {
 // The seq prefix means a slug like CON can never be the whole stem, so reserved names are safe.
 // shortcut: checks and returns without reserving, fine while one worker saves at a time; upgrade to open('wx') with parallel saves.
 export function assetName(seq, prompt, version, ext, dir) {
+  if (!Number.isInteger(seq) || seq < 0) throw createError(ErrorCodes.INVALID_PARAMS, `bad seq: ${seq}`, { next_action: 'Pass seq as a whole number.' });
   const safeExt = ext.toLowerCase().replace(/[^a-z0-9]/g, '');
   if (!safeExt) throw createError(ErrorCodes.INVALID_PARAMS, `bad file extension: ${ext}`, { next_action: 'Pass an extension such as mp4.' });
   const root = path.resolve(dir);

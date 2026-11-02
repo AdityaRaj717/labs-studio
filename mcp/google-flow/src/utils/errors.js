@@ -34,6 +34,8 @@ export const ErrorCodes = {
   FFMPEG_NOT_FOUND: 'FFMPEG_NOT_FOUND',
   JOB_NOT_FOUND: 'JOB_NOT_FOUND',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
+  JOURNAL_CORRUPT: 'JOURNAL_CORRUPT',
+  NOT_IMPLEMENTED: 'NOT_IMPLEMENTED',
 };
 
 const inClass = (cls) => (next_action) => ({ class: cls, next_action });
@@ -86,6 +88,8 @@ export const ERROR_CLASSES = {
   GENERATION_TIMEOUT: job('Check the project in Flow for the result before spending on a retry.'),
   PLAYWRIGHT_ERROR: stopRun('Check the Flow Chrome window, then call resume.'),
   JOB_IN_PROGRESS: caller('Wait for the current job with flow_wait, then call again.'),
+  JOURNAL_CORRUPT: stopRun('Repair or remove the named journal file, then start the engine again. Guessing could spend credits twice.'),
+  NOT_IMPLEMENTED: caller('This tool is not built yet. Check flow://guide for what works now.'),
   INTERNAL_ERROR: stopRun('Read the engine log and fix the cause in details, then call resume.'),
 };
 

@@ -1,5 +1,8 @@
 import fs from 'fs';
 import path from 'path';
+import { createError, ErrorCodes } from '../utils/errors.js';
+
+export const corruptJournal = (file, what) => createError(ErrorCodes.JOURNAL_CORRUPT, `Corrupt journal ${file}: ${what}`, { file });
 
 // Returns only once the line is fsynced; a failed write is rolled back so the file stays parseable.
 export function appendLine(file, line) {
@@ -34,7 +37,7 @@ export function readEvents(file) {
     try {
       return JSON.parse(line);
     } catch {
-      throw new Error(`Corrupt journal ${file} at line ${i + 1}`);
+      throw corruptJournal(file, `bad JSON at line ${i + 1}`);
     }
   });
 }

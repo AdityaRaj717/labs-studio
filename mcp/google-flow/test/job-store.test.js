@@ -10,6 +10,8 @@ process.env.FLOW_DATA_DIR = path.join(tmp, 'data');
 const { createRun, writeManifest } = await import('../src/engine/run-folder.js');
 const { appendEvent, readEvents } = await import('../src/engine/journal.js');
 const { enqueue, transition, recover } = await import('../src/engine/job-store.js');
+const { closeLog } = await import('../src/utils/logger.js');
+const { FlowError } = await import('../src/utils/errors.js');
 
 const outputRoot = path.join(tmp, 'out');
 const newRun = (name = 'test run') => createRun({ name, outputRoot, flowProjectUrl: 'http://fake/project' });
@@ -19,9 +21,9 @@ const ids = (jobs) => jobs.map((j) => j.id);
 
 before(() => recover());
 afterEach(() => mock.restoreAll());
-after(() => {
-  // The data dir stays in the OS temp dir: the logger's stream may still be opening a file there.
-  fs.rmSync(outputRoot, { recursive: true, force: true });
+after(async () => {
+  await closeLog();
+  fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
 test('createRun makes the spec 6.3 folders', () => {
@@ -114,7 +116,7 @@ test('recover returns a job at submitted in reconcile, not resumable', () => {
   assert.ok(!ids(resumable).includes(job.id));
 });
 
-test('recover puts every state past the credit line in reconcile, held ones too', () => {
+test('recover puts running states past the credit line in reconcile and held jobs in held', () => {
   const generating = enqueue(newRun(), { prompt: 'p' });
   walk(generating, 'preparing', 'submitted', 'generating');
   const downloading = enqueue(newRun(), { prompt: 'p' });
@@ -123,11 +125,55 @@ test('recover puts every state past the credit line in reconcile, held ones too'
   walk(paused, 'preparing', 'submitted', 'paused');
   const blocked = enqueue(newRun(), { prompt: 'p' });
   walk(blocked, 'preparing', 'submitted', 'generating', 'needs_user');
-  const { resumable, reconcile } = recover();
-  for (const job of [generating, downloading, paused, blocked]) {
+  const { resumable, reconcile, held } = recover();
+  for (const job of [generating, downloading]) {
     assert.ok(ids(reconcile).includes(job.id), job.state);
     assert.ok(!ids(resumable).includes(job.id), job.state);
   }
+  for (const job of [paused, blocked]) {
+    assert.ok(ids(held).includes(job.id), job.state);
+    assert.ok(!ids(reconcile).includes(job.id), job.state);
+    assert.ok(!ids(resumable).includes(job.id), job.state);
+  }
+});
+
+test('a job held before the credit line stays held, not resumable', () => {
+  const job = enqueue(newRun(), { prompt: 'p' });
+  transition(job, 'paused');
+  const { resumable, held } = recover();
+  assert.ok(ids(held).includes(job.id));
+  assert.ok(!ids(resumable).includes(job.id));
+});
+
+test('retrying a paid job needs the retry flag, keeps history and counts the attempt', () => {
+  const job = enqueue(newRun(), { prompt: 'p' });
+  walk(job, 'preparing', 'submitted');
+  transition(job, 'failed', { error: { error_code: 'FLOW_GENERATION_FAILED' } });
+  const firstSubmit = job.submittedAt;
+  assert.throws(() => transition(job, 'queued'), /retry/);
+  assert.equal(job.submittedAt, firstSubmit);
+  transition(job, 'queued', undefined, { retry: true });
+  assert.equal(job.attempt, 2);
+  assert.equal(job.submittedAt, undefined);
+  assert.equal(job.data.error, undefined);
+  assert.deepEqual(job.history, [{ attempt: 1, submittedAt: firstSubmit, error: { error_code: 'FLOW_GENERATION_FAILED' } }]);
+  const replayed = recover().resumable.find((j) => j.id === job.id);
+  assert.equal(replayed.attempt, 2);
+  assert.equal(replayed.history[0].submittedAt, firstSubmit);
+});
+
+test('enqueue before recover shares one Run object per folder, so seq never repeats', async () => {
+  const fresh = await import('../src/engine/job-store.js?fresh');
+  const run = newRun();
+  const job = fresh.enqueue(run, { prompt: 'p' });
+  const found = fresh.recover().resumable.find((j) => j.id === job.id);
+  assert.equal(found.run, run);
+  fresh.transition(job, 'preparing');
+  fresh.transition(found, 'preparing');
+  const seqs = events(run).map((e) => e.seq);
+  assert.deepEqual(seqs, seqs.map((_, i) => i + 1));
+  transition(fresh.recover().resumable.find((j) => j.id === job.id), 'cancelled');
+  recover();
 });
 
 test('recover resumes a job at preparing', () => {
@@ -174,7 +220,16 @@ test('corruption before the last line stops recovery instead of guessing a state
   const file = path.join(run.dir, 'events.jsonl');
   const good = fs.readFileSync(file);
   fs.writeFileSync(file, `not json\n${good}`);
-  assert.throws(() => recover(), /events\.jsonl/);
+  assert.throws(() => recover(), (err) => err instanceof FlowError && err.code === 'JOURNAL_CORRUPT' && err.message.includes(file));
+  fs.writeFileSync(file, good);
+});
+
+test('a transition with no enqueue is the same coded corruption error', () => {
+  const run = newRun();
+  const file = path.join(run.dir, 'events.jsonl');
+  const good = fs.readFileSync(file);
+  appendEvent(run, { type: 'job.transition', jobId: 'ghost', to: 'preparing' });
+  assert.throws(() => recover(), (err) => err.code === 'JOURNAL_CORRUPT' && err.message.includes(file));
   fs.writeFileSync(file, good);
 });
 
