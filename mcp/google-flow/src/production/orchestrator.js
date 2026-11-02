@@ -195,7 +195,7 @@ export function createOrchestrator({ jobs, store = realStore, flow }) {
     } catch (err) {
       // Another job holds the tab, or the one that just finished has not let go: no later job need come, so try again.
       if (err.code === ErrorCodes.JOB_IN_PROGRESS) {
-        setTimeout(() => pump(entry), TAB_BUSY_RETRY_MS).unref();
+        entry.tabRetry ??= setTimeout(() => { entry.tabRetry = null; pump(entry); }, TAB_BUSY_RETRY_MS).unref();
       } else {
         logger.warn('Production stopped', { event: 'production_stopped', id: entry.production.id, code: err.code, error: err.message });
         pauseFor(entry, { reason: 'error', code: err.code ?? ErrorCodes.INTERNAL_ERROR });

@@ -337,7 +337,7 @@ export function createRpc({ worker, session, hub, getSecret = (name) => process.
       if (![dailyCap, minGapMs, maxGapMs].every((n) => Number.isFinite(n) && n >= 0) || minGapMs > maxGapMs) throw invalid('dailyCap, minGapMs and maxGapMs must be numbers, with min <= max');
       Object.assign(config, { dailyCap, minGapMs, maxGapMs });
       // The app has no resume control: a raised cap or a new day frees a queue the cap stopped.
-      if (worker.status().paused === ErrorCodes.DAILY_CAP_REACHED && !pacer.capReached()) worker.resume();
+      if (worker.status().paused === ErrorCodes.DAILY_CAP_REACHED && !pacer.capReached() && !worker.busy()) worker.resume();
       return { dailyCap, minGapMs, maxGapMs };
     },
     async flow_screenshot({ name = 'manual' }) {
