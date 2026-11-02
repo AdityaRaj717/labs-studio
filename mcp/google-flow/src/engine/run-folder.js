@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { getDataDir } from '../utils/config.js';
 import { appendEvent, appendLine } from './journal.js';
+import { createError, ErrorCodes } from '../utils/errors.js';
 
 const SUBFOLDERS = ['images', 'videos', 'voice', 'bgm', 'sfx', 'final', 'diagnostics'];
 const RENAME_ATTEMPTS = 6;
@@ -59,15 +60,36 @@ function renameWithRetry(from, to) {
 }
 
 export function writeManifest(run) {
-  const file = path.join(run.dir, 'manifest.json');
+  writeFileAtomic(path.join(run.dir, 'manifest.json'), JSON.stringify(run, null, 2));
+}
+
+export function writeFileAtomic(file, text) {
   const tmp = `${file}.tmp`;
   const fd = fs.openSync(tmp, 'w');
   try {
-    fs.writeFileSync(fd, JSON.stringify(run, null, 2));
+    fs.writeFileSync(fd, text);
     fs.fsyncSync(fd);
   } finally {
     fs.closeSync(fd);
   }
-  // shortcut: no directory fsync, Windows refuses it; the journal can rebuild the manifest.
+  // shortcut: no directory fsync, Windows refuses it; a power cut leaves the previous version at worst.
   renameWithRetry(tmp, file);
+}
+
+// null means never written. Corrupt state is an error: guessing would reset a cap or hide spend.
+export function readStateFile(file) {
+  let text;
+  try {
+    text = fs.readFileSync(file, 'utf8');
+  } catch (err) {
+    if (err.code === 'ENOENT') return null;
+    throw err;
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw createError(ErrorCodes.INTERNAL_ERROR, `Corrupt state file: ${file}`, {
+      next_action: `Restore or repair ${file}; deleting it forgets what it recorded.`,
+    });
+  }
 }

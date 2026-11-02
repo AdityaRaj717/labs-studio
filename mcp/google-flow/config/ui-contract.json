@@ -114,5 +114,14 @@
     "video.resolution": { "has": "settings.resolution.720p" },
     "video.duration": { "has": "settings.duration.4s" },
     "video.mode": { "has": "settings.mode.frames" }
+  },
+  "blocks": {
+    "toastDismiss": "Dismiss",
+    "rules": [
+      { "code": "NOT_LOGGED_IN", "url": "^https://accounts\\.google\\.com/" },
+      { "code": "MANUAL_VERIFICATION_REQUIRED", "text": "not a robot|verify (that )?you('re| are) human|complete the captcha", "anywhere": true },
+      { "code": "WAF_BLOCK", "text": "unusual (traffic|activity)", "anywhere": true },
+      { "code": "GOOGLE_LIMIT_REACHED", "text": "reached your (daily |monthly )?(limit|quota)|quota exceeded|not enough credits|out of credits" }
+    ]
   }
 }

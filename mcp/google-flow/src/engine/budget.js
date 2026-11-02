@@ -24,6 +24,7 @@ export function estimate(jobSpecs) {
 }
 
 export function checkBudget(estimated, maxCredits = DEFAULT_MAX_CREDITS, ledger) {
+  if (!ledger) throw createError(ErrorCodes.INTERNAL_ERROR, 'checkBudget needs the credit ledger');
   if (!Number.isFinite(maxCredits) || maxCredits < 0) {
     throw createError(ErrorCodes.INVALID_PARAMS, `max_credits must be a number, 0 or more: ${maxCredits}`, {
       next_action: 'Pass max_credits as a number.',
