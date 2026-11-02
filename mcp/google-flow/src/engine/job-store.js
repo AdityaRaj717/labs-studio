@@ -146,6 +146,9 @@ export function transition(job, state, data, { retry = false } = {}) {
 
 export const allRuns = () => [...runs.values()];
 
+// A Production's Run exists before its first job, and may never have one if everything is reused.
+export const registerRun = (run) => { runs.set(run.dir, run); };
+
 // Rebuilds all state from disk. Past the credit line a running job only ever goes to reconcile; a held one waits for its owner.
 export function recover() {
   const open = load().filter((job) => !TERMINAL.includes(job.state));

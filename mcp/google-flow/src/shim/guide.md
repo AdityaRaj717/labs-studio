@@ -11,6 +11,17 @@ One local engine owns Chrome, the queue and the files. All agents and the app sh
 5. Loop on `flow_wait` (at most 55000 ms per call) until `finished` is true. A `paused` field means the queue is stopped for the owner.
 6. Use `flow_job_control` with `pause`, `resume`, `cancel` or `retry_failed`.
 
+## Productions
+
+A folder with a moodboard file and a prompts file becomes References, then Stills, then silent Animations.
+
+1. `flow_production_plan` with `folder`. Free, no browser. The engine parses tables and blocks only; it never interprets prose.
+2. Read both files yourself. Answer `analysis_needed` through `overrides`, for example `{references: [{id: "MD_04", kind: "place"}]}` or `split_from` for a row hiding two people, then plan again.
+3. `flow_production_start` with `plan_id`, `cast_confirmed: true`, `auto_confirm: true`, and `max_credits` if it has Animations. `cast_confirmed` means you read both files and every Reference is exactly one subject.
+4. Loop `flow_wait` on `run_id`. `production` in the reply has the status and `next_action`. It finishes at `waiting_review`, `needs_action`, `paused`, `cancelled` or `complete`.
+5. At `waiting_review`, tell the owner. Never approve unless the owner told you to.
+6. A stop for quota or verification pauses it, and `flow_job_control` `resume` with `run_id` goes on. A quote above an estimate stops it as `quote_drift`: `resume` with `accept_quote: true` only if that price is acceptable.
+
 ## Rules
 
 - `submitted` is the credit line. Past it a job is never run again without `retry_failed`, because a retry spends again.

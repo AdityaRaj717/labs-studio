@@ -94,6 +94,25 @@ export const TOOLS = [
     defaults: { type: 'object', description: 'Animation defaults { model, duration, resolution }. Default omni, 6, 720p.' },
     name: { type: 'string' },
   })),
+  tool('flow_production_start', 'Start a planned Production: References, then Stills, then silent Animations, each waiting for review. CREDITS when it has Animations. Returns at once; follow with flow_wait on run_id. The same plan_id returns the same Production.', SAME, OBJECT({
+    plan_id: { type: 'string' },
+    cast_confirmed: { type: 'boolean', description: 'true: I read both files and every Reference is exactly one subject.' },
+    auto_confirm: { type: 'boolean', default: false, description: 'Must be true.' },
+    max_credits: { type: 'number', description: 'Required with Animations: the cap on everything, regenerations included.' },
+    project_url: { type: 'string', description: 'Flow project. Default a new one.' },
+    output_root: SPEND.output_root,
+    gates: { type: 'object', description: '{ references: true, stills: true }. false runs on without review at that stage.' },
+    reference_mode: { type: 'string', enum: ['ingredient', 'character'], description: 'Default from config/production.json.' },
+    new_run: { type: 'boolean', default: false, description: 'Start another Production from the same plan.' },
+  }, ['plan_id'])),
+  tool('flow_production_status', 'Status, per-stage counts, credits, what it waits on and the next action. Items only when filtered or with detail full, paged.', LOCAL_READ, OBJECT({
+    production_id: { type: 'string', description: 'Default the latest.' },
+    stage: { type: 'string', enum: ['reference', 'still', 'animation'] },
+    state: { type: 'string', enum: ['planned', 'generating', 'pending_review', 'approved', 'rejected', 'regenerating', 'failed'] },
+    detail: { type: 'string', enum: ['concise', 'full'], default: 'concise' },
+    cursor: { type: 'integer', default: 0 },
+    limit: { type: 'integer', default: 50, maximum: 50 },
+  })),
 
   tool('flow_job_status', 'State of a job or a run. Concise by default.', LOCAL_READ, OBJECT({
     ...TARGET,
@@ -108,6 +127,7 @@ export const TOOLS = [
     action: { type: 'string', enum: ['pause', 'resume', 'cancel', 'retry_failed'] },
     ...TARGET,
     max_credits: { type: 'number', default: 30, description: 'retry_failed: refuse if the regenerations estimate above this.' },
+    accept_quote: { type: 'boolean', description: 'resume of a Production stopped on quote_drift: proceed at the price Flow quoted.' },
   }, ['action'])),
   tool('flow_list_runs', 'The most recent runs with job counts.', LOCAL_READ, OBJECT({ limit: { type: 'integer', default: 20, maximum: 50 } })),
 
@@ -143,4 +163,5 @@ export const TOOLS = [
 export const INSTRUCTIONS = 'Drives Google Flow through one shared local engine. flow_connect, then flow_capabilities. '
   + 'flow_generate_image without auto_confirm is a free dry run; with auto_confirm: true it queues and returns job_id at once. '
   + 'Then loop flow_wait until finished is true. Past submitted a job spends again only by flow_job_control retry_failed or within max_generation_retries (images default 1). '
+  + 'For a whole video: flow_production_plan, answer analysis_needed, flow_production_start, watch with flow_wait on run_id, tell the owner to review, never approve unasked. '
   + 'Never try to get past verification or limits: tell the owner. Read the flow://guide resource for the full workflow.';

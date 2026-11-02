@@ -506,7 +506,7 @@ test('on restart a job past submitted is never run again, held jobs stay held, p
 const SPEC_TOOLS = [
   'flow_connect', 'flow_disconnect', 'flow_status', 'flow_doctor', 'flow_capabilities',
   'flow_estimate', 'flow_generate_image', 'flow_generate_video', 'flow_batch_start',
-  'flow_production_plan',
+  'flow_production_plan', 'flow_production_start', 'flow_production_status',
   'flow_job_status', 'flow_wait', 'flow_job_control', 'flow_list_runs',
   'flow_list_assets', 'flow_download',
   'flow_open_project', 'flow_list_projects', 'flow_rename_project', 'flow_delete_project',

@@ -8,7 +8,11 @@ import { runDoctor } from '../tools/doctor.js';
 import { handleFlowStatus } from '../tools/flow-status.js';
 import { handleImportCharacter } from '../tools/import-character.js';
 import { handleDeleteProject, handleListProjects, handleOpenProject, handleRenameProject } from '../tools/open-project.js';
+import { verifyAccount } from '../browser/account-check.js';
+import { checkFfmpeg } from '../flow/silent.js';
+import { createOrchestrator } from '../production/orchestrator.js';
 import { buildPlan } from '../production/plan.js';
+import { getBalance } from '../tools/flow-status.js';
 import { TOOLS } from '../shim/tools.js';
 import { createError, ERROR_CLASSES, ErrorCodes, toErrorPayload } from '../utils/errors.js';
 import { takeScreenshot } from '../utils/screenshots.js';
@@ -114,7 +118,11 @@ export function createRpc({ worker, session, hub }) {
     const { wait_ms = DEFAULT_WAIT_MS } = args;
     if (!Number.isInteger(wait_ms) || wait_ms < 0 || wait_ms > MAX_WAIT_MS) throw invalid(`wait_ms must be 0 to ${MAX_WAIT_MS}`);
     const jobs = targetOf(args);
-    const finished = () => jobs.every((job) => SETTLED.includes(job.state) && !job.retrying);
+    const owned = args.run_id && orchestrator.forRun(args.run_id);
+    // A Production goes on after each job, so it is finished only when nothing more will run by itself.
+    const finished = () => (owned
+      ? orchestrator.summaryOf(args.run_id).status !== 'running'
+      : jobs.every((job) => SETTLED.includes(job.state) && !job.retrying));
     // Nothing will move on a paused queue, so waiting would only hide that.
     if (!finished() && !(worker.status().paused && !worker.busy())) {
       await new Promise((resolve) => {
@@ -129,7 +137,7 @@ export function createRpc({ worker, session, hub }) {
       });
     }
     const { paused } = worker.status();
-    return { ...view(args), finished: finished(), ...(paused ? { paused } : {}), ...queuePaused() };
+    return { ...view(args), finished: finished(), ...(paused ? { paused } : {}), ...queuePaused(), ...(owned ? { production: orchestrator.summaryOf(args.run_id) } : {}) };
   }
 
   const queueGeneration = (validateJob) => (args) => {
@@ -161,13 +169,21 @@ export function createRpc({ worker, session, hub }) {
     else transition(job, 'queued', undefined, { retry: true });
   }
 
-  function control({ action, job_id, run_id, max_credits }) {
+  function control({ action, job_id, run_id, max_credits, accept_quote }) {
     if (action === 'resume' || action === 'retry_failed') worker.assertSettled(); // before any job moves
     if (action === 'resume' && !job_id && !run_id) {
+      const productions_resumed = orchestrator.resumeAll();
       worker.resume();
-      return worker.status();
+      return { ...worker.status(), productions_resumed };
     }
     const jobs = targetOf({ job_id, run_id });
+    // The Take is what spends and reviews: a job moved under it would go unseen.
+    if (action === 'retry_failed' && job_id && jobs[0].idempotencyKey?.startsWith('prod:')) throw invalid('This job belongs to a Production: use flow_production_regenerate');
+    if (run_id && orchestrator.forRun(run_id)) {
+      if (action === 'pause') orchestrator.hold(run_id);
+      if (action === 'resume') orchestrator.resume(run_id, { accept_quote });
+      if (action === 'cancel') orchestrator.cancel(run_id);
+    }
     const pick = (states) => jobs.filter((job) => states.includes(job.state));
     let changed;
     if (action === 'pause') {
@@ -209,6 +225,22 @@ export function createRpc({ worker, session, hub }) {
     return { status: signIn ? 'oauth_required' : 'connected', account: check?.account ?? null, accountStatus: check?.status ?? 'unverified', url: page.url().split(/[?#]/)[0] };
   });
 
+  const orchestrator = createOrchestrator({
+    jobs: { kick: () => worker.kick() },
+    flow: {
+      // Doctor needs a project page, so the project opens first: a refusal here can leave an empty new project.
+      preflight: ({ needsVideo, project_url, name }) => tab(async (page) => {
+        if (needsVideo) await checkFfmpeg();
+        const { url } = await handleOpenProject(project_url ? { url: project_url, create_if_missing: false } : { name, create_if_missing: true });
+        await verifyAccount(page);
+        const doctor = await runDoctor(page);
+        if (!doctor.ok) throw createError(ErrorCodes.UNKNOWN_UI_CHANGE, `Flow's page no longer matches the contract: ${doctor.missing.map(({ key }) => key).join(', ')}`, { missing: doctor.missing });
+        return { balance: await getBalance(page), project_url: url };
+      }),
+      createCharacter: (args) => tab(() => handleCreateCharacter(args)),
+    },
+  });
+
   function estimateJobs({ jobs }) {
     if (!Array.isArray(jobs) || jobs.length === 0) throw invalid('jobs must be a non-empty list');
     return estimate(jobs.map(validateJob));
@@ -217,6 +249,8 @@ export function createRpc({ worker, session, hub }) {
   const handlers = {
     flow_estimate: estimateJobs,
     flow_production_plan: buildPlan,
+    flow_production_start: (args) => orchestrator.start(args),
+    flow_production_status: (args) => orchestrator.status(args),
     flow_batch_start(args) {
       const started = startBatch(args, ledger);
       if (started.run_id) worker.kick();
@@ -268,7 +302,7 @@ export function createRpc({ worker, session, hub }) {
 
   const known = new Set(TOOLS.map((t) => t.name));
 
-  return async function call(tool, args = {}) {
+  async function call(tool, args = {}) {
     try {
       if (!known.has(tool)) throw invalid(`Unknown tool: ${String(tool).slice(0, 60)}`);
       const handler = handlers[tool];
@@ -277,5 +311,7 @@ export function createRpc({ worker, session, hub }) {
     } catch (err) {
       return toErrorPayload(err);
     }
-  };
+  }
+  call.orchestrator = orchestrator;
+  return call;
 }

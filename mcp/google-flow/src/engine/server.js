@@ -170,7 +170,9 @@ export async function listenEngine({ adapter = flowAdapter, session = chromeSess
     begin() {
       const { reconcile: lost } = recover();
       jobEvents.on('event', onJobEvent);
+      jobEvents.on('event', call.orchestrator.onJobEvent);
       worker.adopt(lost);
+      call.orchestrator.recover();
       logger.info('Engine started', { event: 'engine_started', pid: process.pid, version: VERSION, port: engine.port, lostJobs: lost.length });
       ready = true;
       worker.kick();
@@ -178,6 +180,7 @@ export async function listenEngine({ adapter = flowAdapter, session = chromeSess
     stop: () => (stopping ??= new Promise((resolve) => {
       worker.stop();
       jobEvents.off('event', onJobEvent);
+      jobEvents.off('event', call.orchestrator.onJobEvent);
       streams.forEach((res) => res.end());
       server.closeAllConnections();
       server.close(resolve);
