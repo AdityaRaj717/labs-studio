@@ -110,3 +110,9 @@ Live in project `y0-2026-11-02` (065acc3b-852c-4cf2-84c6-80359d0543bd). Credits:
 - A `Download` once timed out at 120s right after picking a Character, and worked after closing overlays. Cause not established. Download should close overlays first and bound its wait.
 - Tile menu items: `Reuse prompt`, `Animate`, `Add to prompt`, `Download`, `Copy`, `Rename`, `Share`, `Set project cover`, `Flag output`, `Move to trash`, `Favorite`. Page-level `Create body`, `Portrait`, `Select a voice` appear on the character page; unused.
 - Failed tile still not observed.
+
+## Video pipeline, live (2026-11-02)
+- The project grid is a fixed window (28 tiles seen), so its length does not grow with new results. A new result pushes the first known tile down.
+- Running video tile text: `play_circle 3% <prompt>`; at the end `play_circle 360p play_circle 100% <prompt>`, then `play_circle 360p`.
+- A just-finished video tile can hold a `video` element in place of the thumbnail `img`. Their URLs share only their start; 90 characters identified each tile tested.
+- Extend (Veo clip, Add clip, Extend, `What happens next?`, Start) moves from `/edit/<id>` to a new `/scene/<id>` named `Untitled Scene <date>`, with a timeline. The new clip shows as a grey placeholder and the total duration already reads 16s while it generates. No percent text was seen in the page. `Download scene` opened no menu while the clip was pending. Completion marker and scene download still unobserved.
