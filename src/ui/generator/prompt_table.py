@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QRectF, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QPainter
+from PySide6.QtGui import QColor, QKeySequence, QPainter
 from PySide6.QtWidgets import (
     QAbstractItemView, QHeaderView, QMenu, QStyledItemDelegate, QTableView,
 )
@@ -71,6 +71,9 @@ class PromptTable(QTableView):
     character_requested = Signal(list, str)  # rows, character id ("" = detach)
     character_added = Signal(list, str)      # rows, character id joining the shot (Phase 14b)
     scene_requested = Signal(list, str)      # rows, scene id ("" = clear) (Phase 14b)
+    approve_requested = Signal(list)         # rows
+    reject_requested = Signal(list)          # rows
+    regenerate_requested = Signal(list)      # rows
 
     def __init__(self, model, parent=None):
         super().__init__(parent)
@@ -147,22 +150,49 @@ class PromptTable(QTableView):
             return
         if index.row() not in self.selected_rows():
             self.selectRow(index.row())
-        rows = self.selected_rows()
-        job = self.model().job_at(index.row())
+        self._build_menu(index.row(), self.selected_rows()).exec(self.viewport().mapToGlobal(pos))
+
+    def _build_menu(self, row: int, rows: list[int]) -> QMenu:
+        job = self.model().job_at(row)
         menu = QMenu(self)
-        menu.addAction(tr("gen_edit"), lambda: self.edit_requested.emit(index.row()))
-        menu.addAction(tr("gen_retry"), lambda: self.retry_requested.emit(rows))
-        menu.addAction(tr("gen_remove"), lambda: self.remove_requested.emit(rows))
-        if self.characters_source is not None:
-            self._character_menu(menu, rows, job)
-        if self.scenes_source is not None:
-            self._scene_menu(menu, rows, job)
+        if job.production_id:
+            self._production_menu(menu, row, rows)
+        else:
+            menu.addAction(tr("gen_edit"), lambda: self.edit_requested.emit(row))
+            menu.addAction(tr("gen_retry"), lambda: self.retry_requested.emit(rows))
+            menu.addAction(tr("gen_remove"), lambda: self.remove_requested.emit(rows))
+            if self.characters_source is not None:
+                self._character_menu(menu, rows, job)
+            if self.scenes_source is not None:
+                self._scene_menu(menu, rows, job)
         menu.addSeparator()
-        out = menu.addAction(tr("gen_open_output"), lambda: self.open_output_requested.emit(index.row()))
-        folder = menu.addAction(tr("gen_open_folder"), lambda: self.open_folder_requested.emit(index.row()))
+        out = menu.addAction(tr("gen_open_output"), lambda: self.open_output_requested.emit(row))
+        folder = menu.addAction(tr("gen_open_folder"), lambda: self.open_folder_requested.emit(row))
         out.setEnabled(bool(job.outputs))
         folder.setEnabled(bool(job.outputs))
-        menu.exec(self.viewport().mapToGlobal(pos))
+        return menu
+
+    def _pending(self, rows: list[int]) -> bool:
+        return any(self.model().job_at(r).review == "pending_review" for r in rows)
+
+    def _production_menu(self, menu: QMenu, row: int, rows: list[int]) -> None:
+        approve = menu.addAction(tr("gen_approve"), lambda: self.approve_requested.emit(rows))
+        approve.setShortcut(QKeySequence("Ctrl+Return"))
+        approve.setEnabled(self._pending(rows))
+        reject = menu.addAction(tr("gen_reject"), lambda: self.reject_requested.emit(rows))
+        reject.setEnabled(any(self.model().job_at(r).review in ("pending_review", "approved") for r in rows))
+        menu.addAction(tr("gen_retry_same"), lambda: self.regenerate_requested.emit(rows))
+        modify = menu.addAction(tr("gen_modify_regen"), lambda: self.edit_requested.emit(row))
+        modify.setEnabled(len(rows) == 1)
+        menu.addAction(tr("gen_remove")).setEnabled(False)
+
+    def keyPressEvent(self, event) -> None:  # noqa: N802
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            rows = self.selected_rows()
+            if self._pending(rows):
+                self.approve_requested.emit(rows)
+                return
+        super().keyPressEvent(event)
 
     def _character_menu(self, menu: QMenu, rows: list[int], job) -> None:
         sub = menu.addMenu(tr("gen_attach_character"))

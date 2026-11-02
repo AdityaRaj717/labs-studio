@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import logging
+import threading
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, QUrl
+from PySide6.QtCore import Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QComboBox, QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLabel, QMessageBox, QPushButton, QScrollArea,
@@ -27,12 +28,15 @@ from src.ui.generator.prompt_model import COL_PROMPT, PromptTableModel
 from src.ui.generator.prompt_table import PromptTable
 from src.ui.generator.queue_bridge import QueueBridge
 from src.ui.generator.stats_header import StatsHeader
-from src.web.run_mirror import banner_text
+from src.web.production_actions import ActionError, ProductionActions
+from src.web.run_mirror import apply_item, banner_text
 
 log = logging.getLogger(__name__)
 
 
 class GeneratorPage(QWidget):
+    _action_back = Signal(object)  # a callable to run on the GUI thread
+
     def __init__(self, page_key: str, provider: Provider, title: str = "", banner: str = "",
                  store=None, parent: QWidget | None = None, characters=None,
                  alternatives: list[tuple[Provider, str]] | None = None, scenes=None):
@@ -118,6 +122,11 @@ class GeneratorPage(QWidget):
         self.table.edit_requested.connect(self.edit_row)
         self.table.retry_requested.connect(self.retry_rows)
         self.table.remove_requested.connect(self.remove_rows)
+        self.table.approve_requested.connect(self.approve_rows)
+        self.table.reject_requested.connect(self.reject_rows)
+        self.table.regenerate_requested.connect(self.retry_rows)
+        self._actions = None
+        self._action_back.connect(self._run_back)
         self.table.open_output_requested.connect(self.open_output)
         self.table.open_folder_requested.connect(self.open_row_folder)
         self.table.characters_source = lambda: [(c.id, c.name) for c in self.characters.all()]
@@ -317,10 +326,95 @@ class GeneratorPage(QWidget):
             if job.character or job.character_refs or job.cast or job.scenes or job.scene_refs:
                 char_attach.sync(job, self.characters, self.scenes)
 
+    # ---- Production review -------------------------------------------
+    @property
+    def actions(self) -> ProductionActions:
+        if self._actions is None:
+            from src.web.flow_mcp import flow_mcp
+
+            self._actions = ProductionActions(flow_mcp().client)  # this client starts the engine on demand
+        return self._actions
+
+    @staticmethod
+    def _run_back(callback) -> None:
+        callback()
+
+    def _act(self, work, done=None, jobs=(), failed=None) -> None:
+        """Run ``work`` off the GUI thread, then ``done(result)`` or the error handling on it."""
+        def run() -> None:
+            try:
+                result = work()
+            except ActionError as exc:
+                error = exc
+                self._action_back.emit(lambda: (failed or (lambda e: self._action_failed(e, jobs)))(error))
+            else:
+                if done is not None:
+                    self._action_back.emit(lambda: done(result))
+        threading.Thread(target=run, name="production-action", daemon=True).start()
+
+    def _action_failed(self, error: ActionError, jobs=()) -> None:
+        if error.code == "REVIEW_CONFLICT":
+            for job in jobs:
+                self._act(lambda j=job: self.actions.current(j), lambda item, j=job: self._show_item(j, item))
+        QMessageBox.warning(self, self.page_key, tr("gen_engine_error", message=error.message))
+
+    def _show_item(self, job: Job, item: dict | None) -> None:
+        if item is not None:
+            apply_item(job, item)
+            self.model.refresh_job(job.id)
+
+    def approve_rows(self, rows: list[int]) -> None:
+        jobs = [j for j in map(self.model.job_at, rows) if j.review == "pending_review"]
+        if jobs:
+            self._act(lambda: self.actions.approve(jobs), jobs=jobs)
+
+    def reject_rows(self, rows: list[int]) -> None:
+        jobs = [j for j in map(self.model.job_at, rows) if j.review in ("pending_review", "approved")]
+        if jobs:
+            self._act(lambda: self.actions.reject(jobs), jobs=jobs)
+
+    def _regenerate(self, job: Job, prompt: str | None = None) -> None:
+        go = lambda: self._act(lambda: self.actions.regenerate(job, prompt), jobs=[job])  # noqa: E731
+        if self.page_key != "flow_video":  # images use quota only
+            go()
+            return
+
+        def confirm(reply: dict) -> None:
+            text = tr("gen_regen_cost", item=job.item_id, credits=reply.get("estimated_credits"))
+            if QMessageBox.question(self, self.page_key, text) == QMessageBox.StandardButton.Yes:
+                go()
+
+        def over_budget(error: ActionError) -> None:
+            if error.code != "BUDGET_EXCEEDED" or "max_credits" not in error.details:
+                self._action_failed(error, [job])
+                return
+            d = error.details
+            cap = d["max_credits"] + d["credits"] - d["remaining"]
+            text = tr("gen_regen_raise", item=job.item_id, credits=d["credits"], remaining=d["remaining"], cap=cap)
+            if QMessageBox.question(self, self.page_key, text) != QMessageBox.StandardButton.Yes:
+                return
+
+            def raise_and_go():
+                self.actions.raise_budget(d["run_id"], cap)
+                return self.actions.regenerate(job, prompt)
+            self._act(raise_and_go, jobs=[job])
+
+        self._act(lambda: self.actions.regenerate(job, prompt, dry_run=True), confirm, failed=over_budget)
+
+    def _regenerate_all(self, jobs: list[Job]) -> None:
+        for job in jobs:
+            if job.review in ("pending_review", "approved", "rejected") or job.status is JobStatus.FAILED:
+                self._regenerate(job)
+
     def edit_row(self, row: int) -> None:
+        job = self.model.job_at(row)
+        if job.production_id:
+            text, ok = QInputDialog.getMultiLineText(self, tr("gen_edit_title"), tr("gen_col_prompt"), job.prompt)
+            if ok and text.strip():
+                self._regenerate(job, None if text.strip() == job.prompt else text.strip())
+            return
         if self._busy_guard():
             return
-        job = self.model.job_at(row)
         text, ok = QInputDialog.getMultiLineText(self, tr("gen_edit_title"), tr("gen_col_prompt"), job.prompt)
         if ok and text.strip():
             self.model.setData(self.model.index(row, COL_PROMPT), text)
@@ -389,10 +483,12 @@ class GeneratorPage(QWidget):
 
     def retry_rows(self, rows: list[int]) -> int:
         jobs = [self.model.job_at(r) for r in rows]
-        return self._retry(jobs)
+        self._regenerate_all([j for j in jobs if j.production_id])
+        return self._retry([j for j in jobs if not j.production_id])
 
     def retry_failed(self) -> int:
-        return self._retry([j for j in self.jobs if j.status in (JobStatus.FAILED, JobStatus.STOPPED)])
+        self._regenerate_all([j for j in self.jobs if j.production_id and j.status is JobStatus.FAILED])
+        return self._retry([j for j in self.jobs if j.status in (JobStatus.FAILED, JobStatus.STOPPED) and not j.production_id])
 
     def _retry(self, jobs: list[Job]) -> int:
         jobs = [j for j in jobs if j.origin != "agent"]  # a new try would spend: the agent decides
