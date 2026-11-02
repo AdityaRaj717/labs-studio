@@ -4,7 +4,7 @@ import { getDataDir } from '../utils/config.js';
 import { appendEvent, appendLine } from './journal.js';
 import { createError, ErrorCodes } from '../utils/errors.js';
 
-const SUBFOLDERS = ['images', 'videos', 'voice', 'bgm', 'sfx', 'final', 'diagnostics'];
+const SUBFOLDERS = ['images', 'videos', 'voice', 'bgm', 'sfx', 'final', 'diagnostics', 'references', 'inputs'];
 const RENAME_ATTEMPTS = 6;
 const RENAME_RETRY_MS = 50;
 

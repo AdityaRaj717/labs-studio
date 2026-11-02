@@ -13,6 +13,21 @@ const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const option = (page, name, exact) => locate(page, 'picker.assetList').getByRole(contract.keys['picker.option'].role, { name, exact });
 export const chipCount = (page) => locate(page, 'project.chip.ingredient').count();
 
+// Spend gate: the chips that are ready must be exactly what the job asked for.
+export async function assertChips(page, expected) {
+  const ready = await locate(page, 'project.chip.ingredient').evaluateAll((els) => els.filter((el) => el.getAttribute('aria-busy') !== 'true').length);
+  if (ready !== expected) {
+    throw createError(ErrorCodes.UPLOAD_STALLED, `${ready} ingredients are ready, the job has ${expected}`, { ready, expected, next_action: 'Nothing was spent. Regenerate or retry the job.' });
+  }
+}
+
+// Chips clear after a job and on reload (Y0), so one still here is left from something else and must not reach this Shot.
+export async function clearChips(page) {
+  if (await chipCount(page) === 0) return;
+  await page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 });
+  await locate(page, 'project.prompt').first().waitFor({ state: 'visible', timeout: PICKER_MS * 2 });
+}
+
 const emptyFrames = (page) => locate(page, 'project.chip.empty').count();
 
 async function openPicker(page, opener = 'project.addIngredients') {

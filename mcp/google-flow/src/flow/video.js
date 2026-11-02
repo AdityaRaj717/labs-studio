@@ -7,7 +7,15 @@ import { addFrame } from './ingredients.js';
 import { probeVideo, stripAudio } from './silent.js';
 import { verifyVideo } from './verify.js';
 
-const isOmni = ({ model }) => model === 'omni';
+const STRIP_TOLERANCE = 0.5;
+const isOmni =({ model }) => model === 'omni';
+
+// Spec R3: a strip that lost picture is a mismatch, even when the length still fits the request.
+export function noteStripDrift(verified, original) {
+  if (Math.abs(verified.duration - original.duration) <= STRIP_TOLERANCE) return;
+  verified.mismatches.push(`duration ${verified.duration}s differs from the original's ${original.duration}s`);
+  verified.ok = false;
+}
 
 const VIDEO = {
   dir: 'videos',
@@ -34,12 +42,14 @@ const VIDEO = {
   },
   async check(file, spec, info) {
     const silent = spec.silent ? await stripAudio(file) : null;
+    const verified = verifyVideo(await probeVideo(file), { ...spec, info });
+    if (silent) noteStripDrift(verified, await probeVideo(silent.original));
     return {
       resolution: spec.resolution,
       duration_requested: spec.duration,
       ...(silent ? { original: silent.original } : {}),
       sha256: sha256(file),
-      ...verifyVideo(await probeVideo(file), { ...spec, info }),
+      ...verified,
     };
   },
 };

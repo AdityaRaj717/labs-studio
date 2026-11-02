@@ -22,7 +22,12 @@ async function tool(name, ffmpegPath = get('ffmpegPath') ?? process.env.FFMPEG_P
       return bin;
     } catch { /* next */ }
   }
-  throw createError(ErrorCodes.INTERNAL_ERROR, `${name} not found`, { next_action: 'Set ffmpegPath in the engine settings or FFMPEG_PATH.' });
+  throw createError(ErrorCodes.FFMPEG_NOT_FOUND, `${name} not found`, { next_action: 'Set ffmpegPath in the engine settings or FFMPEG_PATH.' });
+}
+
+export async function checkFfmpeg() {
+  await tool('ffmpeg');
+  await tool('ffprobe');
 }
 
 export async function probeVideo(file, { ffmpegPath } = {}) {

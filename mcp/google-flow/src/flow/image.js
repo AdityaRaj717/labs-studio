@@ -10,7 +10,7 @@ import { createError, ErrorCodes, FlowError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 import { locate } from './contract.js';
 import { downloadAsset, readAssetInfo } from './download.js';
-import { addIngredient, chipCount } from './ingredients.js';
+import { addIngredient, assertChips, clearChips } from './ingredients.js';
 import { baselineTiles, observeGeneration, tileOf } from './observe.js';
 import { openProject, resetSession, typePrompt } from './session.js';
 import { applySettings } from './settings.js';
@@ -40,6 +40,14 @@ async function submit(ctx, quotedCredits) {
   return before;
 }
 
+// A production job names its own file, since the file name is the Reference's identity in Flow's picker.
+export function outputName({ spec, run }, seq, dir, ext) {
+  const { output } = spec;
+  return output
+    ? assetName(output.seq, output.name, output.version, ext, path.join(run.dir, output.dir))
+    : assetName(seq, spec.prompt, 1, ext, dir);
+}
+
 // Saves each file before naming the next, so names never collide. A saved file survives a later failure.
 async function saveAll(ctx, job, media, how) {
   const { page, signal } = ctx;
@@ -55,7 +63,7 @@ async function saveAll(ctx, job, media, how) {
     const observed = await readAssetInfo(page, tile);
     let file;
     try {
-      file = await downloadAsset(page, tile, { size: how.size(spec), signal, dest: (ext) => assetName(seq, spec.prompt, 1, ext, dir) });
+      file = await downloadAsset(page, tile, { size: how.size(spec), signal, dest: (ext) => outputName(job, seq, dir, ext) });
     } catch (err) {
       if (err.code === ErrorCodes.DOWNLOAD_FAILED) err.details.saved = outputs;
       throw err;
@@ -117,12 +125,7 @@ async function generate(ctx, job, how) {
     await beat(page);
   }
   await how.attachMore?.(page, spec, signal);
-  const chips = await chipCount(page);
-  if (chips !== wanted) {
-    throw createError(ErrorCodes.UNKNOWN_UI_CHANGE, `${chips} ingredients are attached, the job has ${wanted}`, {
-      next_action: 'Clear the chips in the Flow composer, then call resume.',
-    });
-  }
+  await assertChips(page, wanted);
   await typePrompt(page, sentRequest(spec));
   await beat(page);
 
@@ -168,6 +171,7 @@ export async function runGeneration(ctx, job, how) {
   try {
     await openProject(page, job.state === 'downloading' && job.data.projectUrl && !page.url().startsWith(job.data.projectUrl) ? { project_url: job.data.projectUrl } : job.spec);
     ctx.pinPage(page);
+    if (job.state !== 'downloading') await clearChips(page);
     await resetSession(page);
     const media = job.state === 'downloading' ? job.data.media : await generate(ctx, job, how);
     return await finish(ctx, job, media, job.data.tileText, how);
