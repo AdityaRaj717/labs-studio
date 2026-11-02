@@ -10,7 +10,7 @@ const { StdioClientTransport } = require('@modelcontextprotocol/sdk/client/stdio
 export const PROJECT = 'https://flow.google.com/project/065acc3b-852c-4cf2-84c6-80359d0543bd';
 export async function connect() {
   const client = new Client({ name: 'live', version: '1' });
-  await client.connect(new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'src/index.js')], cwd: root, stderr: 'ignore', env: { ...process.env, FLOW_DATA_DIR: path.join(here, 'out', 'live-data') } }));
+  await client.connect(new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'src/index.js')], cwd: root, stderr: 'ignore', env: { ...process.env, FLOW_DATA_DIR: process.env.FLOW_DATA_DIR ?? path.join(here, 'out', 'live-data') } }));
   const call = async (name, args = {}) => {
     const r = await client.callTool({ name, arguments: args }, undefined, { timeout: 120000 });
     const t = r.content?.[0]?.text ?? '';

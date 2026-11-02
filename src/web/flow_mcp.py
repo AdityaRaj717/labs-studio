@@ -218,6 +218,8 @@ class FlowMcp:
                     break
                 if view.get("queue_paused"):
                     paused = view["queue_paused"]
+                    # The row shows failed and a Retry queues anew, so this job must not run later unseen.
+                    client.call("flow_job_control", {"action": "cancel", "job_id": job_id}, 30)
                     raise EngineToolError(str(paused.get("next_action") or "The Flow queue is paused"),
                                           {"error_code": paused.get("reason")})
                 if time.monotonic() > deadline:

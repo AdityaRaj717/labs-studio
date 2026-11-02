@@ -8,6 +8,8 @@ const PROJECT_KEYS = ['project.agent', 'project.settingsTrigger', 'project.start
 const SETTINGS_KEYS = ['settings.kind.image', 'settings.kind.video', 'settings.ratio.16:9', 'settings.count.x1', 'settings.modelFamily', 'settings.credits'];
 // A new project's picker has no asset list, and Add to prompt shows only after a pick (both live).
 const PICKER_KEYS = ['picker.tab.all', 'picker.upload'];
+// The Start chip's picker has only Images and Uploads tabs (live).
+const FRAME_PICKER_KEYS = ['picker.tab.images', 'picker.upload'];
 
 const isVisibleSoon = (page, key) =>
   locate(page, key).first().waitFor({ state: 'visible', timeout: 2000 }).then(() => true, () => false);
@@ -43,7 +45,7 @@ export async function runDoctor(page) {
   // Frames mode has chips instead of the Add ingredients button; both open the picker.
   const hasAddButton = await isVisibleSoon(page, 'project.addIngredients');
   await clickIfShown(hasAddButton ? 'project.addIngredients' : 'project.chip.start');
-  await check(PICKER_KEYS, 'picker');
+  await check(hasAddButton ? PICKER_KEYS : FRAME_PICKER_KEYS, 'picker');
   await close('picker');
 
   return { ok: missing.length === 0, checked, missing, host: new URL(page.url()).host };

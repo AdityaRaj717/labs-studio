@@ -205,11 +205,12 @@ def test_failed_view_raises_with_the_engine_code(tmp_path):
 
 
 def test_paused_queue_does_not_spin(tmp_path):
-    flow, _ = make_flow(tmp_path)
+    flow, clients = make_flow(tmp_path)
     flow.client.views = [{"finished": False, "queue_paused": {"reason": "GOOGLE_LIMIT_REACHED", "next_action": "wait"}}]
     with pytest.raises(EngineToolError) as err:
         flow.run_job("flow_generate_image", {"prompt": "a"}, 60)
     assert err.value.code == "GOOGLE_LIMIT_REACHED"
+    assert ("flow_job_control", {"action": "cancel", "job_id": "j1"}) in clients[0].calls
 
 
 def test_stop_cancels_the_engine_job(tmp_path):
