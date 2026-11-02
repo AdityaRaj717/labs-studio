@@ -1,5 +1,6 @@
 import { createFish } from '../audio/fish.js';
 import { createStable } from '../audio/stable.js';
+import { lastFrame, stitchVideo } from './stitch.js';
 import { closeBrowser } from '../browser/connect.js';
 import config from '../utils/config.js';
 import { readAccountStatus } from '../browser/account-check.js';
@@ -269,6 +270,8 @@ export function createRpc({ worker, session, hub, getSecret = (name) => process.
     audio_voice_generate: (args) => fish.generate(args),
     audio_voice_list: (args) => fish.list(args),
     audio_stable_generate: (args) => stable.generate(args),
+    stitch_video: stitchVideo,
+    last_frame: lastFrame,
     flow_production_plan: buildPlan,
     flow_production_start: (args) => orchestrator.start(args),
     flow_production_status: (args) => orchestrator.status(args),

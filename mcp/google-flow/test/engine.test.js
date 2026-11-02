@@ -511,7 +511,7 @@ const SPEC_TOOLS = [
   'flow_list_assets', 'flow_download',
   'flow_open_project', 'flow_list_projects', 'flow_rename_project', 'flow_delete_project',
   'flow_create_character', 'flow_list_characters', 'flow_import_character', 'flow_create_scene', 'flow_list_scenes',
-  'audio_voice_generate', 'audio_voice_list', 'audio_stable_generate',
+  'audio_voice_generate', 'audio_voice_list', 'audio_stable_generate', 'stitch_video', 'last_frame',
   'flow_screenshot',
 ];
 
@@ -535,7 +535,7 @@ test('tools/list has annotations and each delete is destructive', { timeout: 300
 
 test('tools/list contains no removed names', () => {
   const removed = ['flow_account_check', 'flow_discover_ui', 'flow_queue_status', 'flow_download_latest',
-    'flow_open_tools_gallery', 'flow_use_tool', 'flow_use_grid_architect', 'stitch_video'];
+    'flow_open_tools_gallery', 'flow_use_tool', 'flow_use_grid_architect'];
   for (const name of removed) assert.ok(!TOOLS.some((t) => t.name === name), name);
 });
 
@@ -564,7 +564,7 @@ test('audio without a key is MISSING_API_KEY through the engine', async () => {
 
 test('an unregistered tool is refused', async () => {
   const engine = await engineWith();
-  assert.equal((await rpc(engine, 'stitch_video', {})).error_code, 'INVALID_PARAMS');
+  assert.equal((await rpc(engine, 'no_such_tool', {})).error_code, 'INVALID_PARAMS');
 });
 
 test('flow_production_plan never touches the page', async () => {

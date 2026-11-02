@@ -55,6 +55,7 @@ class Clip:
     loop: bool = False          # audio: loop the source to fill the clip
     fade_in: float = 0.0
     fade_out: float = 0.0
+    hold: float = 0.0           # video: seconds of its last frame, included in duration
     # overlay placement (overlay tracks, text clips); x/y are 0..1 of the free space
     x: float = 0.5
     y: float = 0.5
@@ -90,6 +91,7 @@ class Track:
     muted: bool = False
     hidden: bool = False
     volume: float = 1.0
+    role: str = ""              # audio: "voice" pushes "ducked" tracks down while it speaks
 
     def sorted_clips(self) -> list[Clip]:
         return sorted(self.clips, key=lambda c: c.start)
@@ -133,6 +135,7 @@ class Project:
     cues: list[Cue] = field(default_factory=list)
     style: SubtitleStyle = field(default_factory=SubtitleStyle)
     burn_subtitles: bool = True
+    loudness: float | None = None  # target LUFS of the final mix
 
     @classmethod
     def new(cls, **kw) -> "Project":

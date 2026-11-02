@@ -175,6 +175,21 @@ def _audio_sources(project: Project) -> list[tuple[Clip, float, int | None]]:
     return [x for x in out if x[1] > 0]
 
 
+def _duck(project: Project, labels: list[str], keys: list[str], graph: list[str]) -> list[str]:
+    """Press "ducked" tracks down with ``keys``, a second copy of the voice. Returns the labels to mix."""
+    clips = {id(c) for t in project.tracks if t.role == "ducked" for c in t.clips}
+    ducked = [label for label, (c, _, _) in zip(labels, _audio_sources(project)) if id(c) in clips]
+    if not keys or not ducked:
+        return labels
+
+    def joined(group: list[str]) -> str:
+        return f"{''.join(group)}amix=inputs={len(group)}:normalize=0:dropout_transition=0" if len(group) > 1 else f"{group[0]}anull"
+    graph.append(f"{joined(keys)},apad=whole_dur={_f(project.duration)}[vkey]")  # the bed goes on after the voice
+    graph.append(f"{joined(ducked)}[bed]")
+    graph.append("[bed][vkey]sidechaincompress=threshold=0.02:ratio=8:attack=20:release=300[bedout]")
+    return [label for label in labels if label not in ducked] + ["[bedout]"]
+
+
 def missing_sources(project: Project) -> list[str]:
     paths = {c.path for t in project.tracks for c in t.clips if c.kind != "text"}
     return sorted(p for p in paths if not Path(p).is_file())
@@ -209,11 +224,12 @@ def build_export(project: Project, out_path: str | Path, settings: ExportSetting
             idx = add_input(["-loop", "1", "-framerate", str(fps), "-t", dur, "-i", c.path])
         else:
             pre = ["-stream_loop", "-1"] if c.loop else []
-            idx = add_input([*pre, "-ss", _f(c.in_point), "-t", dur, "-i", c.path])
+            idx = add_input([*pre, "-ss", _f(c.in_point), "-t", _f(c.duration - c.hold), "-i", c.path])
             video_slot[id(c)] = idx
         sources.append(c.path)
 
-        chain = [f"fps={fps}", f"trim=duration={dur}", "setpts=PTS-STARTPTS"]
+        hold = [f"tpad=stop_mode=clone:stop_duration={_f(c.hold)}"] if c.hold > 0 else []
+        chain = [*hold, f"fps={fps}", f"trim=duration={dur}", "setpts=PTS-STARTPTS"]
         if track.kind == "overlay":
             w = max(2, round(W * c.scale / 2) * 2)
             chain += [f"scale={w}:-2", "format=yuva420p"]
@@ -245,6 +261,9 @@ def build_export(project: Project, out_path: str | Path, settings: ExportSetting
 
     # -- sound
     a_labels = []
+    keys: list[str] = []
+    voices = {id(c) for t in project.tracks if t.role == "voice" for c in t.clips}
+    ducking = any(t.role == "ducked" and t.clips for t in project.tracks)
     for k, (c, gain, slot) in enumerate(_audio_sources(project)):
         if slot is None:
             pre = ["-stream_loop", "-1"] if c.loop else []
@@ -264,13 +283,21 @@ def build_export(project: Project, out_path: str | Path, settings: ExportSetting
             chain.append(f"adelay={round(c.start * 1000)}:all=1")
         graph.append(f"[{idx}:a]{','.join(chain)}[a{k}]")
         a_labels.append(f"[a{k}]")
+        if slot is None and id(c) in voices and ducking:
+            # Its own decode: an asplit into the sidechain stalls ffmpeg before the first frame.
+            pre = ["-stream_loop", "-1"] if c.loop else []
+            key = add_input([*pre, "-ss", _f(c.in_point), "-t", _f(c.duration), "-i", c.path])
+            graph.append(f"[{key}:a]{','.join(chain)}[key{k}]")
+            keys.append(f"[key{k}]")
+    a_labels = _duck(project, a_labels, keys, graph)
     maps = ["-map", "[vout]"]
     out = ["-c:v", "libx264", "-preset", settings.preset, "-crf", str(settings.crf),
            "-pix_fmt", "yuv420p", "-r", str(fps)]
     if a_labels:
         mix = (f"{''.join(a_labels)}amix=inputs={len(a_labels)}:normalize=0:dropout_transition=0,"
                if len(a_labels) > 1 else f"{a_labels[0]}")
-        graph.append(f"{mix}apad,atrim=0:{_f(total)}[aout]")
+        level = f",loudnorm=I={_f(project.loudness)}:TP=-1.5:LRA=11,aresample=48000" if project.loudness is not None else ""
+        graph.append(f"{mix}apad,atrim=0:{_f(total)}{level}[aout]")
         maps += ["-map", "[aout]"]
         out += ["-c:a", "aac", "-b:a", settings.audio_bitrate]
     else:

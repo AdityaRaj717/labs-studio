@@ -1,4 +1,4 @@
-// Spec 6.4. stitch_video is left out until its task builds it.
+// Spec 6.4.
 const OBJECT = (properties = {}, required) => ({ type: 'object', properties, ...(required ? { required } : {}) });
 const hints = (readOnlyHint, destructiveHint, idempotentHint, openWorldHint = true) => ({ readOnlyHint, destructiveHint, idempotentHint, openWorldHint });
 const READ = hints(true, false, true);
@@ -199,6 +199,17 @@ export const TOOLS = [
     auto_confirm: { type: 'boolean', default: false },
     output_root: SPEND.output_root,
   }, ['kind', 'prompt', 'duration'])),
+
+  tool('stitch_video', 'Join a run\'s clips, voice, music and effects into one video in its final folder. Waits for the file. Free. Originals are untouched.', SAME, OBJECT({
+    run_id: { type: 'string' },
+    auto: { type: 'boolean', description: 'Order the run\'s videos by sequence and add its voice and music.' },
+    spec: { type: 'object', description: 'clips [{path, trim_start, trim_end, hold}], voice [{path, start}], bgm {path, volume, fade_out, duck}, sfx [{path, start, volume}], transition {type: fade, duration}, size, fps, loudness (default -14), output.' },
+    name: { type: 'string' },
+  }, ['run_id'])),
+  tool('last_frame', 'Save the last frame of one of a run\'s videos as a PNG, for chaining as a start frame. Free.', SAME, OBJECT({
+    run_id: { type: 'string' },
+    asset_id: { type: 'string', description: 'job_id of a video in that run.' },
+  }, ['run_id', 'asset_id'])),
 
   tool('flow_screenshot', 'Save a screenshot of the Flow tab. Never waits on a running job.', hints(true, false, false), OBJECT({ name: { type: 'string', default: 'manual' } })),
 ];

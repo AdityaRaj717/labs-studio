@@ -10,7 +10,7 @@ const RUN_MS = 120000;
 const FALLBACK_DIR = 'D:\\Apps\\ffmpeg\\ffmpeg-9.0.2-essentials_build\\bin';
 
 // Setting, then env, then PATH, then the known folder; ffprobe sits beside ffmpeg.
-async function tool(name, ffmpegPath = get('ffmpegPath') ?? process.env.FFMPEG_PATH) {
+export async function tool(name, ffmpegPath = get('ffmpegPath') ?? process.env.FFMPEG_PATH) {
   const candidates = [
     ...(ffmpegPath ? [path.join(path.dirname(ffmpegPath), name)] : []),
     name,
