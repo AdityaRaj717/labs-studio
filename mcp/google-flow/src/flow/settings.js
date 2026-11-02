@@ -39,8 +39,7 @@ export async function applySettings(page, settings) {
     if (!await isChecked(page, key)) throw uiChange(`Flow did not keep the setting ${key}`);
   }
   // The button also holds its icon's ligature text (arrow_drop_down) on a second line.
-  const shown = (await locate(page, 'settings.modelFamily').innerText()).split('
-')[0].trim();
+  const shown = (await locate(page, 'settings.modelFamily').innerText()).split('\n')[0].trim();
   if (!modelPattern(kind, model).test(shown)) throw uiChange(`Flow shows model "${shown}" instead of ${model}`);
 
   const credits = locate(page, 'settings.credits').first();
