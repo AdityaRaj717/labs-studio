@@ -139,12 +139,12 @@ export function createRpc({ worker, session, hub }) {
     return { ...view(args), finished: finished(), ...(paused ? { paused } : {}), ...queuePaused() };
   }
 
-  function generateImage(args) {
+  const queueGeneration = (validateJob) => (args) => {
     const { auto_confirm, max_credits, idempotency_key, output_root, ...request } = args;
     // First: a repeat must return its job whatever the budget says now.
     const first = auto_confirm === true && idempotency_key && jobByKey(idempotency_key);
     if (first) return { job_id: first.id, run_id: first.run.id, state: first.state, repeated: true, ...queuePaused() };
-    const spec = validateImage(request);
+    const spec = validateJob(request);
     const estimated = estimate([spec]);
     if (auto_confirm !== true) return { status: 'ready_for_confirmation', estimate: estimated, request: { ...spec, prompt: cut(spec.prompt) } };
     checkBudget(estimated, max_credits, ledger);
@@ -152,7 +152,7 @@ export function createRpc({ worker, session, hub }) {
     const job = enqueue(run, { ...spec, max_credits }, idempotency_key);
     worker.kick();
     return { job_id: job.id, run_id: run.id, state: job.state, estimate: estimated, ...queuePaused() };
-  }
+  };
 
   // A held job past the credit line lost its watcher, so it is settled rather than run again.
   function resumeJob(job) {
@@ -228,7 +228,8 @@ export function createRpc({ worker, session, hub }) {
     flow_status: status,
     flow_doctor: () => tab((page) => runDoctor(page)),
     flow_capabilities: () => getCapabilities(),
-    flow_generate_image: generateImage,
+    flow_generate_image: queueGeneration(validateImage),
+    flow_generate_video: queueGeneration(validateVideo),
     flow_job_status: view,
     flow_wait: wait,
     flow_job_control: control,

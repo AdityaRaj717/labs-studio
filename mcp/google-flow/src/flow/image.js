@@ -41,10 +41,10 @@ async function submit(ctx, quotedCredits) {
 }
 
 // Saves each file before naming the next, so names never collide. A saved file survives a later failure.
-async function saveAll(ctx, job, media) {
+async function saveAll(ctx, job, media, how) {
   const { page, signal } = ctx;
   const { spec } = job;
-  const dir = path.join(job.run.dir, 'images');
+  const dir = path.join(job.run.dir, how.dir);
   const seq = job.run.jobs.indexOf(job) + 1;
   const outputs = [...(job.data.saved ?? [])];
   for (const mediaId of media) {
@@ -55,7 +55,7 @@ async function saveAll(ctx, job, media) {
     const observed = await readAssetInfo(page, tile);
     let file;
     try {
-      file = await downloadAsset(page, tile, { size: spec.size, signal, dest: (ext) => assetName(seq, spec.prompt, 1, ext, dir) });
+      file = await downloadAsset(page, tile, { size: how.size(spec), signal, dest: (ext) => assetName(seq, spec.prompt, 1, ext, dir) });
     } catch (err) {
       if (err.code === ErrorCodes.DOWNLOAD_FAILED) err.details.saved = outputs;
       throw err;
@@ -69,14 +69,12 @@ async function saveAll(ctx, job, media) {
       observed,
       ratio: spec.ratio,
       count: spec.count,
-      size: spec.size,
       flowProjectUrl: page.url().split(/[?#]/)[0],
       quotedCredits: job.data.quotedCredits ?? 0,
-      sha256: createHash('sha256').update(fs.readFileSync(file)).digest('hex'),
-      ...verifyImage(file, { ratio: spec.ratio, model: spec.model, info: observed }),
+      ...await how.check(file, spec, observed),
       downloadMs: Date.now() - started,
     });
-    logger.info('Image saved', { jobId: job.id, file });
+    logger.info('Asset saved', { jobId: job.id, file });
   }
   return outputs;
 }
@@ -100,24 +98,25 @@ async function noteBalance(page) {
   }
 }
 
-async function finish(ctx, job, media, tileText) {
-  const outputs = await saveAll(ctx, job, media);
+async function finish(ctx, job, media, tileText, how) {
+  const outputs = await saveAll(ctx, job, media, how);
   transition(job, 'verifying', { outputs, saved: null });
   assertAsRequested(job, outputs, tileText);
   await noteBalance(ctx.page);
   return { outputs };
 }
 
-async function generate(ctx, job) {
+async function generate(ctx, job, how) {
   const { page, signal } = ctx;
   const { spec } = job;
-  const { quotedCredits } = await applySettings(page, { ...spec, maxCredits: spec.max_credits ?? DEFAULT_MAX_CREDITS });
+  const { quotedCredits } = await applySettings(page, how.settings(spec));
   const wanted = spec.ingredients?.length ?? 0;
   for (const item of spec.ingredients ?? []) {
     signal.throwIfAborted();
     await addIngredient(page, item);
     await beat(page);
   }
+  await how.attachMore?.(page, spec, signal);
   const chips = await chipCount(page);
   if (chips !== wanted) {
     throw createError(ErrorCodes.UNKNOWN_UI_CHANGE, `${chips} ingredients are attached, the job has ${wanted}`, {
@@ -133,6 +132,7 @@ async function generate(ctx, job) {
     before,
     count: spec.count,
     signal,
+    timeoutMs: how.timeoutMs,
     previewDir: path.join(job.run.dir, 'diagnostics'),
     onUpdate(update) {
       job.progress = update;
@@ -147,15 +147,30 @@ async function generate(ctx, job) {
   return result.images;
 }
 
+export const sha256 = (file) => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+
+const IMAGE = {
+  dir: 'images',
+  size: (spec) => spec.size,
+  settings: (spec) => ({ ...spec, maxCredits: spec.max_credits ?? DEFAULT_MAX_CREDITS }),
+  check: (file, spec, info) => ({
+    size: spec.size,
+    sha256: sha256(file),
+    ...verifyImage(file, { ratio: spec.ratio, model: spec.model, info }),
+  }),
+};
+
+export const runImageJob = (ctx, job) => runGeneration(ctx, job, IMAGE);
+
 // A job already in downloading is a retry of the download alone, with no spend.
-export async function runImageJob(ctx, job) {
+export async function runGeneration(ctx, job, how) {
   const { page } = ctx;
   try {
     await openProject(page, job.spec);
     ctx.pinPage(page);
     await resetSession(page);
-    const media = job.state === 'downloading' ? job.data.media : await generate(ctx, job);
-    return await finish(ctx, job, media, job.data.tileText);
+    const media = job.state === 'downloading' ? job.data.media : await generate(ctx, job, how);
+    return await finish(ctx, job, media, job.data.tileText, how);
   } catch (err) {
     if (err instanceof FlowError || err.name !== 'TimeoutError') throw err;
     throw createError(ErrorCodes.UNKNOWN_UI_CHANGE, `Flow did not respond as expected: ${err.message.split('\n')[0]}`);

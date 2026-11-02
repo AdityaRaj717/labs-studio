@@ -7,41 +7,43 @@ import { contract, locate } from './contract.js';
 const POLL_MS = 1000;
 const NOT_RUNNING_POLLS = 3; // a tile can flip through an empty frame on its way to done
 const PREVIEW_MS = 10000;
-// Live tiles read "image 97% <prompt>", the kind word first.
-const PERCENT = /^\s*(?:[a-z]+\s+)?(\d+)%/i;
+// Live tiles read "image 97% <prompt>" or "play_circle 3% <prompt>": the kind word or icon ligature first.
+const PERCENT = /^\s*(?:[a-z_]+\s+)?(\d+)%/i;
 const SETTLE_POLL_MS = 500;
 const SETTLE_MAX_MS = 5000;
 
 const css = (key) => contract.keys[key].css;
 
-// shortcut: finished means an image tile, video tiles have no media id; Task 10 adds its own marker.
+// A resting video has no media id, so its URL stands in. The thumbnail and video element URLs share only their start, so that start is the id. A running tile is never finished, whatever it shows.
 function readTiles(page) {
-  return locate(page, 'project.tile').evaluateAll((els, { character, image }) => els
+  return locate(page, 'project.tile').evaluateAll((els, { character, image, video, percent }) => els
     .filter((el) => !el.querySelector(character)) // saved Characters sit among the results
-    .map((el) => ({
-      label: el.getAttribute('aria-label'),
-      mediaId: el.querySelector(image)?.getAttribute('data-media-id') ?? null,
-      text: el.innerText.trim(),
-    })), { character: css('tile.character'), image: css('tile.image') });
+    .map((el) => {
+      const text = el.innerText.trim();
+      const id = el.querySelector(image)?.getAttribute('data-media-id') ?? el.querySelector(video)?.getAttribute('src')?.slice(0, 90) ?? null;
+      return { label: el.getAttribute('aria-label'), mediaId: new RegExp(percent, 'i').test(text) ? null : id, text };
+    }), { character: css('tile.character'), image: css('tile.image'), video: css('tile.video'), percent: PERCENT.source });
 }
 
 const mediaIds = (tiles) => tiles.flatMap(({ mediaId }) => (mediaId ? [mediaId] : []));
 
 // Taken right before Start, once the grid stops changing: anything finished now is not a result of this job.
 export async function baselineTiles(page) {
-  let ids = mediaIds(await readTiles(page));
+  let tiles = await readTiles(page);
+  let ids = mediaIds(tiles);
   for (const end = Date.now() + SETTLE_MAX_MS; Date.now() < end;) {
     await page.waitForTimeout(SETTLE_POLL_MS);
-    const next = mediaIds(await readTiles(page));
+    tiles = await readTiles(page);
+    const next = mediaIds(tiles);
     const same = next.length === ids.length && next.every((id, i) => id === ids[i]);
     ids = next;
     if (same) break;
   }
-  return ids;
+  return { ids, firstIndex: tiles.findIndex(({ mediaId }) => mediaId) };
 }
 
 export const tileOf = (page, mediaId) => locate(page, 'project.tile')
-  .filter({ has: page.locator(`[data-media-id=${JSON.stringify(mediaId)}]`) }).first();
+  .filter({ has: page.locator(`[data-media-id=${JSON.stringify(mediaId)}], [src^=${JSON.stringify(mediaId)}]`) }).first();
 
 async function savePreview(page, mediaId, dir) {
   const file = path.join(dir, `preview-${mediaId.slice(0, 40).replace(/[^\w-]/g, '_')}.png`);
@@ -55,10 +57,9 @@ async function savePreview(page, mediaId, dir) {
 }
 
 // Tiles are the only truth in direct mode. Ends on done, a failed tile, a block, or a timeout; never throws for those.
-export async function observeGeneration(page, { before, count, previewDir, onUpdate, signal }) {
-  const known = new Set(before);
+export async function observeGeneration(page, { before, count, previewDir, onUpdate, signal, timeoutMs = get('generationTimeoutMs', 300000) }) {
+  const known = new Set(before.ids);
   const started = Date.now();
-  const timeoutMs = get('generationTimeoutMs', 300000);
   const noTileMs = get('noTileTimeoutMs', 60000);
   const graceMs = get('shortResultGraceMs', 20000);
   const runningLabels = new Set();
@@ -86,9 +87,10 @@ export async function observeGeneration(page, { before, count, previewDir, onUpd
     const running = tiles.filter(({ mediaId, text }) => !mediaId && PERCENT.test(text));
     running.forEach(({ label }) => runningLabels.add(label));
     peak = Math.max(peak, running.length);
-    // New results come in at the top. Until a tile was seen running, an unknown id lower down may be an older tile loading late.
+    // The grid is a fixed window, so its length says nothing. New results push the first known tile down by exactly their number.
+    // Ids alone can't say: a video tile may have shown no URL at the baseline (live: saved the wrong clip).
     const firstKnown = tiles.findIndex(({ mediaId }) => known.has(mediaId));
-    const candidates = peak || firstKnown < 0 ? tiles : tiles.slice(0, firstKnown);
+    const candidates = firstKnown < 0 ? tiles : tiles.slice(0, Math.max(0, firstKnown - Math.max(0, before.firstIndex)));
     const images = mediaIds(candidates).filter((id) => !known.has(id)).slice(0, count);
 
     const percent = running.length ? Number(PERCENT.exec(running[0].text)[1]) : null;

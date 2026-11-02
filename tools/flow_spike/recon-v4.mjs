@@ -1,0 +1,11 @@
+import fs from 'node:fs';
+import * as y from './y0lib.mjs';
+const dir = process.argv[2];
+const ev = fs.readFileSync(dir + '/events.jsonl', 'utf8').trim().split('\n').map(JSON.parse);
+const id = ev.find((e) => e.data?.media)?.data.media[0]; console.log('id', id.slice(30, 110));
+const { browser, page } = await y.attach();
+console.log(page.url());
+const r = await y.locate(page, 'project.tile').evaluateAll((els, id) => els.slice(0, 2).map((el) => ({ l: el.getAttribute('aria-label'), match: !!el.querySelector(`[src="${id}"]`), srcs: [...el.querySelectorAll('[src]')].map((n) => n.tagName + ':' + n.getAttribute('src').slice(30, 110)), rect: JSON.stringify(el.getBoundingClientRect()), top: (() => { const b = el.getBoundingClientRect(); const t = document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2); return t?.tagName + '.' + String(t?.className).slice(0, 40); })() })), id);
+console.log(JSON.stringify(r, null, 0).slice(0, 1400));
+console.log('overlays', await page.locator('.cdk-overlay-backdrop, .cdk-overlay-pane').count());
+await browser.close(); process.exit(0);

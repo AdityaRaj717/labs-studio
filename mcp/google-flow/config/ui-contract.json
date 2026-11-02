@@ -32,8 +32,11 @@
 
     "tile.character": { "page": "project", "css": "img[alt=\"Character thumbnail\"]" },
     "tile.image": { "page": "project", "css": "img[alt=\"Tile displaying a user's image\"]" },
+    "tile.video": { "page": "project", "css": "img[alt=\"Generated video thumbnail\"], flow-video-tile video" },
     "tile.moreOptions": { "page": "project", "role": "button", "name": "More options" },
     "tile.download": { "page": "project", "role": "menuitem", "name": "Download" },
+    "download.size.360p": { "page": "project", "role": "menuitem", "name": { "regex": "^360p" } },
+    "download.size.720p": { "page": "project", "role": "menuitem", "name": { "regex": "^720p" } },
     "download.size.1K": { "page": "project", "role": "menuitem", "name": { "regex": "^1K" } },
     "download.size.2K": { "page": "project", "role": "menuitem", "name": { "regex": "^2K" } },
 

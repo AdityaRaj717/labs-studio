@@ -32,9 +32,27 @@ export function verifyImage(file, { ratio, model, info }) {
     if (Math.abs(got - wanted) / wanted > RATIO_TOLERANCE) mismatches.push(`ratio ${size.width}x${size.height} is not ${ratio}`);
   }
   // Only a different recognised model is a mismatch; text with no model label is just recorded by the caller.
-  if (info && model && !labelShown(`settings.model.image.${model}`, info)) {
-    const other = Object.keys(contract.keys).find((key) => key.startsWith('settings.model.') && labelShown(key, info));
-    if (other) mismatches.push(`model: Flow reports "${info}", not ${model}`);
-  }
+  mismatches.push(...modelMismatch('image', model, info));
   return { ok: mismatches.length === 0, mismatches, ...size };
+}
+
+function modelMismatch(kind, model, info) {
+  if (!info || !model || labelShown(`settings.model.${kind}.${model}`, info)) return [];
+  const other = Object.keys(contract.keys).find((key) => key.startsWith('settings.model.') && labelShown(key, info));
+  return other ? [`model: Flow reports "${info}", not ${model}`] : [];
+}
+
+const DURATION_TOLERANCE = 0.5;
+
+// probe comes from probeVideo.
+export function verifyVideo(probe, { ratio, duration, resolution, model, silent, info }) {
+  const mismatches = [];
+  const [w, h] = ratio.split(':').map(Number);
+  const got = probe.width / probe.height;
+  if (Math.abs(got - w / h) / (w / h) > RATIO_TOLERANCE) mismatches.push(`ratio ${probe.width}x${probe.height} is not ${ratio}`);
+  if (resolution && Math.min(probe.width, probe.height) !== parseInt(resolution, 10)) mismatches.push(`resolution ${probe.width}x${probe.height} is not ${resolution}`);
+  if (duration && Math.abs(probe.duration - duration) > DURATION_TOLERANCE) mismatches.push(`duration ${probe.duration}s is not ${duration}s`);
+  if (silent && probe.audio_streams > 0) mismatches.push(`${probe.audio_streams} audio stream(s) in a silent video`);
+  mismatches.push(...modelMismatch('video', model, info));
+  return { ok: mismatches.length === 0, mismatches, width: probe.width, height: probe.height, duration: probe.duration, audio_streams: probe.audio_streams };
 }

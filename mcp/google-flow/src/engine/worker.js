@@ -3,6 +3,7 @@ import { launchFlowChrome } from '../browser/launch-profile.js';
 import { detectBlock } from '../flow/blocks.js';
 import { contract } from '../flow/contract.js';
 import { runImageJob } from '../flow/image.js';
+import { runVideoJob } from '../flow/video.js';
 import { createError, ERROR_CLASSES, ErrorCodes, toErrorPayload } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 import { takeScreenshot } from '../utils/screenshots.js';
@@ -36,8 +37,7 @@ export const chromeSession = {
 };
 
 export const flowAdapter = (job, ctx) => {
-  if (job.spec.kind !== 'image') throw createError(ErrorCodes.NOT_IMPLEMENTED, `${job.spec.kind} jobs are not built yet`);
-  return runImageJob(ctx, job);
+  return job.spec.kind === 'video' ? runVideoJob(ctx, job) : runImageJob(ctx, job);
 };
 
 // Spec 6.5: a failed generation retries by itself only within this allowance, since each retry spends.

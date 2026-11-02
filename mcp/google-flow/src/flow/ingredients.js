@@ -13,9 +13,11 @@ const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const option = (page, name, exact) => locate(page, 'picker.assetList').getByRole(contract.keys['picker.option'].role, { name, exact });
 export const chipCount = (page) => locate(page, 'project.chip.ingredient').count();
 
-async function openPicker(page) {
+const emptyFrames = (page) => locate(page, 'project.chip.empty').count();
+
+async function openPicker(page, opener = 'project.addIngredients') {
   await closeOverlay(page);
-  await locate(page, 'project.addIngredients').click();
+  await locate(page, opener).click();
   await locate(page, 'picker.assetList').waitFor({ timeout: PICKER_MS });
 }
 
@@ -28,15 +30,15 @@ async function search(page, text) {
 }
 
 // One ready chip more than before. Clicking an option can attach at once and remove Add to prompt, so that button is optional.
-async function attach(page, target, before, stalled) {
+async function attach(page, target, before, stalled, filled = chipCount) {
   await target.click();
   await beat(page);
   const add = locate(page, 'picker.addToPrompt');
-  if (await chipCount(page) <= before && await add.isVisible()) await add.click();
+  if (await filled(page) <= before && await add.isVisible()) await add.click();
   const chips = locate(page, 'project.chip.ingredient');
   for (const end = Date.now() + ATTACH_MS; Date.now() < end; await page.waitForTimeout(POLL_MS)) {
     const busy = await chips.evaluateAll((els) => els.filter((el) => el.getAttribute('aria-busy') === 'true').length);
-    if (await chips.count() > before && !busy) {
+    if (await filled(page) > before && !busy) {
       await closeOverlay(page);
       return;
     }
@@ -45,11 +47,11 @@ async function attach(page, target, before, stalled) {
   throw stalled;
 }
 
-async function attachFile(page, file) {
+async function attachFile(page, file, opener, filled = chipCount) {
   const name = path.basename(file);
   const stalled = createError(ErrorCodes.UPLOAD_STALLED, `The upload of ${name} never reached the prompt`, { file: name });
-  const before = await chipCount(page);
-  await openPicker(page);
+  const before = await filled(page);
+  await openPicker(page, opener);
   await search(page, name);
   const listed = option(page, new RegExp(`^${escapeRegex(name)}`)).first();
   if (!await listed.isVisible()) {
@@ -66,7 +68,7 @@ async function attachFile(page, file) {
       await page.waitForTimeout(POLL_MS);
     }
   }
-  await attach(page, listed, before, stalled);
+  await attach(page, listed, before, stalled, filled);
 }
 
 async function attachNamed(page, name, project) {
@@ -101,4 +103,9 @@ export async function addIngredient(page, item) {
   if (file) return withRetry(() => attachFile(page, file));
   if (!character && !scene) throw createError(ErrorCodes.INVALID_PARAMS, 'An ingredient naming only a project has no asset to attach');
   return attachNamed(page, character ?? scene, project);
+}
+
+// A frame chip stops being an empty chip once it holds its image.
+export function addFrame(page, file, which) {
+  return withRetry(() => attachFile(page, file, `project.chip.${which}`, async (p) => -await emptyFrames(p)));
 }
