@@ -432,7 +432,8 @@ async function runGenerateImage(job, args) {
     jobQueue.completeJob(job.id, result);
     return result;
   } catch (err) {
-    await takeScreenshot(getPage(), 'generate-image-error').catch(() => {});
+    // getPage throws once the browser is gone; failJob must still run or the old queue sticks.
+    await Promise.resolve().then(() => takeScreenshot(getPage(), 'generate-image-error')).catch(() => {});
     jobQueue.failJob(job.id, err);
     throw err;
   }
@@ -457,6 +458,8 @@ export async function handleGenerateImage(args) {
 
   const run = runGenerateImage(job, args);
   run.catch(err => logger.error('Background image job failed', { jobId: job.id, error: err.message }));
+  // The engine worker hands the tab on only when the run has really ended.
+  if (args.wait_for_run) return run;
 
   const budgetMs = Number(args.wait_ms) || get('toolResponseBudgetMs', 40000);
   const pending = Symbol('pending');

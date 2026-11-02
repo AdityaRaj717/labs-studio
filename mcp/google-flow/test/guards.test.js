@@ -67,11 +67,11 @@ test('pacing is enforced across two client calls', async () => {
 });
 
 test('two clients waiting at once get separate turns', async () => {
-  Object.assign(config, { minGapMs: 250, maxGapMs: 250 });
+  Object.assign(config, { minGapMs: 1000, maxGapMs: 1000 });
   const times = [];
   const turn = () => pacer.waitTurn().then(() => times.push(Date.now()));
   await Promise.all([turn(), turn()]);
-  assert.ok(times[1] - times[0] >= 200, `turns ${times[1] - times[0]}ms apart`);
+  assert.ok(times[1] - times[0] >= 500, `turns ${times[1] - times[0]}ms apart`);
 });
 
 test('an aborted wait rejects', async () => {

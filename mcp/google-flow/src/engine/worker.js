@@ -13,7 +13,7 @@ const FINISH = ['downloading', 'verifying', 'done'];
 const RUNNABLE = ['queued', 'preparing'];
 // Someone else moved or closed the tab: going on would fail every job or save the wrong one.
 const STOPS_QUEUE = [ErrorCodes.BROWSER_NOT_CONNECTED, ErrorCodes.FLOW_PAGE_NOT_FOUND];
-const LEGACY_WAIT_MS = 600000;
+const SETTLE_MS = 600000;
 const BLOCK_CHECK_MS = 5000;
 
 const projectId = (url) => /\/project\/([^/?#]+)/.exec(url)?.[1] ?? null;
@@ -38,12 +38,12 @@ const LEGACY_MODELS = { banana21: 'Nano Banana 2.1', bananaPro: 'Nano Banana Pro
 
 // shortcut: the old image flow clicks Start inside one call, so the credit line is written before it and a failure
 // before the click still reads credits_at_risk. Task 9 replaces this with the direct composer.
-export async function legacyAdapter(job, ctx) {
+export const createLegacyAdapter = (generate) => async (job, ctx) => {
   const { spec } = job;
   if (spec.kind !== 'image') throw createError(ErrorCodes.NOT_IMPLEMENTED, `${spec.kind} jobs are not built yet`);
   const pick = (key) => spec.ingredients.flatMap((item) => (item?.[key] ? [item[key]] : []));
   ctx.submit(0);
-  const result = await handleGenerateImage({
+  const result = await generate({
     prompt: spec.prompt,
     model: LEGACY_MODELS[spec.model],
     ratio: spec.ratio,
@@ -56,19 +56,22 @@ export async function legacyAdapter(job, ctx) {
     project_url: spec.project_url,
     project_name: spec.project_name,
     output_folder: `${job.run.dir}/images`,
-    wait_ms: LEGACY_WAIT_MS,
+    wait_for_run: true,
     onProjectOpen: ctx.pinPage,
   });
   if (result.status !== 'success') throw createError(ErrorCodes.GENERATION_TIMEOUT, `Image job ended as ${result.status}`);
   return { outputs: result.files ?? [] };
-}
+};
 
-export function createWorker({ adapter, session, pacer, settleMs = LEGACY_WAIT_MS }) {
+export const legacyAdapter = createLegacyAdapter(handleGenerateImage);
+
+export function createWorker({ adapter, session, pacer, settleMs = SETTLE_MS }) {
   let paused = null;
   let current = null;
   let controller = null;
   let looping = false;
   let stopped = false;
+  let unsettled = false; // an adapter outlived its wait and may still be clicking
 
   const pause = (reason) => {
     paused = reason;
@@ -119,7 +122,10 @@ export function createWorker({ adapter, session, pacer, settleMs = LEGACY_WAIT_M
     });
     const stuck = await Promise.race([running.then(() => false, () => false), expired]);
     clearTimeout(timer);
-    if (stuck) pause(ErrorCodes.INTERNAL_ERROR);
+    if (!stuck) return;
+    unsettled = true;
+    running.then(() => { unsettled = false; }, () => { unsettled = false; });
+    pause(ErrorCodes.INTERNAL_ERROR);
   }
 
   async function runOne(job) {
@@ -223,13 +229,20 @@ export function createWorker({ adapter, session, pacer, settleMs = LEGACY_WAIT_M
   return {
     kick,
     pause,
+    assertSettled() {
+      if (!unsettled) return;
+      throw createError(ErrorCodes.JOB_IN_PROGRESS, 'The previous job\'s handler has not stopped, so another job could spend on the same tab', {
+        next_action: 'It is still running: check the Flow tab, wait for it to end, or close Chrome to end it, then call resume.',
+      });
+    },
     resume() {
+      this.assertSettled();
       paused = null;
       kick();
     },
     status: () => ({ paused, active: current?.id ?? null }),
     isActive: (job) => current === job,
-    busy: () => current !== null,
+    busy: () => current !== null || unsettled,
     cancelActive() { controller?.abort('cancel'); },
     stop() {
       stopped = true;

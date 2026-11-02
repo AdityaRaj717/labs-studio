@@ -153,6 +153,7 @@ export function createRpc({ worker, session, hub }) {
   }
 
   function control({ action, job_id, run_id }) {
+    if (action === 'resume' || action === 'retry_failed') worker.assertSettled(); // before any job moves
     if (action === 'resume' && !job_id && !run_id) {
       worker.resume();
       return worker.status();

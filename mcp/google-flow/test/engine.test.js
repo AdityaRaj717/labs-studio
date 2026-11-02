@@ -396,6 +396,37 @@ test('an adapter that never stops holds the queue rather than sharing the tab', 
   assert.equal(ran.length, 1);
 });
 
+test('a legacy run that never ends holds the queue, and resume refuses until it ends', { timeout: 20000 }, async () => {
+  const { createLegacyAdapter } = await import('../src/engine/worker.js');
+  const release = gate();
+  let calls = 0;
+  const engine = await engineWith({
+    settleMs: 100,
+    adapter: createLegacyAdapter(async () => {
+      calls++;
+      await release.opened;
+      return { status: 'success', files: [] };
+    }),
+  });
+  const one = (await rpc(engine, 'flow_generate_image', image())).result.job_id;
+  const two = (await rpc(engine, 'flow_generate_image', image({ prompt: 'two' }))).result.job_id;
+  await until(() => calls === 1);
+  await rpc(engine, 'flow_job_control', { action: 'cancel', job_id: one });
+  await until(() => engine.worker.status().paused);
+  assert.equal(await stateOf(engine, two), 'queued');
+  for (const args of [{ action: 'resume' }, { action: 'resume', job_id: two }, { action: 'retry_failed', job_id: two }]) {
+    const refused = await rpc(engine, 'flow_job_control', args);
+    assert.equal(refused.error_code, 'JOB_IN_PROGRESS', JSON.stringify(args));
+    assert.match(refused.next_action, /still running/);
+  }
+  assert.equal((await rpc(engine, 'flow_doctor', {})).error_code, 'JOB_IN_PROGRESS');
+  assert.equal(calls, 1);
+  release.open();
+  await until(async () => (await rpc(engine, 'flow_job_control', { action: 'resume' })).ok);
+  await until(async () => (await stateOf(engine, two)) === 'done');
+  assert.equal(calls, 2);
+});
+
 test('invalid input fails before any queue or browser work', async () => {
   const engine = await engineWith();
   const res = await rpc(engine, 'flow_generate_image', image({ size: '9K' }));
@@ -666,6 +697,29 @@ test('the old image flow, once in its project, fails clearly when a person navig
     setConnected(false);
     setPage(null);
     await engine.stop();
+    await browser.close();
+  }
+});
+
+test('handleGenerateImage with wait_for_run settles with the run, not with wait_ms', { timeout: 60000 }, async () => {
+  const { handleGenerateImage } = await import('../src/tools/generate-image.js');
+  const { jobQueue } = await import('../src/queue/job-queue.js');
+  const { setPage, setConnected } = await import('../src/browser/connect.js');
+  await until(() => !jobQueue.getCurrentJob(), 30000); // an earlier abandoned old-flow run must be over
+  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  const page = await browser.newPage();
+  await page.goto(`${flow.url}/project/one`);
+  setPage(page);
+  setConnected(true);
+  try {
+    const run = handleGenerateImage({ prompt: 'p', auto_confirm: true, wait_ms: 10, wait_for_run: true }).then((r) => r, (e) => e);
+    const outcome = await Promise.race([run, new Promise((r) => { setTimeout(r, 500, 'pending'); })]);
+    assert.equal(outcome, 'pending');
+    await browser.close();
+    assert.ok((await run) instanceof Error);
+  } finally {
+    setConnected(false);
+    setPage(null);
     await browser.close();
   }
 });
