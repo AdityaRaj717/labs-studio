@@ -70,7 +70,8 @@ export async function listenEngine({ adapter = flowAdapter, session = chromeSess
   const secrets = new Map();
   const hub = createHub();
   const worker = createWorker({ adapter, session, pacer, settleMs, reconcile });
-  const call = createRpc({ worker, session, hub });
+  const getSecret = (name) => secrets.get(name) ?? process.env[name];
+  const call = createRpc({ worker, session, hub, getSecret });
   const startedAt = Date.now();
   const streams = new Set();
   let engine;
@@ -165,7 +166,7 @@ export async function listenEngine({ adapter = flowAdapter, session = chromeSess
     token,
     port: server.address().port,
     url: `http://${HOST}:${server.address().port}`,
-    getSecret: (name) => secrets.get(name) ?? process.env[name],
+    getSecret,
     // Call once this process has won the lock: recovery may truncate a torn journal tail.
     begin() {
       const { reconcile: lost } = recover();

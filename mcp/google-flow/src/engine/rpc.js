@@ -1,3 +1,4 @@
+import { createFish } from '../audio/fish.js';
 import { closeBrowser } from '../browser/connect.js';
 import config from '../utils/config.js';
 import { readAccountStatus } from '../browser/account-check.js';
@@ -86,7 +87,8 @@ function targetOf({ job_id, run_id }) {
   return job_id ? [findJob(job_id)] : findRun(run_id).jobs;
 }
 
-export function createRpc({ worker, session, hub }) {
+export function createRpc({ worker, session, hub, getSecret = (name) => process.env[name] }) {
+  const fish = createFish({ getSecret });
   // shortcut: refuses rather than queues while a job runs, or the call could wait out a whole batch.
   const tab = (fn) => {
     if (worker.busy()) {
@@ -262,6 +264,8 @@ export function createRpc({ worker, session, hub }) {
 
   const handlers = {
     flow_estimate: estimateJobs,
+    audio_voice_generate: (args) => fish.generate(args),
+    audio_voice_list: (args) => fish.list(args),
     flow_production_plan: buildPlan,
     flow_production_start: (args) => orchestrator.start(args),
     flow_production_status: (args) => orchestrator.status(args),

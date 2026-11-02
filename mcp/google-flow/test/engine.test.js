@@ -550,9 +550,21 @@ test('tool schemas state the defaults', () => {
   assert.equal(props('flow_wait').wait_ms.maximum, 55000);
 });
 
+test('audio without a key is MISSING_API_KEY through the engine', async () => {
+  const engine = await engineWith();
+  const saved = process.env.FISH_API_KEY;
+  delete process.env.FISH_API_KEY;
+  try {
+    assert.equal((await rpc(engine, 'audio_voice_generate', { text: 'Hello.' })).error_code, 'MISSING_API_KEY');
+    assert.equal((await rpc(engine, 'audio_voice_list', {})).error_code, 'MISSING_API_KEY');
+  } finally {
+    if (saved !== undefined) process.env.FISH_API_KEY = saved;
+  }
+});
+
 test('unbuilt tools return NOT_IMPLEMENTED and unknown tools are refused', async () => {
   const engine = await engineWith();
-  for (const name of ['audio_voice_generate', 'audio_voice_list', 'audio_stable_generate']) {
+  for (const name of ['audio_stable_generate']) {
     assert.equal((await rpc(engine, name, {})).error_code, 'NOT_IMPLEMENTED', name);
   }
   assert.equal((await rpc(engine, 'stitch_video', {})).error_code, 'INVALID_PARAMS');

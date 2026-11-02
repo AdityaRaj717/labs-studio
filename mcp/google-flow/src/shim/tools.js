@@ -166,8 +166,26 @@ export const TOOLS = [
   tool('flow_create_scene', 'Create a reusable place as a character marked as a place. Free from an image; a prompt alone spends.', WRITE, CHARACTER),
   tool('flow_list_scenes', 'List a project\'s reusable places. Free.', READ, OBJECT({ project_url: { type: 'string' } }, ['project_url'])),
 
-  tool('audio_voice_generate', 'Generate speech with Fish Audio.', WRITE, OBJECT({ text: { type: 'string' }, voice: { type: 'string' } }, ['text'])),
-  tool('audio_voice_list', 'List available voices.', READ),
+  tool('audio_voice_generate', 'Generate speech with Fish Audio and save it in the run\'s voice folder. Waits for the file. Stays on the free model unless model names another; never moves to a paid one by itself.', WRITE, OBJECT({
+    text: { type: 'string' },
+    script: { type: 'string', description: 'Same as text, for a longer narration. Long text is split at sentences and joined.' },
+    voice_id: { type: 'string', description: 'From audio_voice_list.' },
+    run_id: { type: 'string', description: 'Run to save in. Default a new run.' },
+    name: { type: 'string' },
+    format: { type: 'string', enum: ['mp3', 'wav', 'pcm', 'opus'], default: 'mp3' },
+    speed: { type: 'number', minimum: 0.5, maximum: 2 },
+    volume: { type: 'number', description: 'Decibels.' },
+    temperature: { type: 'number', minimum: 0, maximum: 1 },
+    top_p: { type: 'number', minimum: 0, maximum: 1 },
+    model: { type: 'string', enum: ['s2.1-pro-free', 's2.1-pro', 's2-pro', 's1', 'drama-3'], default: 's2.1-pro-free', description: 'All but s2.1-pro-free cost money.' },
+    language: { type: 'string', description: 'BCP-47 tag.' },
+    output_root: SPEND.output_root,
+  })),
+  tool('audio_voice_list', 'List Fish Audio voices.', READ, OBJECT({
+    query: { type: 'string', description: 'Filter by title.' },
+    mine: { type: 'boolean', default: false, description: 'Only your own voices.' },
+    limit: { type: 'number', default: 20, maximum: 100 },
+  })),
   tool('audio_stable_generate', 'Generate music or sound effects with Stability.', WRITE, OBJECT({
     kind: { type: 'string', enum: ['music', 'sfx'] }, prompt: { type: 'string' },
   }, ['kind', 'prompt'])),

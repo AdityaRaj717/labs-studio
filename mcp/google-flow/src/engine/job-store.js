@@ -99,6 +99,8 @@ function loadRun(dir, known) {
       apply(job, event);
     }
   }
+  const audio = events.filter((e) => e.type === 'audio.saved').map(({ seq, ts, type, ...entry }) => entry);
+  if (audio.length) run.audio = audio;
   return run.jobs;
 }
 
