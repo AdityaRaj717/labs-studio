@@ -68,7 +68,7 @@
       ${group('kind', ['Image', 'Video'])}
       ${isVideo() ? group('mode', ['Frames', 'Ingredients']) : ''}
       ${group('ratio', isVideo() ? VIDEO_RATIOS : IMAGE_RATIOS)}
-      <button data-act="modelMenu" aria-label="Select model family">${s.model}</button>
+      <button data-act="modelMenu" aria-label="Select model family">${s.model}&#10;<i style="display:block">arrow_drop_down</i></button>
       ${omni ? `<div role="radiogroup">${radio('resolution', '360p', '360p 360p generates faster at lower resolution')}${radio('resolution', '720p')}</div>` : ''}
       ${omni ? group('duration', ['4s', '6s', '8s', '10s']) : ''}
       ${group('count', ['x1', 'x2', 'x3', 'x4'])}
