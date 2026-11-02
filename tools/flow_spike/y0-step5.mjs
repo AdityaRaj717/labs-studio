@@ -1,0 +1,14 @@
+import path from 'node:path';
+import * as y from './y0lib.mjs';
+const { page } = await y.attach();
+const base=page.url().match(/.*\/project\/[^/]+/)[0];
+await page.goto(base+'/character',{waitUntil:'domcontentloaded'});
+await y.locate(page,'character.upload').waitFor({timeout:30000});
+await y.snap(page,'character-start');
+const chooser=page.waitForEvent('filechooser',{timeout:15000});
+await y.locate(page,'character.upload').click();
+await (await chooser).setFiles(path.join(y.OUT,'y0-sheet-md02.jpg'));
+await page.waitForTimeout(15000);
+const t=await y.snap(page,'character-uploaded');
+console.log(page.url()); console.log(t.slice(0,3500));
+process.exit(0);

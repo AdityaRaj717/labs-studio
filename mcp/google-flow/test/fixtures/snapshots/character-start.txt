@@ -1,0 +1,33 @@
+- link "Skip to main content":
+  - /url: "#main-content"
+- main:
+  - button "Go back"
+  - text: New character
+  - main:
+    - text: Build and reuse characters for consistent videos. Use a sample prompt below, or create from scratch.
+    - button "The Eccentric The Eccentric Unforgettable quirky humans. Magnetic scene-stealers with offbeat charm.":
+      - img "The Eccentric"
+      - text: The Eccentric Unforgettable quirky humans. Magnetic scene-stealers with offbeat charm.
+    - button "The Professional The Professional Clean cut, well spoken, competent":
+      - img "The Professional"
+      - text: The Professional Clean cut, well spoken, competent
+    - button "The Wildcard The Wildcard Beyond human, anything can be a character, right?":
+      - img "The Wildcard"
+      - text: The Wildcard Beyond human, anything can be a character, right?
+    - button "The Familiar The Familiar Grounded and authentic, a relatable anchor for your story":
+      - img "The Familiar"
+      - text: The Familiar Grounded and authentic, a relatable anchor for your story
+    - button "The Wicked The Wicked Powerful antagonistic figures that command the screen":
+      - img "The Wicked"
+      - text: The Wicked Powerful antagonistic figures that command the screen
+    - button "The Fantastical The Fantastical Ethereal, dreamlike beings fusing the human and the mythical":
+      - img "The Fantastical"
+      - text: The Fantastical Ethereal, dreamlike beings fusing the human and the mythical
+  - textbox "Describe your character…":
+    - paragraph
+  - button "Add ingredients to the prompt box"
+  - button "Format" [disabled]
+  - button "Start generation" [disabled]
+  - button "Upload"
+  - button "Add from project"
+  - paragraph: Google Flow can make mistakes, so double check it

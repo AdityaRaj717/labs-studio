@@ -88,3 +88,25 @@ With the page setting on, Omni 720p came back with an aac stream at max -19.9 dB
 ## Agent mode, for the record
 
 Confirm Always gives a plan plus `costing N credits` with `radiogroup "Permission options"` (`Approve`, `Always approve`, `Reject`). A question comes back as plain paragraphs and lists with no radios. Duration and resolution are taken from prompt text. It works, but direct mode is more exact, faster, and doesn't use the agent's daily query limit.
+
+# Y0 reference spike (2026-11-02)
+
+Live in project `y0-2026-11-02` (065acc3b-852c-4cf2-84c6-80359d0543bd). Credits: 8, balance 1,025 to 1,017. Images used quota only. Result files are in `tools/flow_spike/out/y0/` (git-ignored). **The primary from R4 stands: `referenceMode: ingredient`.**
+
+## Answers
+
+1. **Sheet as ingredient:** identity held in both Shots (face, eyebrow scar, jacket, gloves), and the place carried over. No grid layout leaked. Judged by viewing `y0-ing-img01.jpg` and `y0-ing-img04.jpg`. IMG_04 was reduced to one person, as only one sheet was made.
+2. **Flow Character:** works in direct mode. Upload goes straight to `/project/<id>/character/<uuid>` with the image set; set `Character name`, then `Done` returns to the project. Tab `Characters` in the picker lists it; clicking its option attaches at once as a chip with `img "Character ingredient image"`, with no `Add to prompt` step. Result `y0-char-img01.jpg` is the same man. Fallback remains valid.
+3. **Ingredient limit:** image accepted 16 chips with no refusal, so the limit is **at least 16**. Video: **unknown**, `maxIngredients.video` is null. The attempt to add more failed on a click timeout for reasons not diagnosed, not on a refusal; one chip is proven. Y3 must count ready chips before Start and fail with no spend on a mismatch; Y8 tests multiple chips on video.
+4. **Video:** Omni 360p 4s at 4 credits, both modes, 27s each, 640x360, 4.0s, one audio stream each. Frames with an uploaded Still: first frame matches it. Ingredients with the sheet: same outfit, face less distinct at 360p.
+
+## Corrections for the pipeline
+
+- **Model menu labels have an emoji prefix** (`🍌 Nano Banana 2.1`). Exact names failed live and passed on fake Flow; contract now uses a suffix regex. Fake Flow should copy this.
+- **Saved Characters are grid tiles.** `flow-grid-tile-container` with `img "Character thumbnail"`, and it sat at index 1 among results. "New tiles at the top" must ignore these and match on finished media.
+- **Chips clear** after a job and on reload. Ingredient chips from the previous Shot don't carry over. Y3 still asserts the count.
+- **Picker search finds an upload by exact filename on a later job.**
+- **Clicking a picker option can attach immediately**, removing `Add to prompt` from the DOM. Treat that button as optional, and confirm by chip count.
+- A `Download` once timed out at 120s right after picking a Character, and worked after closing overlays. Cause not established. Download should close overlays first and bound its wait.
+- Tile menu items: `Reuse prompt`, `Animate`, `Add to prompt`, `Download`, `Copy`, `Rename`, `Share`, `Set project cover`, `Flag output`, `Move to trash`, `Favorite`. Page-level `Create body`, `Portrait`, `Select a voice` appear on the character page; unused.
+- Failed tile still not observed.

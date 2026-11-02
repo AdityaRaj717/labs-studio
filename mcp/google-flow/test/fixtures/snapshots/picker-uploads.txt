@@ -1,0 +1,135 @@
+- link "Skip to main content":
+  - /url: "#main-content"
+- main:
+  - navigation:
+    - button "Home"
+    - heading "y0-2026-11-02" [level=1]
+    - textbox "Editable text":
+      - /placeholder: ""
+      - text: y0-2026-11-02
+  - button "More options for the project"
+  - button "Search"
+  - textbox "Search"
+  - button "Filtering and sorting options"
+  - button "Add media menu"
+  - button "Product help"
+  - button "Settings"
+  - button "More options"
+  - button "Account details":
+    - text: PRO
+    - 'button "Google Account: CypherX (<email>), Google membership"'
+  - navigation "Project navigation":
+    - button "All media"
+    - button "Images"
+    - button "Videos"
+    - button "Characters"
+    - button "Scenes"
+    - button "Uploads"
+    - separator
+    - link "Library Create collection":
+      - /url: /project/065acc3b-852c-4cf2-84c6-80359d0543bd
+      - text: Library
+      - button "Create collection"
+    - separator
+    - link "Tools":
+      - /url: /project/065acc3b-852c-4cf2-84c6-80359d0543bd/tools
+    - link "Create tool":
+      - /url: /project/065acc3b-852c-4cf2-84c6-80359d0543bd/create-tool
+    - link "Trash":
+      - /url: /project/065acc3b-852c-4cf2-84c6-80359d0543bd/trash
+    - button "Collapse"
+  - group "Man scratching tally mark":
+    - img "Tile displaying a user's image"
+  - group "y0 narrator":
+    - img "Character thumbnail"
+    - text: y0 narrator
+  - group "Man walking down corridor":
+    - img "Generated video thumbnail"
+    - text: 360p
+  - group "Man finishes tally mark":
+    - img "Generated video thumbnail"
+    - text: 360p
+  - group "y0-ing-img01.jpg":
+    - img "Tile displaying a user's image"
+  - group "y0-lim-image-16.jpg":
+    - img "Tile displaying a user's image"
+  - group "y0-lim-image-15.jpg":
+    - img "Tile displaying a user's image"
+  - group "y0-lim-image-14.jpg":
+    - img "Tile displaying a user's image"
+  - group "y0-lim-image-13.jpg":
+    - img "Tile displaying a user's image"
+  - group "y0-lim-image-12.jpg":
+    - img "Tile displaying a user's image"
+  - group "y0-lim-image-11.jpg":
+    - img "Tile displaying a user's image"
+  - group "y0-lim-image-10.jpg":
+    - img "Tile displaying a user's image"
+  - group "y0-lim-image-9.jpg":
+    - img "Tile displaying a user's image"
+  - group "y0-lim-image-8.jpg":
+    - img "Tile displaying a user's image"
+  - group "y0-lim-image-7.jpg":
+    - img "Tile displaying a user's image"
+  - group "y0-lim-image-6.jpg":
+    - img "Tile displaying a user's image"
+  - group "y0-lim-image-5.jpg":
+    - img "Tile displaying a user's image"
+  - group "y0-lim-image-4.jpg":
+    - img "Tile displaying a user's image"
+  - group "y0-lim-image-3.jpg":
+    - img "Tile displaying a user's image"
+  - group "y0-lim-image-2.jpg":
+    - img "Tile displaying a user's image"
+  - group "y0-lim-image-1.jpg":
+    - img "Tile displaying a user's image"
+  - group "Man eating beans by candlelight":
+    - img "Tile displaying a user's image"
+  - group "Man scratching wall in bunker":
+    - img "Tile displaying a user's image"
+  - group "y0-place-md01.jpg":
+    - img "Tile displaying a user's image"
+  - group "y0-sheet-md02.jpg":
+    - img "Tile displaying a user's image"
+  - group "Survival bunker interior with su…":
+    - img "Tile displaying a user's image"
+  - group "Man character reference sheet":
+    - img "Tile displaying a user's image"
+  - textbox "What do you want to create?":
+    - paragraph
+  - button "Add ingredients to the prompt box" [expanded]
+  - button "Agent"
+  - button "Settings trigger": Video · 360p · 4s x1
+  - button "Start generation" [disabled]
+  - paragraph: Google Flow can make mistakes, so double check it
+- progressbar "Loading…"
+- tablist "Category navigation":
+  - tab "All" [selected]
+  - tab "Images"
+  - tab "Videos"
+  - tab "Voices"
+  - tab "Characters"
+  - tab "Avatars"
+  - tab "Uploads"
+- button "Upload media"
+- banner:
+  - textbox "Search assets"
+  - combobox "Sort assets": Recent
+- listbox "Asset list":
+  - option "Man scratching tally mark Image"
+  - option "y0 narrator Character"
+  - option "Man walking down corridor Video"
+  - option "y0-sheet-md02.jpg Image"
+  - option "Man finishes tally mark Video"
+  - option "y0-ing-img01.jpg Image"
+  - option "y0-lim-image-16.jpg Image"
+  - option "y0-lim-image-15.jpg Image"
+  - option "y0-lim-image-14.jpg Image"
+  - option "y0-lim-image-13.jpg Image"
+  - option "y0-lim-image-12.jpg Image"
+  - option "y0-lim-image-11.jpg Image"
+  - option "y0-lim-image-10.jpg Image"
+  - option "y0-lim-image-9.jpg Image"
+  - option "y0-lim-image-8.jpg Image"
+- img "Preview of Man scratching tally mark"
+- button "Add to prompt"
