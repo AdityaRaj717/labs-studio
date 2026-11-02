@@ -1,6 +1,7 @@
 import { closeBrowser } from '../browser/connect.js';
 import { readAccountStatus } from '../browser/account-check.js';
 import { navigateToFlow } from '../browser/launch-profile.js';
+import { downloadAgain, downloadLatest, listProjectAssets } from '../flow/reconcile.js';
 import { handleCreateCharacter, handleListCharacters } from '../tools/create-character.js';
 import { handleCreateScene, handleListScenes } from '../tools/create-scene.js';
 import { runDoctor } from '../tools/doctor.js';
@@ -10,6 +11,7 @@ import { handleDeleteProject, handleListProjects, handleOpenProject, handleRenam
 import { TOOLS } from '../shim/tools.js';
 import { createError, ERROR_CLASSES, ErrorCodes, toErrorPayload } from '../utils/errors.js';
 import { takeScreenshot } from '../utils/screenshots.js';
+import { startBatch, validateJob } from './batch.js';
 import { checkBudget, estimate } from './budget.js';
 import { getCapabilities } from './capabilities.js';
 import { allRuns, enqueue, jobByKey, transition } from './job-store.js';
@@ -74,16 +76,6 @@ function findRun(id) {
 function targetOf({ job_id, run_id }) {
   if (Boolean(job_id) === Boolean(run_id)) throw invalid('Pass exactly one of job_id and run_id');
   return job_id ? [findJob(job_id)] : findRun(run_id).jobs;
-}
-
-// After a crash nothing watches a paid job. Finding it in the project comes in a later task; until then it is reported, never rerun.
-export function failLostJob(job) {
-  transition(job, 'failed', {
-    error: toErrorPayload(createError(ErrorCodes.FLOW_GENERATION_FAILED, 'The engine lost track of this job after it reached Flow', {
-      credits_at_risk: true,
-      next_action: 'Check the project in Flow for the result. retry_failed spends again.',
-    })),
-  });
 }
 
 export function createRpc({ worker, session, hub }) {
@@ -154,20 +146,21 @@ export function createRpc({ worker, session, hub }) {
     return { job_id: job.id, run_id: run.id, state: job.state, estimate: estimated, ...queuePaused() };
   };
 
-  // A held job past the credit line lost its watcher, so it is settled rather than run again.
+  // A held job past the credit line lost its watcher, so it is looked for rather than run again.
   function resumeJob(job) {
     transition(job, job.heldFrom);
-    if (job.submittedAt) failLostJob(job);
+    if (job.submittedAt) worker.adopt([job]);
   }
+
+  const downloadOnly = ({ data: { error, media } }) => error?.error_code === ErrorCodes.DOWNLOAD_FAILED && Boolean(media);
 
   // Spec 6.1: a download or disk failure retries the download only, never the generation.
   function retryJob(job) {
-    const { error, media } = job.data;
-    if (error?.error_code === ErrorCodes.DOWNLOAD_FAILED && media) transition(job, 'downloading', { error: null, saved: error.details?.saved ?? [] });
+    if (downloadOnly(job)) transition(job, 'downloading', { error: null, saved: job.data.error.details?.saved ?? [] });
     else transition(job, 'queued', undefined, { retry: true });
   }
 
-  function control({ action, job_id, run_id }) {
+  function control({ action, job_id, run_id, max_credits }) {
     if (action === 'resume' || action === 'retry_failed') worker.assertSettled(); // before any job moves
     if (action === 'resume' && !job_id && !run_id) {
       worker.resume();
@@ -186,11 +179,13 @@ export function createRpc({ worker, session, hub }) {
     } else if (action === 'cancel') {
       changed = jobs.filter((job) => !['done', 'failed', 'cancelled'].includes(job.state));
       for (const job of changed) {
-        if (worker.isActive(job)) worker.cancelActive();
+        // Its credits are spent and the file is on its way: let the download finish.
+        if (worker.isActive(job)) { if (!['downloading', 'verifying'].includes(job.state)) worker.cancelActive(); }
         else transition(job, 'cancelled');
       }
     } else if (action === 'retry_failed') {
       changed = pick(['failed']);
+      checkBudget(estimate(changed.filter((job) => !downloadOnly(job)).map((job) => job.spec)), max_credits, ledger);
       changed.forEach(retryJob);
       worker.resume();
     } else {
@@ -215,11 +210,27 @@ export function createRpc({ worker, session, hub }) {
 
   function estimateJobs({ jobs }) {
     if (!Array.isArray(jobs) || jobs.length === 0) throw invalid('jobs must be a non-empty list');
-    return estimate(jobs.map((job) => (job?.kind === 'video' ? validateVideo(job) : validateImage(job))));
+    return estimate(jobs.map(validateJob));
   }
 
   const handlers = {
     flow_estimate: estimateJobs,
+    flow_batch_start(args) {
+      const started = startBatch(args, ledger);
+      if (started.run_id) worker.kick();
+      return { ...started, ...queuePaused() };
+    },
+    flow_list_assets(args) {
+      if (args.project_url) return tab(async (page) => ({ assets: await listProjectAssets(page, args.project_url), note: 'Only the grid window shows here: the newest 28 tiles.' }));
+      const assets = targetOf(args).flatMap((job) => (job.data.outputs ?? []).map(({ file, mediaId, model }) => ({ job_id: job.id, prompt: cut(job.spec.prompt, 80), file, mediaId, model })));
+      return { assets };
+    },
+    flow_download({ job_id, latest, project_url }) {
+      if (latest === true) return tab((page) => downloadLatest(page, project_url));
+      if (!job_id) throw invalid('Pass job_id, or latest: true');
+      const job = findJob(job_id);
+      return tab((page) => downloadAgain(page, job));
+    },
     flow_connect: connect,
     flow_disconnect: () => withTab('disconnect', async () => {
       await closeBrowser();

@@ -72,7 +72,18 @@ export const TOOLS = [
     silent: { type: 'boolean', default: false },
     ...SPEND,
   }, ['prompt'])),
-  tool('flow_batch_start', 'Queue many jobs as one run from JSON or CSV. CREDITS.', WRITE, OBJECT({ jobs: { type: 'array', items: { type: 'object' } }, file: { type: 'string' }, ...SPEND })),
+  tool('flow_batch_start', 'Queue many jobs as one run from JSON or CSV. CREDITS.', WRITE, OBJECT({
+    name: { type: 'string' },
+    jobs: { type: 'array', description: 'Same arguments as the generate tools, plus kind: image (default) or video.', items: { type: 'object' } },
+    file: { type: 'string', description: 'A .json list, or a .csv with a prompt column. CSV ingredients separate with ";": a path, character:Name or scene:Name.' },
+    defaults: { type: 'object', description: 'Arguments every job starts from.' },
+    project: { type: 'string', description: 'Flow project URL or title for every job.' },
+    stop_on: { description: '"failure", or a list of error codes, holds the rest of the run as paused when a job fails that way. Default: only quota, limit and owner stops do.', oneOf: [{ type: 'string', enum: ['failure'] }, { type: 'array', items: { type: 'string' } }] },
+    max_credits: SPEND.max_credits,
+    auto_confirm: SPEND.auto_confirm,
+    idempotency_key: SPEND.idempotency_key,
+    output_root: SPEND.output_root,
+  })),
 
   tool('flow_job_status', 'State of a job or a run. Concise by default.', LOCAL_READ, OBJECT({
     ...TARGET,
@@ -86,11 +97,12 @@ export const TOOLS = [
   tool('flow_job_control', 'pause, resume, cancel or retry_failed. retry_failed may spend again. resume with no target restarts a stopped queue.', WRITE, OBJECT({
     action: { type: 'string', enum: ['pause', 'resume', 'cancel', 'retry_failed'] },
     ...TARGET,
+    max_credits: { type: 'number', default: 30, description: 'retry_failed: refuse if the regenerations estimate above this.' },
   }, ['action'])),
   tool('flow_list_runs', 'The most recent runs with job counts.', LOCAL_READ, OBJECT({ limit: { type: 'integer', default: 20, maximum: 50 } })),
 
   tool('flow_list_assets', 'List the assets of a run or Flow project.', READ, OBJECT({ ...TARGET, project_url: { type: 'string' } })),
-  tool('flow_download', 'Download an asset again, or the latest with latest: true. Repeats no generation.', SAME, OBJECT({ job_id: { type: 'string' }, latest: { type: 'boolean', default: false } })),
+  tool('flow_download', 'Download an asset again, or the latest with latest: true. Repeats no generation.', SAME, OBJECT({ job_id: { type: 'string' }, latest: { type: 'boolean', default: false }, project_url: { type: 'string', description: 'With latest: the project. Default the open one.' } })),
 
   tool('flow_open_project', 'Open a Flow project, creating it when missing. Free.', SAME, OBJECT({
     url: { type: 'string' }, name: { type: 'string' }, create_if_missing: { type: 'boolean', default: true },

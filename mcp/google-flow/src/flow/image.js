@@ -35,7 +35,7 @@ async function submit(ctx, quotedCredits) {
     await page.waitForTimeout(250);
   }
   const before = await baselineTiles(page);
-  ctx.submit(quotedCredits); // the credit line: durable before the click, and nothing but the click after it
+  ctx.submit(quotedCredits, before); // the credit line: durable before the click, and nothing but the click after it
   await start.click();
   return before;
 }
@@ -166,7 +166,7 @@ export const runImageJob = (ctx, job) => runGeneration(ctx, job, IMAGE);
 export async function runGeneration(ctx, job, how) {
   const { page } = ctx;
   try {
-    await openProject(page, job.spec);
+    await openProject(page, job.state === 'downloading' && job.data.projectUrl && !page.url().startsWith(job.data.projectUrl) ? { project_url: job.data.projectUrl } : job.spec);
     ctx.pinPage(page);
     await resetSession(page);
     const media = job.state === 'downloading' ? job.data.media : await generate(ctx, job, how);

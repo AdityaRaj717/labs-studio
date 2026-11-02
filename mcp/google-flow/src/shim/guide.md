@@ -17,5 +17,6 @@ One local engine owns Chrome, the queue and the files. All agents and the app sh
 - Never try to get past a CAPTCHA, verification or limit. Tell the owner.
 - A failure has `error_code`, `retryable`, `credits_at_risk` and `next_action`. Do what `next_action` says.
 - `NOT_IMPLEMENTED` means that tool is not built yet.
+- `flow_batch_start` without `auto_confirm` is a free estimate. With it, one run queues; loop `flow_wait` on `run_id`, then `flow_job_control` with `resume` for what was held and `retry_failed` for what failed.
 - `flow_delete_project` is permanent. Pass `confirm: true` only after the owner agreed to delete that project.
 - While a job runs, tools that need the Flow tab return `JOB_IN_PROGRESS`. `flow_status`, `flow_wait` and `flow_screenshot` still work.

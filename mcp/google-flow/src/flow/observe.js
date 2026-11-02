@@ -8,14 +8,14 @@ const POLL_MS = 1000;
 const NOT_RUNNING_POLLS = 3; // a tile can flip through an empty frame on its way to done
 const PREVIEW_MS = 10000;
 // Live tiles read "image 97% <prompt>" or "play_circle 3% <prompt>": the kind word or icon ligature first.
-const PERCENT = /^\s*(?:[a-z_]+\s+)?(\d+)%/i;
+export const PERCENT = /^\s*(?:[a-z_]+\s+)?(\d+)%/i;
 const SETTLE_POLL_MS = 500;
 const SETTLE_MAX_MS = 5000;
 
 const css = (key) => contract.keys[key].css;
 
 // A resting video has no media id, so its URL stands in. The thumbnail and video element URLs share only their start, so that start is the id. A running tile is never finished, whatever it shows.
-function readTiles(page) {
+export function readTiles(page) {
   return locate(page, 'project.tile').evaluateAll((els, { character, image, video, percent }) => els
     .filter((el) => !el.querySelector(character)) // saved Characters sit among the results
     .map((el) => {
@@ -39,7 +39,8 @@ export async function baselineTiles(page) {
     ids = next;
     if (same) break;
   }
-  return { ids, firstIndex: tiles.findIndex(({ mediaId }) => mediaId) };
+  // slots keeps each tile's place, for telling after a restart how far the grid has shifted.
+  return { ids, firstIndex: tiles.findIndex(({ mediaId }) => mediaId), slots: tiles.map(({ mediaId }) => mediaId) };
 }
 
 export const tileOf = (page, mediaId) => locate(page, 'project.tile')

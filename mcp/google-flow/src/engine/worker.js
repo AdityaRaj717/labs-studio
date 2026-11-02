@@ -3,20 +3,33 @@ import { launchFlowChrome } from '../browser/launch-profile.js';
 import { detectBlock } from '../flow/blocks.js';
 import { contract } from '../flow/contract.js';
 import { runImageJob } from '../flow/image.js';
+import { reconcile as findInProject } from '../flow/reconcile.js';
 import { runVideoJob } from '../flow/video.js';
 import { createError, ERROR_CLASSES, ErrorCodes, toErrorPayload } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 import { takeScreenshot } from '../utils/screenshots.js';
+import { holdRest } from './batch.js';
 import { allRuns, transition } from './job-store.js';
 import { recordSpend } from './ledger.js';
 import { withTab } from './tab-lock.js';
 
+const LOST_STATES = ['submitted', 'generating', 'downloading', 'verifying'];
 const FINISH = ['downloading', 'verifying', 'done'];
 const RUNNABLE = ['queued', 'preparing', 'downloading']; // downloading only ever comes back as a retry of the download
 // Someone else moved or closed the tab: going on would fail every job or save the wrong one.
 const STOPS_QUEUE = [ErrorCodes.BROWSER_NOT_CONNECTED, ErrorCodes.FLOW_PAGE_NOT_FOUND];
 const SETTLE_MS = 600000;
 const BLOCK_CHECK_MS = 5000;
+
+// Nothing watches a paid job after a crash and it was not found in the project: reported, never rerun.
+export function failLostJob(job) {
+  transition(job, 'failed', {
+    error: toErrorPayload(createError(ErrorCodes.FLOW_GENERATION_FAILED, 'The engine lost track of this job after it reached Flow and did not find its result', {
+      credits_at_risk: true,
+      next_action: 'Check the project in Flow for the result. retry_failed spends again.',
+    })),
+  });
+}
 
 const projectId = (url) => /\/project\/([^/?#]+)/.exec(url)?.[1] ?? null;
 
@@ -51,13 +64,14 @@ function shouldAutoRetry(job, { error_code: code, details }) {
   return !new RegExp(contract.tile.noRetry, 'i').test(text) && !job.history?.some(({ error }) => error?.details?.tile_text === text);
 }
 
-export function createWorker({ adapter, session, pacer, settleMs = SETTLE_MS }) {
+export function createWorker({ adapter, session, pacer, settleMs = SETTLE_MS, reconcile = findInProject }) {
   let paused = null;
   let current = null;
   let controller = null;
   let looping = false;
   let stopped = false;
   let unsettled = false; // an adapter outlived its wait and may still be clicking
+  const lost = []; // past the credit line with no watcher, looked for before any new job moves the grid
 
   const pause = (reason) => {
     paused = reason;
@@ -102,6 +116,7 @@ export function createWorker({ adapter, session, pacer, settleMs = SETTLE_MS }) 
       // Through the store, so the attempt is counted and the ledger keys a new spend.
       if (retrying) transition(job, 'queued', undefined, { retry: true });
       Object.defineProperty(job, 'retrying', { value: false, configurable: true });
+      if (!retrying) holdRest(job, code);
     }
   }
 
@@ -142,9 +157,10 @@ export function createWorker({ adapter, session, pacer, settleMs = SETTLE_MS }) 
       signal,
       get page() { return page; },
       // Durable before return: call right before clicking Start.
-      submit(credits = 0) {
+      submit(credits = 0, before) {
         if (signal.aborted) throw createError(ErrorCodes.INTERNAL_ERROR, 'Job was stopped; Start must not be clicked');
-        transition(job, 'submitted', { quotedCredits: credits });
+        // The baseline and project are what let reconcile find this result after a crash.
+        transition(job, 'submitted', { quotedCredits: credits, before, projectUrl: page?.url().split(/[?#]/)[0] });
         pacer.recordUse();
         recordSpend(job, credits);
       },
@@ -200,10 +216,49 @@ export function createWorker({ adapter, session, pacer, settleMs = SETTLE_MS }) 
     }
   }
 
+  async function recoverLost(job) {
+    if (!LOST_STATES.includes(job.state)) return; // cancelled while it waited
+    // The result is already known, so only the download is left; downloading is runnable as it stands.
+    if (job.data.media?.length) {
+      if (job.state === 'verifying') transition(job, 'downloading', { saved: job.data.outputs ?? [] });
+      return;
+    }
+    current = job;
+    const control = new AbortController();
+    controller = control;
+    try {
+      await withTab(job.id, async () => {
+        const { page } = await session.ensure();
+        const { found, assets } = page ? await reconcile(page, job, control.signal) : { found: false };
+        if (found) transition(job, 'downloading', { media: assets, recovered: true });
+        else failLostJob(job);
+      });
+    } catch (err) {
+      if (control.signal.reason === 'stop') return;
+      if (control.signal.reason === 'cancel') transition(job, 'cancelled', { credits_at_risk: true });
+      else if (err.code === ErrorCodes.BROWSER_NOT_CONNECTED) {
+        // Not an answer: the result may be there, so look again on resume.
+        lost.unshift(job);
+        pause(err.code);
+      } else {
+        logger.warn('Reconcile failed', { event: 'reconcile_failed', jobId: job.id, error: err.message });
+        failLostJob(job);
+      }
+    } finally {
+      current = null;
+      controller = null;
+    }
+  }
+
   async function loop() {
-    for (let job; !stopped && !paused && (job = nextJob());) {
+    for (let job; !stopped && !paused && (job = lost[0] ?? nextJob());) {
       try {
-        await runOne(job);
+        if (job === lost[0]) {
+          lost.shift();
+          await recoverLost(job);
+        } else {
+          await runOne(job);
+        }
       } catch (err) {
         // The journal refused the failure record too: don't spin on the same job.
         logger.error('Worker could not record a job', { event: 'worker_error', jobId: job.id, error: err.message });
@@ -223,6 +278,7 @@ export function createWorker({ adapter, session, pacer, settleMs = SETTLE_MS }) 
   return {
     kick,
     pause,
+    adopt(jobs) { lost.push(...jobs); },
     assertSettled() {
       if (!unsettled) return;
       throw createError(ErrorCodes.JOB_IN_PROGRESS, 'The previous job\'s handler has not stopped, so another job could spend on the same tab', {

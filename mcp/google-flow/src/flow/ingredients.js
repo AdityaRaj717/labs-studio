@@ -91,8 +91,10 @@ async function attachNamed(page, name, project) {
   await search(page, name);
   const target = option(page, name, true).first();
   if (!await target.isVisible()) {
+    await search(page, '');
+    const characters = await locate(page, 'picker.assetList').getByRole(contract.keys['picker.option'].role).allInnerTexts();
     await closeOverlay(page);
-    throw createError(ErrorCodes.INVALID_PARAMS, `No character or scene "${name}" in the Flow picker`, { name, project, next_action: 'Create it with flow_create_character, or fix the name.' });
+    throw createError(ErrorCodes.INVALID_PARAMS, `No character or scene "${name}" in the Flow picker. Existing: ${characters.join(', ') || '(none)'}`, { name, project, characters, next_action: 'Create it with flow_create_character, or fix the name.' });
   }
   await attach(page, target, before, createError(ErrorCodes.UNKNOWN_UI_CHANGE, `"${name}" never reached the prompt`));
 }

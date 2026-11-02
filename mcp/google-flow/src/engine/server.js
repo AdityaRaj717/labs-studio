@@ -4,7 +4,7 @@ import { VERSION } from '../shim/client.js';
 import { logger } from '../utils/logger.js';
 import { jobEvents, recover } from './job-store.js';
 import { pacer as realPacer } from './pacer.js';
-import { createRpc, failLostJob } from './rpc.js';
+import { createRpc } from './rpc.js';
 import { chromeSession, createWorker, flowAdapter } from './worker.js';
 
 const HOST = '127.0.0.1';
@@ -64,12 +64,12 @@ function send(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
-export async function listenEngine({ adapter = flowAdapter, session = chromeSession, pacer = realPacer, settleMs, onShutdown } = {}) {
+export async function listenEngine({ adapter = flowAdapter, session = chromeSession, pacer = realPacer, settleMs, reconcile, onShutdown } = {}) {
   const token = randomBytes(32).toString('hex');
   const tokenDigest = digest(`Bearer ${token}`);
   const secrets = new Map();
   const hub = createHub();
-  const worker = createWorker({ adapter, session, pacer, settleMs });
+  const worker = createWorker({ adapter, session, pacer, settleMs, reconcile });
   const call = createRpc({ worker, session, hub });
   const startedAt = Date.now();
   const streams = new Set();
@@ -168,10 +168,10 @@ export async function listenEngine({ adapter = flowAdapter, session = chromeSess
     getSecret: (name) => secrets.get(name) ?? process.env[name],
     // Call once this process has won the lock: recovery may truncate a torn journal tail.
     begin() {
-      const { reconcile } = recover();
+      const { reconcile: lost } = recover();
       jobEvents.on('event', onJobEvent);
-      reconcile.forEach(failLostJob);
-      logger.info('Engine started', { event: 'engine_started', pid: process.pid, version: VERSION, port: engine.port, lostJobs: reconcile.length });
+      worker.adopt(lost);
+      logger.info('Engine started', { event: 'engine_started', pid: process.pid, version: VERSION, port: engine.port, lostJobs: lost.length });
       ready = true;
       worker.kick();
     },

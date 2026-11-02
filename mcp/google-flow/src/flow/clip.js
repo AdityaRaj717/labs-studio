@@ -152,6 +152,9 @@ async function check(page, job, file) {
   return { ...rest, ok: mismatches.length === 0, mismatches, ...(silent ? { original: silent.original } : {}), scene_seconds: total };
 }
 
+// Saves the clip page already open, with no spend.
+export const downloadTake = (page, job) => save({ page, signal: new AbortController().signal }, job, job.spec.mode);
+
 export async function runClipJob(ctx, job) {
   const { page } = ctx;
   const { spec } = job;
