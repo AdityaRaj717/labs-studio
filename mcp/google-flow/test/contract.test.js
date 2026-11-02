@@ -54,7 +54,11 @@ test('locate resolves every contract key against fake Flow', { timeout: 60000 },
   await see(['project.chatClose', 'project.stop', 'project.chip.ingredient', 'project.promoDismiss']);
   await click('project.chatClose');
   await see(['project.agent', 'project.settingsTrigger', 'project.start', 'project.prompt',
-    'project.addIngredients', 'project.tile', 'project.addMedia', 'project.title']);
+    'project.addIngredients', 'project.tile', 'project.addMedia', 'project.title', 'tile.character', 'tile.image', 'tile.moreOptions']);
+  await locate(page, 'tile.moreOptions').first().click();
+  await click('tile.download');
+  await see(['tile.download', 'download.size.']);
+  await closeOverlay(page);
   await click('project.addMedia');
   await see(['character.create']);
   await closeOverlay(page);

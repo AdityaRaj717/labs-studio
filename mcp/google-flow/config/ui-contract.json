@@ -30,6 +30,13 @@
     "project.tile": { "page": "project", "css": "flow-grid-tile-container[role=group]" },
     "project.promoDismiss": { "page": "project", "role": "button", "name": "Got it" },
 
+    "tile.character": { "page": "project", "css": "img[alt=\"Character thumbnail\"]" },
+    "tile.image": { "page": "project", "css": "img[alt=\"Tile displaying a user's image\"]" },
+    "tile.moreOptions": { "page": "project", "role": "button", "name": "More options" },
+    "tile.download": { "page": "project", "role": "menuitem", "name": "Download" },
+    "download.size.1K": { "page": "project", "role": "menuitem", "name": { "regex": "^1K" } },
+    "download.size.2K": { "page": "project", "role": "menuitem", "name": { "regex": "^2K" } },
+
     "settings.kind.image": { "page": "settings", "role": "radio", "name": "Image" },
     "settings.kind.video": { "page": "settings", "role": "radio", "name": "Video" },
     "settings.mode.frames": { "page": "settings", "role": "radio", "name": "Frames" },
@@ -72,6 +79,8 @@
     "picker.upload": { "page": "picker", "role": "button", "name": "Upload media" },
     "picker.assetList": { "page": "picker", "role": "listbox", "name": "Asset list" },
     "picker.addToPrompt": { "page": "picker", "role": "button", "name": "Add to prompt" },
+    "picker.option": { "page": "picker", "role": "option" },
+    "picker.projectList": { "page": "picker", "role": "listbox", "name": "Select project" },
 
     "editor.addClip": { "page": "editor", "role": "button", "name": "Add clip" },
     "editor.menu.addClip": { "page": "editor", "role": "menuitem", "name": "Add clip" },
@@ -105,6 +114,8 @@
     "pageSettings.showDetails": { "page": "pageSettings", "role": "switch", "name": "Show tile details toggle" },
     "pageSettings.clearPrompt": { "page": "pageSettings", "role": "switch", "name": "Clear prompt on submit toggle" }
   },
+  "picker": { "uploading": "^Uploading " },
+  "tile": { "assetInfo": "^Created " },
   "settingsGroups": {
     "kind": { "has": "settings.kind.image" },
     "image.ratio": { "has": "settings.ratio.1:1" },

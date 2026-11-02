@@ -5,16 +5,13 @@ import { isFlowHost } from '../browser/host.js';
 import { locate } from '../flow/contract.js';
 import { getCapabilities } from '../engine/capabilities.js';
 import { allRuns } from '../engine/job-store.js';
-import { monthTotal, todayQuota } from '../engine/ledger.js';
+import { lastBalance, monthTotal, recordBalance, todayQuota } from '../engine/ledger.js';
 import { get } from '../utils/config.js';
 import { takeScreenshot } from '../utils/screenshots.js';
 
 const BALANCE_TIMEOUT_MS = 2000;
 const BALANCE_MAX_AGE_MS = 60000; // opening the panel is visible to the owner, so not on every poll
 const IDLE = ['queued', 'done', 'failed', 'cancelled', 'needs_user', 'paused'];
-
-let lastBalance = null;
-let lastBalanceAt = 0;
 
 // Reads the account panel. null when it isn't there: status must not fail on this.
 export async function getBalance(page, timeout = BALANCE_TIMEOUT_MS) {
@@ -55,7 +52,7 @@ export async function handleFlowStatus(args = {}) {
     pageTitle: null,
     queue: queueStatus(),
     ledger: ledgerStatus(),
-    balance: lastBalance,
+    balance: lastBalance()?.credits ?? null,
   };
 
   if (args.busy) {
@@ -73,11 +70,11 @@ export async function handleFlowStatus(args = {}) {
         status.account = check.account;
         status.accountStatus = check.status;
       }
-      if (status.flowAccessible && !status.oauthRequired && Date.now() - lastBalanceAt > BALANCE_MAX_AGE_MS) {
+      const seenAt = Date.parse(lastBalance()?.at ?? 0);
+      if (status.flowAccessible && !status.oauthRequired && Date.now() - seenAt > BALANCE_MAX_AGE_MS) {
         const balance = await getBalance(page);
         if (balance !== null) {
-          lastBalance = balance;
-          lastBalanceAt = Date.now();
+          recordBalance(balance);
           status.balance = balance;
         }
       }

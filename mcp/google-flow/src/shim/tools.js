@@ -54,6 +54,7 @@ export const TOOLS = [
     count: { type: 'integer', default: 1, enum: [1, 2, 3, 4] },
     size: { type: 'string', default: '1K', enum: ['1K', '2K'] },
     ingredients: INGREDIENTS,
+    max_generation_retries: { type: 'integer', default: 1, description: 'How many times a generation Flow failed is tried again by itself. Each try spends.' },
     ...SPEND,
   }, ['prompt'])),
   tool('flow_generate_video', 'Queue a video generation. CREDITS.', WRITE, OBJECT({
@@ -119,5 +120,5 @@ export const TOOLS = [
 
 export const INSTRUCTIONS = 'Drives Google Flow through one shared local engine. flow_connect, then flow_capabilities. '
   + 'flow_generate_image without auto_confirm is a free dry run; with auto_confirm: true it queues and returns job_id at once. '
-  + 'Then loop flow_wait until finished is true. Past submitted a job never spends again without flow_job_control retry_failed. '
+  + 'Then loop flow_wait until finished is true. Past submitted a job spends again only by flow_job_control retry_failed or within max_generation_retries (images default 1). '
   + 'Never try to get past verification or limits: tell the owner. Read the flow://guide resource for the full workflow.';

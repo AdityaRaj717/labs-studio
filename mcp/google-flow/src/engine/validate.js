@@ -48,6 +48,10 @@ export function validateImage(args) {
   if (!caps.sizes.includes(size)) {
     fail(COMBINATION_NOT_SUPPORTED, `image size ${size} is not available on Pro`, caps.sizes, `Use one of: ${caps.sizes.join(', ')}.`);
   }
+  const retries = args.max_generation_retries;
+  if (retries !== undefined && (!Number.isInteger(retries) || retries < 0)) {
+    fail(INVALID_PARAMS, 'max_generation_retries must be a whole number, 0 or more', undefined, 'Pass 0 to never spend on a retry.');
+  }
   return { ...job, kind: 'image', size, ingredients: checkIngredients(args.ingredients) };
 }
 

@@ -396,17 +396,17 @@ test('an adapter that never stops holds the queue rather than sharing the tab', 
   assert.equal(ran.length, 1);
 });
 
-test('a legacy run that never ends holds the queue, and resume refuses until it ends', { timeout: 20000 }, async () => {
-  const { createLegacyAdapter } = await import('../src/engine/worker.js');
+test('an adapter that never ends holds the queue, and resume refuses until it ends', { timeout: 20000 }, async () => {
   const release = gate();
   let calls = 0;
   const engine = await engineWith({
     settleMs: 100,
-    adapter: createLegacyAdapter(async () => {
+    adapter: async (job, ctx) => {
+      ctx.submit(0);
       calls++;
       await release.opened;
-      return { status: 'success', files: [] };
-    }),
+      return { outputs: [] };
+    },
   });
   const one = (await rpc(engine, 'flow_generate_image', image())).result.job_id;
   const two = (await rpc(engine, 'flow_generate_image', image({ prompt: 'two' }))).result.job_id;
@@ -469,7 +469,7 @@ test('retry_failed starts a new paid attempt only on the explicit call', { timeo
       return { outputs: [] };
     },
   });
-  const { result: { job_id } } = await rpc(engine, 'flow_generate_image', image());
+  const { result: { job_id } } = await rpc(engine, 'flow_generate_image', image({ max_generation_retries: 0 }));
   await until(async () => (await stateOf(engine, job_id)) === 'failed');
   await new Promise((r) => setTimeout(r, 100));
   assert.equal(runs, 1);
@@ -671,55 +671,6 @@ test('page navigated by a person yields a clear failure, not a wrong download', 
     assert.equal(await stateOf(engine, two), 'queued');
   } finally {
     await engine.stop();
-    await browser.close();
-  }
-});
-
-test('the old image flow, once in its project, fails clearly when a person navigates away', { timeout: 90000 }, async () => {
-  const { legacyAdapter } = await import('../src/engine/worker.js');
-  const { setPage, setConnected } = await import('../src/browser/connect.js');
-  const { browser, page, engine } = await browserEngine(legacyAdapter, { settleMs: 100 });
-  setPage(page);
-  setConnected(true);
-  process.env.FLOW_TEST_HOST = new URL(flow.url).host;
-  try {
-    const one = (await rpc(engine, 'flow_generate_image', image())).result.job_id;
-    const two = (await rpc(engine, 'flow_generate_image', image({ prompt: 'two' }))).result.job_id;
-    await until(() => page.listenerCount('framenavigated') > 0, 30000); // pinned: the flow is in its project
-    await page.goto(`${flow.url}/`);
-    await until(async () => (await stateOf(engine, one)) === 'failed');
-    const failed = (await rpc(engine, 'flow_job_status', { job_id: one })).result;
-    assert.equal(failed.error.error_code, 'FLOW_PAGE_NOT_FOUND');
-    assert.equal(await stateOf(engine, two), 'queued');
-    assert.ok(engine.worker.status().paused);
-  } finally {
-    delete process.env.FLOW_TEST_HOST;
-    setConnected(false);
-    setPage(null);
-    await engine.stop();
-    await browser.close();
-  }
-});
-
-test('handleGenerateImage with wait_for_run settles with the run, not with wait_ms', { timeout: 60000 }, async () => {
-  const { handleGenerateImage } = await import('../src/tools/generate-image.js');
-  const { jobQueue } = await import('../src/queue/job-queue.js');
-  const { setPage, setConnected } = await import('../src/browser/connect.js');
-  await until(() => !jobQueue.getCurrentJob(), 30000); // an earlier abandoned old-flow run must be over
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
-  const page = await browser.newPage();
-  await page.goto(`${flow.url}/project/one`);
-  setPage(page);
-  setConnected(true);
-  try {
-    const run = handleGenerateImage({ prompt: 'p', auto_confirm: true, wait_ms: 10, wait_for_run: true }).then((r) => r, (e) => e);
-    const outcome = await Promise.race([run, new Promise((r) => { setTimeout(r, 500, 'pending'); })]);
-    assert.equal(outcome, 'pending');
-    await browser.close();
-    assert.ok((await run) instanceof Error);
-  } finally {
-    setConnected(false);
-    setPage(null);
     await browser.close();
   }
 });

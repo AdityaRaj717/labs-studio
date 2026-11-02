@@ -8,7 +8,9 @@
   <div role="textbox" contenteditable aria-label="Editable text">spike</div>
   <button>Add media menu</button> <button>Settings</button> <button>Account details</button>
   <button aria-label="Google Account: Fake User (fake@example.com), Google membership"></button>
-  <flow-grid-tile-container role="group" aria-label="Red paper boat on lake"><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="Tile displaying a user's image"></flow-grid-tile-container>
+  <div id="grid"></div>
+  <div id="info"></div>
+  <div id="notices"></div>
   <div role="textbox" contenteditable aria-label="What do you want to create?" id="prompt"></div>
   <div id="composer"></div>
 </main>
@@ -18,23 +20,36 @@
   const F = window.FAKE;
   const IMAGE_RATIOS = ['16:9', '4:3', '1:1', '3:4', '9:16'];
   const VIDEO_RATIOS = ['16:9', '9:16'];
-  const IMAGE_MODELS = ['Nano Banana 2.1', 'Nano Banana Pro', 'Nano Banana 2 Lite'];
+  // The emoji prefix is live Flow's: exact-name lookups must fail here as they did there.
+  const IMAGE_MODELS = ['🍌 Nano Banana 2.1', '🍌 Nano Banana Pro', '🍌 Nano Banana 2 Lite'];
   const VIDEO_MODELS = ['Omni 1.1 Flash', 'Veo 3.1 - Lite', 'Veo 3.1 - Fast', 'Veo 3.1 - Quality'];
   // Costs at x1, from docs/flow-ui-findings.md.
   const VEO_COST = { 'Veo 3.1 - Lite': 10, 'Veo 3.1 - Fast': 20, 'Veo 3.1 - Quality': 100 };
   const OMNI_COST = { '720p': { '4s': 7, '6s': 10, '8s': 12, '10s': 15 }, '360p': { '4s': 4, '6s': 5, '8s': 6, '10s': 7 } };
   const VIDEO_DEFAULTS = { model: 'Omni 1.1 Flash', ratio: '16:9', resolution: '360p', duration: '4s' };
-  const IMAGE_DEFAULTS = { model: 'Nano Banana 2.1', ratio: '1:1' };
+  const IMAGE_DEFAULTS = { model: IMAGE_MODELS[0], ratio: '1:1' };
+  const SIZES_1K = { '16:9': [1376, 768], '4:3': [1200, 900], '1:1': [1024, 1024], '3:4': [900, 1200], '9:16': [768, 1376] };
 
   const s = {
     ...IMAGE_DEFAULTS, kind: 'Image', mode: 'Ingredients', resolution: '360p', duration: '4s', count: 'x1',
-    chat: !!F.chatOpen, panel: null, menu: null,
+    chat: !!F.chatOpen, agent: !!F.agentOn, panel: null, menu: null, chips: F.ingredient ? 1 : 0, search: '', tab: 'All', selected: null, added: false,
+    assets: [{ name: 'Red paper boat on lake', type: 'Image' }, { name: 'y0 narrator', type: 'Character' }],
+    // A saved Character sits among the results, as it does live.
+    tiles: [
+      { id: 'old-1', label: 'Red paper boat on lake', state: 'done', model: IMAGE_MODELS[0], ratio: '1:1' },
+      { label: 'y0 narrator', state: 'character' },
+      { id: 'old-2', label: 'Older boat', state: 'done', model: IMAGE_MODELS[0], ratio: '1:1' },
+    ],
+    active: null, info: '', notice: '',
   };
   if (F.kind === 'video') Object.assign(s, VIDEO_DEFAULTS, { kind: 'Video', mode: 'Frames' });
+  let seq = 0;
+  let failuresLeft = F.failOnce ? 1 : 0;
 
   const isVideo = () => s.kind === 'Video';
   const isOmni = () => s.model.startsWith('Omni');
   function quote() {
+    if (F.quote) return F.quote;
     if (!isVideo()) return 0;
     const base = isOmni() ? OMNI_COST[s.resolution][s.duration] : VEO_COST[s.model];
     return base * Number(s.count.slice(1));
@@ -60,12 +75,21 @@
       <span>Generating will use</span> <a href="#credits">${quote()} credits</a>
     </div>`;
   }
+  function assetOptions() {
+    const shown = s.assets.filter((a) => (s.tab === 'Characters' ? a.type === 'Character' : true)
+      && (!s.search || a.name.includes(s.search)));
+    return shown.map((a) => {
+      const name = a.uploading ? `Uploading ${a.name} Image` : s.tab === 'Characters' ? a.name : `${a.name} ${a.type}`;
+      return `<div role="option" aria-label="${name}" data-asset="${a.name}">${name}</div>`;
+    }).join('');
+  }
   const pickerPanel = () => `<div class="cdk-overlay-backdrop" data-act="closePanel"></div><div class="panel">
-    <div role="tablist">${['All', 'Images', 'Videos', 'Voices', 'Characters', 'Avatars', 'Uploads'].map((t) => `<div role="tab">${t}</div>`).join('')}</div>
+    <div role="tablist">${['All', 'Images', 'Videos', 'Voices', 'Characters', 'Avatars', 'Uploads'].map((t) => `<div role="tab" data-tab="${t}">${t}</div>`).join('')}</div>
     <div role="combobox" aria-label="Select project">spike</div>
-    <input aria-label="Search assets"><button>Upload media</button>
-    <div role="listbox" aria-label="Asset list"><div role="option">Red paper boat on lake Image</div></div>
-    <button>Add to prompt</button></div>`;
+    <div role="listbox" aria-label="Select project"><div role="option" aria-label="Other project">Other project</div></div>
+    <input aria-label="Search assets" id="search" value="${s.search}"><button data-act="upload">Upload media</button>
+    <div role="listbox" aria-label="Asset list" id="assets">${assetOptions()}</div>
+    ${s.added ? '' : '<button data-act="addToPrompt">Add to prompt</button>'}</div>`;
   const accountPanel = () => `<div role="dialog" class="panel" aria-label="Account settings">
     <button data-act="closePanel">Close account panel</button><a href="#balance">1,025 Google Flow credits</a></div>`;
   const PANELS = { settings: settingsPanel, picker: pickerPanel, account: accountPanel };
@@ -75,11 +99,30 @@
     model: () => (isVideo() ? VIDEO_MODELS : IMAGE_MODELS).map((m) => `<div role="menuitem" data-set="model=${m}">${m}</div>`).join(''),
     page: () => SWITCHES.map((n) => `<div>${n}<button role="switch" aria-checked="false" aria-label="${n} toggle"></button></div>`).join(''),
     addMedia: () => '<div role="menuitem">Create character</div>',
+    tile: () => `<div role="menuitem">Add to prompt</div><div role="menuitem" data-act="sizes">Download</div>${MENUS.sizes()}`,
+    sizes: () => s.sizesOpen
+      ? '<div role="menuitem" data-size="1">1K Original size</div><div role="menuitem" data-size="2">2K Upscaled</div><div role="menuitem" aria-disabled="true">4K Upscaled</div>'
+      : '',
   };
   function menuLayer() {
     if (!s.menu) return '';
     const backdrop = F.stuckMenu ? '' : '<div class="cdk-overlay-backdrop" data-act="closeMenu"></div>';
     return `${backdrop}<div role="menu" class="panel">${MENUS[s.menu]()}</div>`;
+  }
+
+  function tileBody(t) {
+    if (t.state === 'character') return `<img alt="Character thumbnail" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">${t.label}`;
+    if (t.state === 'running') return `${t.pct}% ${t.prompt}`;
+    if (t.state === 'failed') return t.text;
+    return `<img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="Tile displaying a user's image" data-media-id="${t.id}">
+      <button data-act="tileMenu" data-id="${t.id}" aria-label="More options"></button>
+      <button data-act="info" data-id="${t.id}" aria-label="${t.label}"></button>`;
+  }
+  function renderGrid() {
+    document.getElementById('grid').innerHTML = s.tiles.map((t) =>
+      `<flow-grid-tile-container role="group" aria-label="${t.label}">${tileBody(t)}</flow-grid-tile-container>`).join('');
+    document.getElementById('info').textContent = s.info;
+    document.getElementById('notices').innerHTML = s.notice;
   }
 
   function composer() {
@@ -88,10 +131,10 @@
       ${frames
         ? '<button class="empty-chip" data-act="picker">Start</button><button>Swap first and last frames</button><button class="empty-chip" data-act="picker">End</button>'
         : '<button data-act="picker" aria-label="Add ingredients to the prompt box">+</button>'}
-      ${F.ingredient ? '<flow-ingredient-chip><button aria-label="Ingredient" aria-busy="false"></button></flow-ingredient-chip>' : ''}
-      ${s.chat ? '<button data-act="closeChat">Close</button>' : '<button aria-pressed="false">Agent</button>'}
+      ${'<flow-ingredient-chip><button aria-label="Ingredient" aria-busy="false"></button></flow-ingredient-chip>'.repeat(s.chips)}
+      ${s.chat ? '<button data-act="closeChat">Close</button>' : `<button data-act="toggleAgent" aria-pressed="${s.agent}">Agent</button>`}
       <button data-act="settings" aria-label="Settings trigger">${triggerText()}</button>
-      ${F.noStart ? '' : '<button id="start" disabled>Start generation</button>'}
+      ${F.noStart ? '' : '<button id="start" data-act="start" disabled>Start generation</button>'}
       ${F.running ? '<button>Stop</button>' : ''}
       ${F.promo ? '<button data-act="dismissPromo">Got it</button>' : ''}`;
   }
@@ -101,16 +144,71 @@
     document.getElementById('overlay').innerHTML = (s.panel ? PANELS[s.panel]() : '') + menuLayer();
     const start = document.getElementById('start');
     if (start) start.disabled = !document.getElementById('prompt').textContent.trim();
+    renderGrid();
+  }
+
+  function startGeneration() {
+    const box = document.getElementById('prompt');
+    const prompt = box.textContent.trim();
+    box.textContent = '';
+    s.chips = 0;
+    if (F.quotaToast) s.notice = '<div><span>You have reached your daily limit</span><button>Dismiss</button></div>';
+    if (F.captcha) s.notice = "<p>Please verify you're human to continue</p>";
+    if (F.noTile || F.quotaToast || F.captcha) return;
+    const count = F.oneImage ? 1 : Number(s.count.slice(1));
+    const failing = F.failTile || failuresLeft-- > 0;
+    const batch = Array.from({ length: count }, () => ({
+      id: `m${++seq}`, label: prompt, prompt, state: 'running', pct: 0, model: s.model, ratio: s.ratio,
+    }));
+    s.tiles.unshift(...batch);
+    const timer = setInterval(() => {
+      for (const t of batch) {
+        t.pct += 25;
+        if (t.pct < 100) continue;
+        clearInterval(timer);
+        Object.assign(t, failing ? { state: 'failed', text: 'Something went wrong with this generation' } : { state: 'done', label: 'A finished title' });
+      }
+      renderGrid();
+    }, F.genTickMs || 100);
+  }
+
+  function attach() {
+    s.chips += 1;
+    s.selected = null;
+  }
+
+  function upload() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.addEventListener('change', () => {
+      const name = input.files[0].name;
+      const asset = { name, type: 'Image', uploading: true };
+      s.assets.unshift(asset);
+      render();
+      if (F.uploadStalls) return;
+      setTimeout(() => { asset.uploading = false; render(); }, 100);
+    });
+    input.click();
   }
 
   const ACTIONS = {
     settings: () => { s.panel = s.panel === 'settings' ? null : 'settings'; },
-    picker: () => { s.panel = 'picker'; },
+    picker: () => { Object.assign(s, { panel: 'picker', search: '', tab: 'All', added: false }); },
     closePanel: () => { s.panel = null; },
-    closeMenu: () => { s.menu = null; },
+    closeMenu: () => { s.menu = null; s.sizesOpen = false; },
     modelMenu: () => { s.menu = 'model'; },
     closeChat: () => { s.chat = false; },
+    toggleAgent: () => { if (!F.stuckAgent) s.agent = !s.agent; },
     dismissPromo: () => { F.promo = false; },
+    start: startGeneration,
+    upload,
+    addToPrompt: attach,
+    tileMenu: (el) => { s.menu = 'tile'; s.active = el.dataset.id; },
+    sizes: () => { s.sizesOpen = true; },
+    info: (el) => {
+      const t = s.tiles.find((x) => x.id === el.dataset.id);
+      s.info = s.info ? '' : `Created Nov 2, 2026 ${t.model} ${t.ratio}`;
+    },
   };
   const NAMED_BUTTONS = {
     Settings: () => { s.menu = 'page'; },
@@ -118,19 +216,41 @@
     'Account details': () => { s.panel = 'account'; },
   };
   function setField(field, value) {
-    s[field] = value;
     s.menu = null;
+    if (F.stickyRatio && field === 'ratio') return;
+    s[field] = value;
     if (field === 'kind') Object.assign(s, value === 'Video' ? VIDEO_DEFAULTS : IMAGE_DEFAULTS);
+  }
+  function download(scale) {
+    const t = s.tiles.find((x) => x.id === s.active);
+    const [w, h] = SIZES_1K[t.ratio];
+    const a = document.createElement('a');
+    a.href = `/__asset?w=${w * scale}&h=${h * scale}&id=${t.id}`;
+    a.download = '';
+    a.click();
+    ACTIONS.closeMenu();
   }
 
   document.addEventListener('click', (e) => {
-    const el = e.target.closest('[data-act],[data-set]');
+    const el = e.target.closest('[data-act],[data-set],[data-size],[data-asset],[data-tab]');
     const named = NAMED_BUTTONS[e.target.closest('button')?.textContent.trim()];
-    if (el?.dataset.act) ACTIONS[el.dataset.act]();
+    if (el?.dataset.act) ACTIONS[el.dataset.act](el);
     else if (el?.dataset.set) setField(...el.dataset.set.split(/=(.*)/s));
-    else if (named) named();
+    else if (el?.dataset.size) download(Number(el.dataset.size));
+    else if (el?.dataset.tab) s.tab = el.dataset.tab;
+    else if (el?.dataset.asset) {
+      s.selected = el.dataset.asset;
+      // Characters and attachNow behave as live: one click attaches and Add to prompt goes away.
+      if (F.attachNow || s.tab === 'Characters') { s.added = true; attach(); }
+    } else if (named) named();
     else return;
     render();
+  });
+  document.addEventListener('input', (e) => {
+    if (e.target.id === 'search') {
+      s.search = e.target.value;
+      document.getElementById('assets').innerHTML = assetOptions();
+    }
   });
   document.getElementById('prompt').addEventListener('input', render);
   render();

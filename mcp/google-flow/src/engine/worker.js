@@ -1,7 +1,7 @@
 import { closeBrowser, getBrowser, getPage, isBrowserConnected } from '../browser/connect.js';
 import { launchFlowChrome } from '../browser/launch-profile.js';
 import { detectBlock } from '../flow/blocks.js';
-import { handleGenerateImage } from '../tools/generate-image.js';
+import { runImageJob } from '../flow/image.js';
 import { createError, ERROR_CLASSES, ErrorCodes, toErrorPayload } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 import { takeScreenshot } from '../utils/screenshots.js';
@@ -10,7 +10,7 @@ import { recordSpend } from './ledger.js';
 import { withTab } from './tab-lock.js';
 
 const FINISH = ['downloading', 'verifying', 'done'];
-const RUNNABLE = ['queued', 'preparing'];
+const RUNNABLE = ['queued', 'preparing', 'downloading']; // downloading only ever comes back as a retry of the download
 // Someone else moved or closed the tab: going on would fail every job or save the wrong one.
 const STOPS_QUEUE = [ErrorCodes.BROWSER_NOT_CONNECTED, ErrorCodes.FLOW_PAGE_NOT_FOUND];
 const SETTLE_MS = 600000;
@@ -34,36 +34,13 @@ export const chromeSession = {
   },
 };
 
-const LEGACY_MODELS = { banana21: 'Nano Banana 2.1', bananaPro: 'Nano Banana Pro', banana2Lite: 'Nano Banana 2 Lite' };
-
-// shortcut: the old image flow clicks Start inside one call, so the credit line is written before it and a failure
-// before the click still reads credits_at_risk. Task 9 replaces this with the direct composer.
-export const createLegacyAdapter = (generate) => async (job, ctx) => {
-  const { spec } = job;
-  if (spec.kind !== 'image') throw createError(ErrorCodes.NOT_IMPLEMENTED, `${spec.kind} jobs are not built yet`);
-  const pick = (key) => spec.ingredients.flatMap((item) => (item?.[key] ? [item[key]] : []));
-  ctx.submit(0);
-  const result = await generate({
-    prompt: spec.prompt,
-    model: LEGACY_MODELS[spec.model],
-    ratio: spec.ratio,
-    count: spec.count,
-    download_size: spec.size,
-    auto_confirm: true,
-    reference_images: spec.ingredients.flatMap((item) => (typeof item === 'string' ? [item] : item?.file ? [item.file] : [])),
-    characters: pick('character'),
-    scenes: pick('scene'),
-    project_url: spec.project_url,
-    project_name: spec.project_name,
-    output_folder: `${job.run.dir}/images`,
-    wait_for_run: true,
-    onProjectOpen: ctx.pinPage,
-  });
-  if (result.status !== 'success') throw createError(ErrorCodes.GENERATION_TIMEOUT, `Image job ended as ${result.status}`);
-  return { outputs: result.files ?? [] };
+export const flowAdapter = (job, ctx) => {
+  if (job.spec.kind !== 'image') throw createError(ErrorCodes.NOT_IMPLEMENTED, `${job.spec.kind} jobs are not built yet`);
+  return runImageJob(ctx, job);
 };
 
-export const legacyAdapter = createLegacyAdapter(handleGenerateImage);
+// Spec 6.5: a failed generation retries by itself only within this allowance, since each retry spends.
+const retriesAllowed = ({ spec }) => spec.max_generation_retries ?? (spec.kind === 'image' ? 1 : 0);
 
 export function createWorker({ adapter, session, pacer, settleMs = SETTLE_MS }) {
   let paused = null;
@@ -103,17 +80,22 @@ export function createWorker({ adapter, session, pacer, settleMs = SETTLE_MS }) 
     if (kind === 'owner') {
       transition(job, 'needs_user', { error: payload });
       pause(code);
+      await page?.bringToFront().catch(() => {});
     } else if (kind === 'stop_run') {
       if (job.state !== 'queued') transition(job, 'paused', { error: payload });
       pause(code);
     } else {
       transition(job, 'failed', { error: payload });
       if (STOPS_QUEUE.includes(code)) pause(code);
+      // Through the store, so the attempt is counted and the ledger keys a new spend.
+      if (code === ErrorCodes.FLOW_GENERATION_FAILED && (job.attempt ?? 1) <= retriesAllowed(job)) {
+        transition(job, 'queued', undefined, { retry: true });
+      }
     }
   }
 
-  // The old flow takes no signal and may still be clicking after its job ended, so the tab
-  // isn't handed on until it stops. One that never stops holds the queue for the owner.
+  // An adapter may still be clicking after its job ended, so the tab isn't handed on until
+  // it stops. One that never stops holds the queue for the owner.
   async function waitForAdapter(running) {
     let timer;
     const expired = new Promise((resolve) => {
@@ -147,6 +129,7 @@ export function createWorker({ adapter, session, pacer, settleMs = SETTLE_MS }) 
 
     const ctx = {
       signal,
+      get page() { return page; },
       // Durable before return: call right before clicking Start.
       submit(credits = 0) {
         if (signal.aborted) throw createError(ErrorCodes.INTERNAL_ERROR, 'Job was stopped; Start must not be clicked');

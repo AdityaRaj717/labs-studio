@@ -5,7 +5,7 @@ import { logger } from '../utils/logger.js';
 import { jobEvents, recover } from './job-store.js';
 import { pacer as realPacer } from './pacer.js';
 import { createRpc, failLostJob } from './rpc.js';
-import { chromeSession, createWorker, legacyAdapter } from './worker.js';
+import { chromeSession, createWorker, flowAdapter } from './worker.js';
 
 const HOST = '127.0.0.1';
 const MAX_BODY = 1024 * 1024;
@@ -64,7 +64,7 @@ function send(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
-export async function listenEngine({ adapter = legacyAdapter, session = chromeSession, pacer = realPacer, settleMs, onShutdown } = {}) {
+export async function listenEngine({ adapter = flowAdapter, session = chromeSession, pacer = realPacer, settleMs, onShutdown } = {}) {
   const token = randomBytes(32).toString('hex');
   const tokenDigest = digest(`Bearer ${token}`);
   const secrets = new Map();

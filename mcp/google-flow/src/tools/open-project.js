@@ -1,6 +1,5 @@
 import { logger } from '../utils/logger.js';
 import { getPage } from '../browser/connect.js';
-import { jobQueue } from '../queue/job-queue.js';
 import { FlowError, ErrorCodes } from '../utils/errors.js';
 import { takeScreenshot } from '../utils/screenshots.js';
 import { contract, locate } from '../flow/contract.js';
@@ -111,10 +110,8 @@ async function setTitle(page, name) {
  * Returns { status, url, created, title }. PROJECT_NOT_FOUND when gone and not creating.
  */
 export async function handleOpenProject(args = {}) {
-  const job = jobQueue.createJob('open_project', { url: args.url, name: args.name });
   const page = getPage();
   try {
-    jobQueue.startJob(job.id);
     const create = args.create_if_missing !== false;
     let url = null;
     let created = false;
@@ -132,12 +129,9 @@ export async function handleOpenProject(args = {}) {
     }
     const title = args.name ? await setTitle(page, String(args.name).trim())
       : (await locate(page, 'project.title').first().inputValue().catch(() => ''));
-    const result = { status: 'success', url, created, title };
-    jobQueue.completeJob(job.id, result);
-    return result;
+    return { status: 'success', url, created, title };
   } catch (err) {
     await takeScreenshot(page, 'open-project-error').catch(() => {});
-    jobQueue.failJob(job.id, err);
     throw err;
   }
 }
@@ -167,16 +161,11 @@ async function readProjects(page) {
 }
 
 async function withJob(type, params, fn) {
-  const job = jobQueue.createJob(type, params);
   const page = getPage();
   try {
-    jobQueue.startJob(job.id);
-    const result = await fn(page);
-    jobQueue.completeJob(job.id, result);
-    return result;
+    return await fn(page);
   } catch (err) {
     await takeScreenshot(page, `${type}-error`).catch(() => {});
-    jobQueue.failJob(job.id, err);
     throw err;
   }
 }

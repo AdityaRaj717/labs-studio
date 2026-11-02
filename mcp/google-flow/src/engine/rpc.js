@@ -34,14 +34,14 @@ function errorView(error) {
   return { error_code, message: cut(message), credits_at_risk, next_action, retryable, screenshot };
 }
 
-// Progress is the engine's stage only until Task 9 reads Flow's own number.
+// Spec 6.2: Flow's own number while it shows one, otherwise only the engine's stage.
 const jobView = (job) => ({
   job_id: job.id,
   run_id: job.run.id,
   state: job.state,
   attempt: job.attempt ?? 1,
   prompt: cut(job.spec.prompt, 80),
-  progress: { source: 'phase', stage: job.state },
+  progress: job.state === 'generating' && job.progress ? job.progress : { source: 'phase', stage: job.state },
   ...(job.data.outputs ? { outputs: job.data.outputs } : {}),
   ...(job.data.error ? { error: errorView(job.data.error) } : {}),
 });
@@ -141,7 +141,7 @@ export function createRpc({ worker, session, hub }) {
     if (auto_confirm !== true) return { status: 'ready_for_confirmation', estimate: estimated, request: { ...spec, prompt: cut(spec.prompt) } };
     checkBudget(estimated, max_credits, ledger);
     const run = createRun({ name: spec.prompt, outputRoot: output_root, flowProjectUrl: spec.project_url });
-    const job = enqueue(run, spec, idempotency_key);
+    const job = enqueue(run, { ...spec, max_credits }, idempotency_key);
     worker.kick();
     return { job_id: job.id, run_id: run.id, state: job.state, estimate: estimated };
   }
@@ -150,6 +150,13 @@ export function createRpc({ worker, session, hub }) {
   function resumeJob(job) {
     transition(job, job.heldFrom);
     if (job.submittedAt) failLostJob(job);
+  }
+
+  // Spec 6.1: a download or disk failure retries the download only, never the generation.
+  function retryJob(job) {
+    const { error, media } = job.data;
+    if (error?.error_code === ErrorCodes.DOWNLOAD_FAILED && media) transition(job, 'downloading', { error: null, saved: error.details?.saved ?? [] });
+    else transition(job, 'queued', undefined, { retry: true });
   }
 
   function control({ action, job_id, run_id }) {
@@ -176,7 +183,7 @@ export function createRpc({ worker, session, hub }) {
       }
     } else if (action === 'retry_failed') {
       changed = pick(['failed']);
-      changed.forEach((job) => transition(job, 'queued', undefined, { retry: true }));
+      changed.forEach(retryJob);
       worker.resume();
     } else {
       throw invalid(`Unknown action: ${action}`);

@@ -189,9 +189,6 @@ google-flow-browser-mcp/
 │   │
 │   ├── 📁 tools/                   # All MCP tool implementations
 │   │   ├── flow-status.js          # Connection status
-│   │   ├── generate-image.js       # Image generation
-│   │   ├── generate-video.js       # Video generation (setup only)
-│   │   ├── download-latest.js      # Download generated files
 │   │   ├── create-character.js     # List / create characters (people and places)
 │   │   ├── import-character.js     # Copy a character from another project
 │   │   ├── create-scene.js         # List / create scenes (places kept as characters)
@@ -199,14 +196,10 @@ google-flow-browser-mcp/
 │   │   ├── grid-architect.js       # Batch shot generation
 │   │   └── use-flow-tool.js        # Generic tool opener
 │   │
-│   ├── 📁 queue/                   # Job management
-│   │   └── job-queue.js            # Single-job queue
-│   │
 │   └── 📁 utils/                   # Helpers
 │       ├── config.js               # Config loader
 │       ├── logger.js               # Structured logging
 │       ├── errors.js               # Error codes & types
-│       ├── file-manager.js         # File download/save
 │       └── screenshots.js          # Screenshot capture
 │
 └── 📂 output/                      # Generated files land here

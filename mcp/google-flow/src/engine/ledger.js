@@ -8,16 +8,30 @@ import { readStateFile, writeFileAtomic } from './run-folder.js';
 const ledgerFile = () => path.join(getDataDir(), 'ledger.json');
 const today = () => new Date().toLocaleDateString('sv'); // local YYYY-MM-DD
 
-function spends() {
+function load() {
   const saved = readStateFile(ledgerFile());
-  if (saved === null) return {};
+  if (saved === null) return { spends: {} };
   if (typeof saved.spends !== 'object' || saved.spends === null) {
     throw createError(ErrorCodes.INTERNAL_ERROR, `Corrupt state file: ${ledgerFile()}`, {
       next_action: `Restore or repair ${ledgerFile()}; deleting it forgets what it recorded.`,
     });
   }
-  return saved.spends;
+  return saved;
 }
+
+const spends = () => load().spends;
+
+function save(state) {
+  fs.mkdirSync(getDataDir(), { recursive: true });
+  writeFileAtomic(ledgerFile(), JSON.stringify(state));
+}
+
+// Flow's own number, read from the account panel.
+export function recordBalance(credits) {
+  save({ ...load(), balance: { credits, at: new Date().toISOString() } });
+}
+
+export const lastBalance = () => load().balance ?? null;
 
 // Keyed by job and attempt: a paid retry counts, but re-recording one attempt after a crash doesn't; its first record stands.
 export function recordSpend(job, credits) {
@@ -25,13 +39,13 @@ export function recordSpend(job, credits) {
   if (!Number.isFinite(credits) || credits < 0) {
     throw createError(ErrorCodes.INVALID_PARAMS, `credits must be a number, 0 or more: ${credits}`);
   }
-  const all = spends();
+  const state = load();
+  const all = state.spends;
   const key = `${job.id}#${job.attempt ?? 1}`;
   if (all[key]) return all[key];
   const { kind, model, count } = job.spec ?? {};
   all[key] = { credits, model, images: kind === 'image' ? count : 0, day: today() };
-  fs.mkdirSync(getDataDir(), { recursive: true });
-  writeFileAtomic(ledgerFile(), JSON.stringify({ spends: all }));
+  save(state);
   return all[key];
 }
 

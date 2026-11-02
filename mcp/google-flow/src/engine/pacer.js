@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { setTimeout as sleep } from 'timers/promises';
 import { get, getDataDir } from '../utils/config.js';
-import { createError, ErrorCodes } from '../utils/errors.js';
+import { createError, ERROR_CLASSES, ErrorCodes } from '../utils/errors.js';
 import { readStateFile, writeFileAtomic } from './run-folder.js';
 
 const DEFAULT_MIN_GAP_MS = 8000;
@@ -62,3 +62,24 @@ function recordUse() {
 }
 
 export const pacer = { waitTurn, recordUse, capReached };
+
+const DEFAULT_BEAT_MS = 300;
+const RETRY_TRIES = 3;
+
+// Spec 6.6: +-25%.
+export const jitter = (ms) => ms * (0.75 + Math.random() * 0.5);
+
+// The pause between two interactions with Flow.
+export const beat = (page, ms = DEFAULT_BEAT_MS) => page.waitForTimeout(jitter(ms));
+
+// Spec 6.5: only the "retry safely" class, which repeats no spend; exponential backoff with jitter.
+export async function withRetry(fn, { baseMs = get('retryBaseMs', 1000), signal } = {}) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (attempt === RETRY_TRIES || ERROR_CLASSES[err.code]?.class !== 'retry') throw err;
+      await sleep(jitter(baseMs * 2 ** (attempt - 1)), undefined, { signal });
+    }
+  }
+}
