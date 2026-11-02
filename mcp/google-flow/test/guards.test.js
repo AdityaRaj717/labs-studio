@@ -127,6 +127,19 @@ test('recordSpend adds to the month and counts a job once', () => {
   assert.equal(ledger.monthTotal(), 15);
 });
 
+test('two paid attempts on one job both count, a repeated attempt does not', () => {
+  const images = { kind: 'image', model: 'bananaPro', count: 2 };
+  ledger.recordSpend(job('a'), 10);
+  ledger.recordSpend({ ...job('a'), attempt: 1 }, 10);
+  ledger.recordSpend({ ...job('a'), attempt: 2 }, 10);
+  ledger.recordSpend({ ...job('a'), attempt: 2 }, 10);
+  assert.equal(ledger.monthTotal(), 20);
+  ledger.recordSpend(job('i', images), 0);
+  ledger.recordSpend({ ...job('i', images), attempt: 2 }, 0);
+  ledger.recordSpend({ ...job('i', images), attempt: 2 }, 0);
+  assert.equal(ledger.todayQuota('bananaPro').used, 4);
+});
+
 test('monthTotal ignores other months and survives a torn temp file', () => {
   ledger.recordSpend(job('a'), 10);
   const saved = JSON.parse(fs.readFileSync(ledgerFile, 'utf8'));

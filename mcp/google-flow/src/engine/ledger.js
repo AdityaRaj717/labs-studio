@@ -19,19 +19,20 @@ function spends() {
   return saved.spends;
 }
 
-// Keyed by job, so recording twice after a crash or retry never double-counts: the first record stands.
+// Keyed by job and attempt: a paid retry counts, but re-recording one attempt after a crash doesn't; its first record stands.
 export function recordSpend(job, credits) {
   if (!job?.id) throw createError(ErrorCodes.INVALID_PARAMS, 'recordSpend needs a job with an id');
   if (!Number.isFinite(credits) || credits < 0) {
     throw createError(ErrorCodes.INVALID_PARAMS, `credits must be a number, 0 or more: ${credits}`);
   }
   const all = spends();
-  if (all[job.id]) return all[job.id];
+  const key = `${job.id}#${job.attempt ?? 1}`;
+  if (all[key]) return all[key];
   const { kind, model, count } = job.spec ?? {};
-  all[job.id] = { credits, model, images: kind === 'image' ? count : 0, day: today() };
+  all[key] = { credits, model, images: kind === 'image' ? count : 0, day: today() };
   fs.mkdirSync(getDataDir(), { recursive: true });
   writeFileAtomic(ledgerFile(), JSON.stringify({ spends: all }));
-  return all[job.id];
+  return all[key];
 }
 
 export function monthTotal() {
