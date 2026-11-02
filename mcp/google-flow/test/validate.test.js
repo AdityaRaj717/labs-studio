@@ -146,7 +146,7 @@ test('Omni 4s 360p estimates 4', () => assert.equal(credits({ model: 'omni', dur
 test('Veo Lite estimates 10', () => assert.equal(credits({ model: 'veoLite' }), 10));
 test('Veo Fast estimates 20', () => assert.equal(credits({ model: 'veoFast' }), 20));
 test('Veo Quality 100', () => assert.equal(credits({ model: 'veoQuality' }), 100));
-test('Omni edit estimates 40', () => assert.equal(credits({ model: 'omni', edit_from: 'clip' }), 40));
+test('Omni edit estimates 20', () => assert.equal(credits({ model: 'omni', edit_from: 'clip' }), 20));
 test('x2 doubles', () => assert.equal(credits({ model: 'omni', duration: 8, resolution: '720p', count: 2 }), 24));
 
 test('images estimate 0 credits and count against quota', () => {

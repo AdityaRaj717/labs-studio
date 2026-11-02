@@ -20,7 +20,7 @@
           "720p": { "4": 7, "6": 10, "8": 12, "10": 15 },
           "360p": { "4": 4, "6": 5, "8": 6, "10": 7 }
         },
-        "editCredits": 40
+        "editCredits": 20
       },
       "veoLite": {
         "modes": ["text", "frames", "ingredients", "extend"],
