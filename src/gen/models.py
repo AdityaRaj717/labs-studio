@@ -52,6 +52,13 @@ class Job:
     engine_key: str = ""  # idempotency key of the engine job this row is waiting on
     origin: str = ""  # "agent": an outside agent's job; the engine runs it, never this row's Start
     engine_job: str = ""  # the engine's job id behind an agent row
+    production_id: str = ""  # set on a Production's rows; the engine's review truth is what they show
+    item_id: str = ""
+    review: str = ""  # "", pending_review, approved, rejected or regenerating
+    take: int = 0  # the Take a verdict on this row names
+    latest_take: int = 0  # the newest Take, which a regeneration names
+    stale: str = ""  # the dependency IDs whose Approved Take changed since this row's
+    ref_labels: list[str] = field(default_factory=list)  # Cast names
 
     def reset(self) -> None:
         self.status = JobStatus.PENDING

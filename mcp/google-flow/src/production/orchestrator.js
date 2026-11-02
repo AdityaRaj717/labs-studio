@@ -60,7 +60,8 @@ export function createOrchestrator({ jobs, store = realStore, flow }) {
       take: take?.n ?? null,
       approved_take: item.approved_take,
       prompt: item.prompt,
-      file: (item.approved_take !== null ? item.takes.find(({ n }) => n === item.approved_take) : take)?.file ?? null,
+      // A Take under review shows itself, or the owner would approve what they never saw.
+      file: (item.approved_take !== null && item.state !== 'pending_review' ? item.takes.find(({ n }) => n === item.approved_take) : take)?.file ?? null,
       ref_names: names,
       stale,
       error: item.last_error,
@@ -384,7 +385,7 @@ export function createOrchestrator({ jobs, store = realStore, flow }) {
     const cost = item.estimate;
     const left = remaining(production);
     if (item.stage === 'animation' && production.budget.max_credits !== null && cost > left) {
-      throw createError(ErrorCodes.BUDGET_EXCEEDED, `${id} would cost ${cost} credits and ${left} are left after what is planned`, { credits: cost, remaining: left, next_action: 'Raise the cap with flow_job_control set_budget.' });
+      throw createError(ErrorCodes.BUDGET_EXCEEDED, `${id} would cost ${cost} credits and ${left} are left after what is planned`, { credits: cost, remaining: left, max_credits: production.budget.max_credits, run_id: entry.run.id, next_action: 'Raise the cap with flow_job_control set_budget.' });
     }
     const ready = { take: latest.n + 1, job_id: null, state: item.state, estimated_credits: cost };
     if (dry_run === true) return ready;

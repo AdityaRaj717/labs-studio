@@ -58,6 +58,13 @@ def job_to_row(job: Job) -> dict[str, Any]:
         "engine_key": job.engine_key,
         "origin": job.origin,
         "engine_job": job.engine_job,
+        "production_id": job.production_id,
+        "item_id": job.item_id,
+        "review": job.review,
+        "take": job.take,
+        "latest_take": job.latest_take,
+        "stale": job.stale,
+        "ref_labels": list(job.ref_labels),
     }
 
 
@@ -66,7 +73,8 @@ def row_to_job(row: dict[str, Any], index: int) -> Job:
         status = JobStatus(row.get("status", "pending"))
     except ValueError:
         status = JobStatus.PENDING
-    if status in (JobStatus.QUEUED, JobStatus.RUNNING):
+    production_id = str(row.get("production_id", ""))
+    if status in (JobStatus.QUEUED, JobStatus.RUNNING) and not production_id:  # the mirror refreshes those
         status = JobStatus.STOPPED  # the app closed mid-batch
     return Job(
         str(row.get("prompt", "")), index=index,
@@ -83,6 +91,13 @@ def row_to_job(row: dict[str, Any], index: int) -> Job:
         cast=[str(c) for c in row.get("cast", [])],
         scenes=[str(c) for c in row.get("scenes", [])],
         scene_refs=[Path(p) for p in row.get("scene_refs", [])],
+        production_id=production_id,
+        item_id=str(row.get("item_id", "")),
+        review=str(row.get("review", "")),
+        take=int(row.get("take", 0)),
+        latest_take=int(row.get("latest_take", 0)),
+        stale=str(row.get("stale", "")),
+        ref_labels=[str(c) for c in row.get("ref_labels", [])],
     )
 
 

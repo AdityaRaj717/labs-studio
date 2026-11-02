@@ -15,7 +15,7 @@ from src.gen.models import JobStatus
 from src.i18n import tr
 from src.ui.generator.prompt_model import (
     COL_CHARACTER, COL_INDEX, COL_OUTPUT, COL_PROGRESS, COL_PROMPT, COL_REFS, COL_SCENE, COL_STATUS,
-    STATUS_COLORS, THUMB_HEIGHT,
+    THUMB_HEIGHT, status_color,
 )
 
 IMPORT_SUFFIXES = {".txt", ".text", ".csv", ".xlsx", ".xlsm"}
@@ -33,9 +33,9 @@ class ProgressDelegate(QStyledItemDelegate):
         if value is None:
             return super().paint(painter, option, index)
         colors = theme.COLORS[theme.current_mode()]
-        status = index.model().job_at(index.row()).status
-        done_or_failed = status in (JobStatus.DONE, JobStatus.FAILED, JobStatus.STOPPED)
-        fill = QColor(STATUS_COLORS[status] if done_or_failed else colors["accent"])
+        job = index.model().job_at(index.row())
+        done_or_failed = job.status in (JobStatus.DONE, JobStatus.FAILED, JobStatus.STOPPED)
+        fill = QColor(status_color(job) if done_or_failed else colors["accent"])
 
         rect = option.rect.adjusted(8, 0, -8, 0)
         text_w = 40

@@ -2,11 +2,13 @@
 
 The manifests are the truth, so a run made while the app was closed shows on the next start.
 Engine events only say when to look again. Jobs the app started (key ``app:``) already have
-their row, and a Production's (key ``prod:``) belong to its own review list.
+their row. A Production's jobs (key ``prod:``) don't get one: its Items do, one row each, from
+``flow_production_status`` at the start and ``production.item`` events after.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
 from pathlib import Path
@@ -14,17 +16,78 @@ from typing import Any
 
 from PySide6.QtCore import QObject, Signal
 
-from src.gen.models import Job
+from src.gen.models import Job, JobStatus
+from src.i18n import tr
 from src.projects.store import job_to_row, row_to_job
-from src.web.engine_client import read_manifests, row_state
+from src.web.engine_client import EngineError, EngineToolError, read_manifests, row_state
 
 log = logging.getLogger(__name__)
 
 SKIPPED_KEYS = ("app:", "prod:")
+ITEM_STATUS = {
+    "planned": JobStatus.QUEUED,  # not PENDING, so Start can never submit it
+    "generating": JobStatus.RUNNING,
+    "pending_review": JobStatus.DONE,
+    "approved": JobStatus.DONE,
+    "rejected": JobStatus.DONE,
+    "regenerating": JobStatus.RUNNING,
+    "failed": JobStatus.FAILED,
+}
+REVIEW_STATES = ("pending_review", "approved", "rejected", "regenerating")
+
+
+def banner_text(summary: dict[str, Any], name: str) -> str:
+    """One line: ``Name: references 4/4 · stills 6/8 · 14 of 60 credits · waiting for your review``."""
+    parts = []
+    for stage, key in (("reference", "production_references"), ("still", "production_stills"),
+                       ("animation", "production_animations")):
+        counts = (summary.get("stages") or {}).get(stage) or {}
+        if counts.get("total"):
+            parts.append(f"{tr(key)} {counts.get('approved', 0)}/{counts['total']}")
+    credits = summary.get("credits") or {}
+    if credits.get("max") is not None:
+        parts.append(tr("production_credits", spent=credits.get("spent", 0), max=credits["max"]))
+    status = summary.get("status")
+    if status == "paused":
+        reason = str((summary.get("paused") or {}).get("reason") or "").replace("_", " ")
+        parts.append(tr("production_paused", reason=reason))
+    elif status:
+        parts.append(tr(f"production_{status}"))
+    return f"{name}: {' · '.join(parts)}"
+
+
+def item_fields(event: dict[str, Any]) -> dict[str, Any]:
+    """A ``production.item`` as row fields, per the spec's mapping."""
+    state = event.get("state")
+    status = ITEM_STATUS.get(state, JobStatus.QUEUED)
+    latest = int(event.get("take") or 0)
+    approved = event.get("approved_take")
+    return {
+        "prompt": str(event.get("prompt") or ""),
+        "production_id": str(event["production_id"]),
+        "item_id": str(event["item"]),
+        "status": status,
+        "review": state if state in REVIEW_STATES else "",
+        "take": int(approved) if state == "approved" and approved is not None else latest,
+        "latest_take": latest,
+        "stale": ", ".join(event.get("stale") or []),
+        "ref_labels": [str(n) for n in event.get("ref_names") or []],
+        "outputs": [Path(event["file"])] if event.get("file") else [],
+        "error": str(event.get("error") or "") if not isinstance(event.get("error"), dict)
+        else str(event["error"].get("message") or ""),
+        "progress": 1.0 if status is JobStatus.DONE else float(event.get("progress") or 0) / 100,
+        "progress_source": str(event.get("source") or ""),
+    }
+
+
+def apply_item(job: Job, event: dict[str, Any]) -> None:
+    for name, value in item_fields(event).items():
+        setattr(job, name, value)
 
 
 class RunMirror(QObject):
     _changed = Signal()
+    _production = Signal(object)
 
     def __init__(self, data_dir: Path, page_lookup=None, client=None, parent: QObject | None = None):
         super().__init__(parent)
@@ -35,6 +98,7 @@ class RunMirror(QObject):
         self._stop = threading.Event()
         self._queued = threading.Event()
         self._changed.connect(self.refresh)
+        self._production.connect(self.apply_production_event)
 
     def start(self, store) -> None:
         """Catch up now, then follow the engine. Never starts an engine by itself."""
@@ -47,11 +111,79 @@ class RunMirror(QObject):
         self._stop.set()
 
     def _follow(self) -> None:
+        caught_up = self.catch_up()
         for event in self.client.events(0, self._stop):
+            if not caught_up or event.get("type") == "reset":  # the engine wasn't up before, or came back
+                caught_up = self.catch_up()
+            if str(event.get("type")).startswith("production."):
+                self._production.emit(event)
             # One look covers every event before it, so a replay of old ones doesn't queue a look each.
-            if event.get("type") != "job.progress" and not self._queued.is_set():
+            elif event.get("type") != "job.progress" and not self._queued.is_set():
                 self._queued.set()
                 self._changed.emit()  # queued to the GUI thread, which owns rows and pages
+
+    def catch_up(self) -> bool:
+        """Off the GUI thread: every Production's Items, read once. False while the engine is down."""
+        for run in read_manifests(self.data_dir):
+            try:
+                production = json.loads((Path(run["dir"]) / "production.json").read_text(encoding="utf-8"))
+            except (OSError, ValueError, KeyError):
+                continue  # not a Production's run
+            try:
+                self._read_production(production["id"], run["id"])
+            except (EngineError, TimeoutError) as exc:
+                log.debug("Production rows wait for the engine: %s", exc)
+                return False
+            except EngineToolError as exc:  # one Production's trouble must not hide the others
+                log.warning("Production %s not read: %s", production.get("id"), exc)
+        return True
+
+    def _read_production(self, production_id: str, run_id: str) -> None:
+        cursor = 0
+        while cursor is not None:
+            reply = self.client.call("flow_production_status", {"production_id": production_id, "detail": "full",
+                                                                "cursor": cursor})
+            for item in reply.get("items") or []:
+                self._production.emit({**item, "type": "production.item", "runId": run_id})
+            cursor = reply.get("next_cursor")
+        self._production.emit({**reply, "type": "production.summary", "runId": run_id})
+
+    # ---- Production events -> rows and banner ------------------------------
+    def _run(self, run_id: str) -> dict[str, Any]:
+        return next((r for r in read_manifests(self.data_dir) if r.get("id") == run_id), {})
+
+    def apply_production_event(self, event: dict[str, Any]) -> None:
+        run = self._run(event.get("runId"))
+        project = self._project_for(run)
+        if event.get("type") == "production.item":
+            self._apply_item(project, "flow_video" if event.get("stage") == "animation" else "flow_image", event)
+        elif event.get("type") == "production.summary":
+            name = str(event.get("name") or run.get("name") or "")
+            project.set("production_banner", banner_text(event, name))
+            for key in ("flow_image", "flow_video"):
+                page = self.page_lookup(project, key)
+                if page is not None:
+                    page.set_production_summary(event, name)
+
+    def _apply_item(self, project, key: str, event: dict[str, Any]) -> None:
+        same_item = (str(event["production_id"]), str(event["item"]))
+        page = self.page_lookup(project, key)
+        if page is not None:
+            job = next((j for j in page.jobs if (j.production_id, j.item_id) == same_item), None)
+            if job is None:
+                page.model.add_jobs([Job(origin="agent", **item_fields(event))])
+            else:
+                apply_item(job, event)
+                page.model.refresh_job(job.id)
+            return
+        rows = project.rows(key)
+        row = next((r for r in rows if (r.get("production_id"), r.get("item_id")) == same_item), None)
+        if row is None:
+            project.set_rows(key, [*rows, job_to_row(Job(origin="agent", **item_fields(event)))])
+            return
+        job = row_to_job(row, 0)
+        apply_item(job, event)
+        project.set_rows(key, [job_to_row(job) if r is row else r for r in rows])
 
     # ---- manifests -> rows ------------------------------------------------
     def _project_for(self, run: dict[str, Any]):

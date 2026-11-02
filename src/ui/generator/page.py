@@ -27,6 +27,7 @@ from src.ui.generator.prompt_model import COL_PROMPT, PromptTableModel
 from src.ui.generator.prompt_table import PromptTable
 from src.ui.generator.queue_bridge import QueueBridge
 from src.ui.generator.stats_header import StatsHeader
+from src.web.run_mirror import banner_text
 
 log = logging.getLogger(__name__)
 
@@ -78,6 +79,8 @@ class GeneratorPage(QWidget):
             pick.addWidget(self.provider_combo)
             pick.addStretch(1)
             right.addLayout(pick)
+        self._provider_banner = banner
+        self._production_banner = ""
         self.banner_label = QLabel(banner)
         self.banner_label.setWordWrap(True)
         self.banner_label.setObjectName("DemoBanner")
@@ -132,7 +135,7 @@ class GeneratorPage(QWidget):
         self._save_timer.timeout.connect(self.save_rows)
         self.load_rows()
         for sig in (self.model.rowsInserted, self.model.rowsRemoved, self.model.modelReset, self.model.dataChanged):
-            sig.connect(lambda *_: self._save_timer.start())
+            sig.connect(lambda *_: (self._save_timer.start(), self._refresh_stats()))
         if self.provider_combo is not None:
             store_ = store if store is not None else config.settings()
             saved = store_.get(f"pages.{page_key}.provider", provider.key)
@@ -162,8 +165,8 @@ class GeneratorPage(QWidget):
         if save:
             (self._store if self._store is not None else config.settings()).set(
                 f"pages.{self.page_key}.provider", provider.key)
-        self.banner_label.setText(banner)
-        self.banner_label.setVisible(bool(banner))
+        self._provider_banner = banner
+        self._show_banner()
         if provider is self.provider:
             return
         self.provider = provider
@@ -171,6 +174,15 @@ class GeneratorPage(QWidget):
         self.config_panel = ConfigPanel(self.page_key, provider.config_fields() + COMMON_FIELDS, self._store)
         self.scroll.setWidget(self.config_panel)
         log.info("%s: provider set to %s", self.page_key, provider.name)
+
+    def _show_banner(self) -> None:
+        text = "\n".join(filter(None, [self._provider_banner, self._production_banner]))
+        self.banner_label.setText(text)
+        self.banner_label.setVisible(bool(text))
+
+    def set_production_summary(self, summary: dict, name: str) -> None:
+        self._production_banner = banner_text(summary, name)
+        self._show_banner()
 
     def _button(self, key: str, slot) -> QPushButton:
         b = QPushButton(tr(key))
@@ -186,6 +198,8 @@ class GeneratorPage(QWidget):
         self._project = projects.current()
         if self._project is None:
             return 0
+        self._production_banner = self._project.get("production_banner", "")
+        self._show_banner()
         jobs = [row_to_job(r, i + 1) for i, r in enumerate(self._project.rows(self.page_key))]
         if jobs:
             self.model.add_jobs(jobs)
@@ -239,7 +253,7 @@ class GeneratorPage(QWidget):
         folder = self.config_panel.value("ref_dir")
         if not folder:
             return 0
-        added = match_refs(self.jobs, folder)
+        added = match_refs([j for j in self.jobs if not j.production_id], folder)
         log.info(tr("gen_refs_matched", count=added))
         self.model.refresh_all()
         return added
@@ -293,7 +307,7 @@ class GeneratorPage(QWidget):
 
     def match_characters(self) -> int:
         """Attach the characters and scenes each row's prompt names."""
-        changed = char_attach.match_by_name(self.jobs, self.characters, self.scenes)
+        changed = char_attach.match_by_name([j for j in self.jobs if not j.production_id], self.characters, self.scenes)
         log.info(tr("gen_characters_matched", count=changed))
         self.model.refresh_all()
         return changed
@@ -314,12 +328,16 @@ class GeneratorPage(QWidget):
     def remove_rows(self, rows: list[int]) -> None:
         if self._busy_guard():
             return
+        rows = [r for r in rows if not self.model.job_at(r).production_id]
         self.queue.forget(self.model.job_at(r) for r in rows)
         self.model.remove_rows(rows)
         self._refresh_stats()
 
     def clear(self) -> None:
         if self._busy_guard():
+            return
+        if any(j.production_id for j in self.jobs):
+            self.remove_rows(list(range(len(self.jobs))))
             return
         self.queue.forget(self.jobs)
         self.model.clear()

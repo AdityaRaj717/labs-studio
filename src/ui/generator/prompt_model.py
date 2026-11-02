@@ -25,9 +25,20 @@ STATUS_COLORS = {
     JobStatus.STOPPED: "#8b919c",
 }
 
+REVIEW_COLORS = {
+    "pending_review": STATUS_COLORS[JobStatus.QUEUED],
+    "approved": STATUS_COLORS[JobStatus.DONE],
+    "rejected": STATUS_COLORS[JobStatus.FAILED],
+    "regenerating": STATUS_COLORS[JobStatus.RUNNING],
+}
+
 Index = QModelIndex | QPersistentModelIndex
 
 _video_pix: QPixmap | None = None
+
+
+def status_color(job: Job) -> str:
+    return REVIEW_COLORS.get(job.review) or STATUS_COLORS[job.status]
 
 
 def video_placeholder() -> QPixmap:
@@ -78,7 +89,7 @@ class PromptTableModel(QAbstractTableModel):
 
     def flags(self, index: Index):
         base = super().flags(index)
-        if index.column() == COL_PROMPT and self.editable:
+        if index.column() == COL_PROMPT and self.editable and not self.jobs[index.row()].production_id:
             base |= Qt.ItemFlag.ItemIsEditable
         return base
 
@@ -91,13 +102,17 @@ class PromptTableModel(QAbstractTableModel):
             if col == COL_INDEX:
                 return job.index
             if col == COL_PROMPT:
-                return job.prompt
+                return f"{job.item_id} · {job.prompt}" if job.production_id else job.prompt
+            if col == COL_CHARACTER and job.production_id:
+                return ", ".join(job.ref_labels)
             if col == COL_CHARACTER:
                 return self.character_name(job) if self.character_name else ""
             if col == COL_SCENE:
                 return self.scene_name(job) if self.scene_name else ""
             if col == COL_REFS:
                 return str(len(job.refs)) if job.refs else ""
+            if col == COL_STATUS and job.review:
+                return tr(f"review_{job.review}", take=job.take)
             if col == COL_STATUS:
                 text = tr(f"status_{job.status.value}")
                 if job.status is JobStatus.RUNNING and job.attempts > 1:
@@ -116,6 +131,10 @@ class PromptTableModel(QAbstractTableModel):
                 return job.prompt
             if col == COL_REFS and job.refs:
                 return "\n".join(p.name for p in job.refs)
+            if col == COL_CHARACTER and job.production_id:
+                return ", ".join(job.ref_labels) or None
+            if col == COL_STATUS and job.stale:
+                return "\n".join(filter(None, [job.error, tr("review_stale", items=job.stale)]))
             if col == COL_CHARACTER and self.character_name:
                 return self.character_name(job) or None
             if col == COL_SCENE and self.scene_name:
@@ -129,7 +148,7 @@ class PromptTableModel(QAbstractTableModel):
             if col == COL_PROGRESS and job.progress_source == "phase":
                 return tr("gen_progress_phase")
         elif role == Qt.ItemDataRole.ForegroundRole and col in (COL_STATUS, COL_OUTPUT):
-            return QColor(STATUS_COLORS[job.status])
+            return QColor(status_color(job))
         elif role == Qt.ItemDataRole.DecorationRole and col == COL_OUTPUT and (job.outputs or job.preview):
             return self._thumb(job.outputs[0] if job.outputs else job.preview)
         elif role == Qt.ItemDataRole.TextAlignmentRole and col in (COL_INDEX, COL_REFS):
@@ -137,7 +156,7 @@ class PromptTableModel(QAbstractTableModel):
         return None
 
     def setData(self, index: Index, value, role=Qt.ItemDataRole.EditRole) -> bool:  # noqa: N802
-        if role != Qt.ItemDataRole.EditRole or index.column() != COL_PROMPT:
+        if role != Qt.ItemDataRole.EditRole or index.column() != COL_PROMPT or self.jobs[index.row()].production_id:
             return False
         text = str(value).strip()
         if not text:

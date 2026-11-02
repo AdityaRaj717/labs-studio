@@ -306,6 +306,7 @@ export function summary(production) {
   const status = statusOf(production);
   return {
     status,
+    paused: production.paused,
     stages,
     credits: { max: production.budget.max_credits, spent: production.budget.spent, planned },
     waiting_on: [...new Set(blocked)].slice(0, MAX_LISTED),
