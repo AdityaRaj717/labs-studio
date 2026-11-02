@@ -92,6 +92,8 @@
     "editor.doneEditing": { "page": "editor", "role": "button", "name": "Done editing scene" },
     "editor.editPrompt": { "page": "editor", "role": "textbox", "name": "Describe how to edit this video…" },
     "editor.extendPrompt": { "page": "editor", "role": "textbox", "name": "What happens next?" },
+    "editor.downloadMedia": { "page": "editor", "role": "button", "name": "Download media" },
+    "editor.downloadScene": { "page": "editor", "role": "button", "name": "Download scene" },
 
     "character.nav": { "page": "character", "role": "navigation", "name": { "regex": "Project navigation" } },
     "character.section": { "page": "character", "role": "button", "name": "Characters", "within": "character.nav" },

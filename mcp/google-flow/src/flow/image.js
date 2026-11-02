@@ -88,7 +88,7 @@ function assertAsRequested(job, outputs, tileText) {
 }
 
 // Must not fail a job that already has its files.
-async function noteBalance(page) {
+export async function noteBalance(page) {
   const credits = await getBalance(page);
   if (credits === null) return;
   try {

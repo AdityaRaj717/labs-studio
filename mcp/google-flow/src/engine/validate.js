@@ -75,6 +75,7 @@ export function validateVideo(args) {
     fail(COMBINATION_NOT_SUPPORTED, `${job.model} does not support ${mode} mode`, modes, `Use one of: ${modes.join(', ')}, or another model.`);
   }
 
+  if ((mode === 'extend' || mode === 'edit') && job.count !== 1) fail(COMBINATION_NOT_SUPPORTED, `${mode} makes one clip`, [1], 'Use count 1.');
   const { duration = defaults.duration, resolution = defaults.resolution } = args;
   if (!Object.hasOwn(credits, resolution)) {
     const valid = Object.keys(credits);

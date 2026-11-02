@@ -1,6 +1,7 @@
 import { getCapabilities } from '../engine/capabilities.js';
 import { beat } from '../engine/pacer.js';
 import { get } from '../utils/config.js';
+import { runClipJob } from './clip.js';
 import { runGeneration, sha256 } from './image.js';
 import { addFrame } from './ingredients.js';
 import { probeVideo, stripAudio } from './silent.js';
@@ -43,4 +44,4 @@ const VIDEO = {
   },
 };
 
-export const runVideoJob = (ctx, job) => runGeneration(ctx, job, VIDEO);
+export const runVideoJob = (ctx, job) => (['extend', 'edit'].includes(job.spec.mode) ? runClipJob(ctx, job) : runGeneration(ctx, job, VIDEO));

@@ -28,12 +28,12 @@
         "credits": { "720p": { "8": 10 } }
       },
       "veoFast": {
-        "modes": ["text", "frames", "ingredients", "extend"],
+        "modes": ["text", "frames", "ingredients"],
         "defaults": { "duration": 8, "resolution": "720p" },
         "credits": { "720p": { "8": 20 } }
       },
       "veoQuality": {
-        "modes": ["text", "frames", "extend"],
+        "modes": ["text", "frames"],
         "defaults": { "duration": 8, "resolution": "720p" },
         "credits": { "720p": { "8": 100 } }
       }
