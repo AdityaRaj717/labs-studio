@@ -1,7 +1,7 @@
 """What the app shows (Phase 14b).
 
-Only the Google Flow web path works end to end. Flow Video stays hidden until its
-provider exists, and the API keys tab until something uses a key. One switch shows them:
+Only the Google Flow web path works end to end. The API keys tab stays hidden until
+something uses a key. One switch shows it:
 
 - setting ``features.flow_only`` (default ``True``) in settings.json, or
 - environment ``LABS_STUDIO_FEATURES=all`` (or ``flow``), which wins over the setting.
@@ -15,7 +15,6 @@ ENV = "LABS_STUDIO_FEATURES"
 
 # Hidden in Flow-only mode -> why (checked by name in the UI code).
 HIDDEN: dict[str, str] = {
-    "page:flow_video": "no provider yet",
     "settings:api_keys": "API keys tab: nothing shown uses a key",
 }
 

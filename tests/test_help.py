@@ -250,7 +250,6 @@ def test_help_buttons_open_their_topic(qapp, tmp_path, monkeypatch):
             btn.click()
             assert window.current_key == "help"
             assert window.page("help").current.id == PAGE_TOPICS[key]
-        assert not hasattr(window.page("flow_video"), "help_button")  # placeholder pages have none
     finally:
         for p in window.pages.values():
             if callable(getattr(p, "shutdown", None)):

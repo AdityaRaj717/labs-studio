@@ -25,6 +25,9 @@ def register_pages(window) -> None:
 
     window.register_page("flow_image", lambda: GeneratorPage(
         "flow_image", WebFlowImageProvider(), title=tr("nav_img"), banner=tr("web_flow_banner")))
+    from src.gen.web_flow_video import WebFlowVideoProvider
+    window.register_page("flow_video", lambda: GeneratorPage(
+        "flow_video", WebFlowVideoProvider(), title=tr("nav_video"), banner=tr("web_flow_video_banner")))
     window.register_page("settings", SettingsPage)
 
     from src.ui.characters.page import CharactersPage  # Phase 6
@@ -80,6 +83,14 @@ def main(argv: list[str] | None = None) -> int:
     window = MainWindow()
     window.attach_projects(store)
     register_pages(window)
+    from src.web.flow_mcp import flow_mcp
+    from src.web.engine_client import EngineClient
+    from src.web.run_mirror import RunMirror
+    # Only a page already built needs the row now; the others read it from the project.
+    window.run_mirror = RunMirror(
+        flow_mcp().data_dir, parent=window, client=EngineClient(flow_mcp().data_dir),
+        page_lookup=lambda project, key: window.pages.get(key) if project is store.active else None)
+    window.run_mirror.start(store)
     if settings.get("webhook.autostart", False):  # Phase 10
         window.page("webhook").start_server()
     window.show()

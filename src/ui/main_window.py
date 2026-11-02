@@ -190,5 +190,7 @@ class MainWindow(QMainWindow):
             shutdown = getattr(page, "shutdown", None)
             if callable(shutdown):
                 shutdown()
+        if getattr(self, "run_mirror", None) is not None:
+            self.run_mirror.stop()
         log.info("Window closed; settings saved")
         super().closeEvent(event)

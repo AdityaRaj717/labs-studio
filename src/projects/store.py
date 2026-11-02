@@ -56,6 +56,8 @@ def job_to_row(job: Job) -> dict[str, Any]:
         "outputs": [str(p) for p in job.outputs],
         "error": job.error,
         "engine_key": job.engine_key,
+        "origin": job.origin,
+        "engine_job": job.engine_job,
     }
 
 
@@ -74,6 +76,8 @@ def row_to_job(row: dict[str, Any], index: int) -> Job:
         outputs=[Path(p) for p in row.get("outputs", [])],
         error=str(row.get("error", "")),
         engine_key=str(row.get("engine_key", "")),
+        origin=str(row.get("origin", "")),
+        engine_job=str(row.get("engine_job", "")),
         character=str(row.get("character", "")),
         character_refs=[Path(p) for p in row.get("character_refs", [])],
         cast=[str(c) for c in row.get("cast", [])],

@@ -111,4 +111,4 @@ def test_nav_visible_default(monkeypatch):
 
     monkeypatch.setenv(features.ENV, "flow")
     assert features.visible_pages(NAV_KEYS) == (
-        "flow_image", "projects", "characters", "scenes", "webhook", "log", "settings", "help")
+        "flow_image", "flow_video", "projects", "characters", "scenes", "webhook", "log", "settings", "help")

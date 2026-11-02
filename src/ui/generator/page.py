@@ -359,7 +359,7 @@ class GeneratorPage(QWidget):
         self._apply_config()
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         self._batch_folder = output_dir(self._base_dir(), self.config_panel.value("subdir_mode"), stamp)
-        todo = [j for j in self.jobs if j.status is JobStatus.PENDING]
+        todo = [j for j in self.jobs if j.status is JobStatus.PENDING and j.origin != "agent"]
         if not todo:
             return 0
         self.stats_header.reset_clock()
@@ -377,6 +377,7 @@ class GeneratorPage(QWidget):
         return self._retry([j for j in self.jobs if j.status in (JobStatus.FAILED, JobStatus.STOPPED)])
 
     def _retry(self, jobs: list[Job]) -> int:
+        jobs = [j for j in jobs if j.origin != "agent"]  # a new try would spend: the agent decides
         if not jobs:
             return 0
         self._apply_config()

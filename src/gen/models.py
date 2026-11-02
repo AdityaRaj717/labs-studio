@@ -50,6 +50,8 @@ class Job:
     preview: Path | None = None  # shown until ``outputs`` exist
     progress_source: str = ""  # "flow": Flow's own percent; "phase": only the engine's stage
     engine_key: str = ""  # idempotency key of the engine job this row is waiting on
+    origin: str = ""  # "agent": an outside agent's job; the engine runs it, never this row's Start
+    engine_job: str = ""  # the engine's job id behind an agent row
 
     def reset(self) -> None:
         self.status = JobStatus.PENDING

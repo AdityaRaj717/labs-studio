@@ -24,11 +24,10 @@ Read [Terms of service and your account](terms-and-risks.md) before you start. A
 
 ## Flow-only mode: what is hidden
 
-Labs Studio starts in **Flow-only mode**. It shows only what works end to end with Google Flow: Flow Image, Projects, Characters, Scenes, Webhook API, Detailed Log, Settings (Web Sessions tab) and Help.
+Labs Studio starts in **Flow-only mode**. It shows only what works end to end with Google Flow: Flow Image, Flow Video, Projects, Characters, Scenes, Webhook API, Detailed Log, Settings (Web Sessions tab) and Help.
 
 | Hidden | Why |
 |---|---|
-| Flow Video | It has no provider yet |
 | Settings → API keys tab | Nothing shown uses a key |
 
 To show everything, close Labs Studio and do **one** of these:
