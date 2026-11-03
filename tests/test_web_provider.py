@@ -115,7 +115,7 @@ def test_progress_events_drive_the_row(store, tmp_path):
     report_event({"type": "job.progress", "progress": 40, "source": "flow"}, c)
     report_event({"type": "job.progress", "progress": 40, "source": "flow", "previewPath": "p.png"}, c)
     report_event({"type": "job.transition", "state": "downloading"}, c)
-    assert seen == [0.4, 0.4] and previews == [Path("p.png")] and sources[-1] == "phase"
+    assert seen == [0.4, 0.4, 0.0] and previews == [Path("p.png")] and sources[-1] == "phase"
 
 
 @pytest.mark.parametrize("code,needle", [

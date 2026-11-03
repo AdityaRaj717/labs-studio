@@ -33,6 +33,8 @@ def job_info(page_key: str, job: Job) -> dict[str, Any]:
         "prompt": job.prompt,
         "status": job.status.value,
         "progress": round(job.progress, 3),
+        "progress_source": job.progress_source,
+        "stage": job.stage,
         "attempts": job.attempts,
         "error": job.error,
         "outputs": [str(p) for p in job.outputs],

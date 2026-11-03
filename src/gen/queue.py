@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import random
 import threading
+import time
 from collections import Counter, deque
 from dataclasses import dataclass
 from pathlib import Path
@@ -195,6 +196,8 @@ class JobQueue:
             job.attempts += 1
             job.progress = 0.0
             job.error = ""
+            job.progress_source, job.stage, job.tiles = "", "", 1
+            job.started_at = time.time()  # an engine job replaces it with Flow's submit time
         self.on_update(job)
 
         def progress(p: float) -> None:
@@ -208,7 +211,12 @@ class JobQueue:
         def note(source: str) -> None:
             job.progress_source = source
 
-        ctx = RunContext(progress=progress, should_stop=self._stop.is_set, partial=partial, note=note)
+        def info(**fields) -> None:
+            for name, value in fields.items():
+                setattr(job, name, value)
+            self.on_update(job)
+
+        ctx = RunContext(progress=progress, should_stop=self._stop.is_set, partial=partial, note=note, info=info)
         try:
             files = self.provider.generate(job, self.options, ctx)
             paths = self.saver(job, files)

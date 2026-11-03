@@ -62,6 +62,7 @@ class RunContext:
     should_stop: Callable[[], bool]
     partial: Callable[[Path], None] = lambda path: None  # a first look at the result (sets ``Job.preview``)
     note: Callable[[str], None] = lambda source: None  # whose number ``progress`` is: "flow" or "phase"
+    info: Callable[..., None] = lambda **fields: None  # engine truth: stage, started_at, tiles
 
 
 class Provider:

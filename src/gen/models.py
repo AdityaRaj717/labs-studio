@@ -49,6 +49,9 @@ class Job:
     scene_refs: list[Path] = field(default_factory=list)  # the refs in ``refs`` the scenes brought
     preview: Path | None = None  # shown until ``outputs`` exist
     progress_source: str = ""  # "flow": Flow's own percent; "phase": only the engine's stage
+    stage: str = ""  # the engine job's state while live (see ``src.gen.progress``)
+    started_at: float | None = None  # epoch s: Flow submit for engine jobs, attempt start otherwise
+    tiles: int = 1  # running tiles behind Flow's percent
     engine_key: str = ""  # idempotency key of the engine job this row is waiting on
     origin: str = ""  # "agent": an outside agent's job; the engine runs it, never this row's Start
     engine_job: str = ""  # the engine's job id behind an agent row
@@ -65,4 +68,7 @@ class Job:
         self.progress = 0.0
         self.preview = None
         self.progress_source = ""
+        self.stage = ""
+        self.started_at = None
+        self.tiles = 1
         self.error = ""

@@ -142,7 +142,7 @@ export function transition(job, state, data, { retry = false } = {}) {
   const event = appendEvent(job.run, { type: 'job.transition', jobId: job.id, from: job.state, to: state, data });
   apply(job, event);
   saveManifest(job.run);
-  jobEvents.emit('event', { type: 'job.transition', runId: job.run.id, jobId: job.id, from: event.from, state });
+  jobEvents.emit('event', { type: 'job.transition', runId: job.run.id, jobId: job.id, from: event.from, state, submittedAt: job.submittedAt ?? null });
   return job;
 }
 

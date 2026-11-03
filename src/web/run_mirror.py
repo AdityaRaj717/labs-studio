@@ -17,6 +17,7 @@ from typing import Any
 from PySide6.QtCore import QObject, Signal
 
 from src.gen.models import Job, JobStatus
+from src.gen.progress import parse_ts
 from src.i18n import tr
 from src.projects.store import job_to_row, row_to_job
 from src.web.engine_client import EngineError, EngineToolError, read_manifests, row_state
@@ -77,6 +78,9 @@ def item_fields(event: dict[str, Any]) -> dict[str, Any]:
         else str(event["error"].get("message") or ""),
         "progress": 1.0 if status is JobStatus.DONE else float(event.get("progress") or 0) / 100,
         "progress_source": str(event.get("source") or ""),
+        "stage": str(event.get("job_state") or "") if status in (JobStatus.RUNNING, JobStatus.QUEUED) else "",
+        "started_at": parse_ts(event.get("submitted_at")),
+        "tiles": int(event.get("tiles") or 1),
     }
 
 
@@ -88,6 +92,7 @@ def apply_item(job: Job, event: dict[str, Any]) -> None:
 class RunMirror(QObject):
     _changed = Signal()
     _production = Signal(object)
+    _progress = Signal(object)
 
     def __init__(self, data_dir: Path, page_lookup=None, client=None, parent: QObject | None = None):
         super().__init__(parent)
@@ -99,6 +104,7 @@ class RunMirror(QObject):
         self._queued = threading.Event()
         self._changed.connect(self.refresh)
         self._production.connect(self.apply_production_event)
+        self._progress.connect(self.apply_progress)
 
     def start(self, store) -> None:
         """Catch up now, then follow the engine. Never starts an engine by itself."""
@@ -117,6 +123,8 @@ class RunMirror(QObject):
                 caught_up = self.catch_up()
             if str(event.get("type")).startswith("production."):
                 self._production.emit(event)
+            elif event.get("type") == "job.progress":
+                self._progress.emit(event)  # Flow's own percent for an agent row
             # One look covers every event before it, so a replay of old ones doesn't queue a look each.
             elif event.get("type") != "job.progress" and not self._queued.is_set():
                 self._queued.set()
@@ -185,6 +193,20 @@ class RunMirror(QObject):
         apply_item(job, event)
         project.set_rows(key, [job_to_row(job) if r is row else r for r in rows])
 
+    def apply_progress(self, event: dict[str, Any]) -> None:
+        """A live percent goes to an open page's agent row only; saved rows keep no percent."""
+        if event.get("progress") is None:
+            return
+        project = self._project_for(self._run(event.get("runId")))
+        for key in ("flow_image", "flow_video"):
+            page = self.page_lookup(project, key)
+            job = next((j for j in page.jobs if j.engine_job == event.get("jobId")), None) if page else None
+            if job is not None:
+                job.progress = float(event["progress"]) / 100
+                job.progress_source = str(event.get("source") or "")
+                job.tiles = int(event.get("tiles") or 1)
+                page.model.refresh_job(job.id)
+
     # ---- manifests -> rows ------------------------------------------------
     def _project_for(self, run: dict[str, Any]):
         url = run.get("flowProjectUrl")
@@ -249,4 +271,5 @@ class RunMirror(QObject):
 
     @staticmethod
     def _same(job: Job, state: dict[str, Any]) -> bool:
-        return (job.status, job.outputs, job.error) == (state["status"], state["outputs"], state["error"])
+        return ((job.status, job.outputs, job.error, job.stage, job.started_at)
+                == (state["status"], state["outputs"], state["error"], state["stage"], state["started_at"]))

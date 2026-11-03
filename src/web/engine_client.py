@@ -19,6 +19,7 @@ from typing import Any, Iterator
 import httpx
 
 from src.gen.models import JobStatus
+from src.gen.progress import parse_ts
 
 log = logging.getLogger(__name__)
 
@@ -207,10 +208,15 @@ def row_state(job: dict[str, Any]) -> dict[str, Any]:
     state = job.get("state")
     data = job.get("data") or {}
     status = {"done": JobStatus.DONE, "failed": JobStatus.FAILED, "cancelled": JobStatus.STOPPED,
-              "needs_user": JobStatus.STOPPED, "paused": JobStatus.STOPPED}.get(state, JobStatus.RUNNING)
+              "needs_user": JobStatus.STOPPED, "paused": JobStatus.STOPPED,
+              "queued": JobStatus.QUEUED}.get(state, JobStatus.RUNNING)
     outputs = [Path(o["file"]) for o in data.get("outputs") or [] if o.get("file")]
+    live = status in (JobStatus.RUNNING, JobStatus.QUEUED)
     return {"status": status, "progress": 1.0 if status is JobStatus.DONE else 0.0, "outputs": outputs,
-            "error": str((data.get("error") or {}).get("message") or "")}
+            "error": str((data.get("error") or {}).get("message") or ""),
+            "stage": str(state or "") if live else "",
+            # From the manifest, so the clock is right after an app restart.
+            "started_at": parse_ts(job.get("submittedAt")) if live else None}
 
 
 def uses_today(data_dir: Path) -> int:

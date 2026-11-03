@@ -16,6 +16,7 @@ from typing import Any
 
 from src.characters.flow_sync import SyncError
 from src.gen.models import Job, OutputFile
+from src.gen.progress import parse_ts
 from src.gen.provider import ConfigField, Estimate, Provider, ProviderError, RunContext
 from src.web.engine_client import EngineError, EngineToolError
 
@@ -73,10 +74,17 @@ def report_event(event: dict[str, Any], ctx: RunContext) -> None:
         if event.get("progress") is not None:
             ctx.note(str(event.get("source") or ""))
             ctx.progress(float(event["progress"]) / 100)
+            ctx.info(tiles=int(event.get("tiles") or 1))
         if event.get("previewPath"):
             ctx.partial(Path(event["previewPath"]))
     elif event.get("type") == "job.transition":
+        # A new stage: Flow's last percent no longer says anything, so it is dropped.
         ctx.note("phase")
+        ctx.progress(0.0)
+        fields = {"stage": str(event.get("state") or "")}
+        if event.get("submittedAt"):
+            fields["started_at"] = parse_ts(event["submittedAt"])
+        ctx.info(**fields)
 
 
 def read_outputs(view: dict[str, Any], what: str) -> list[OutputFile]:
@@ -99,7 +107,6 @@ def run_engine_job(provider, job: Job, tool: str, args: dict[str, Any], timeout:
     chars, scenes = character_ids(job), list(job.scenes)
     extra = {"characters": chars, "scenes": scenes} if chars or scenes else {}
     ctx.note("phase")
-    ctx.progress(0.05)
     try:
         view = provider.backend.run_job(tool, {**args, "idempotency_key": job.engine_key}, timeout,
                                         on_event=lambda e: report_event(e, ctx), should_stop=ctx.should_stop, **extra)
