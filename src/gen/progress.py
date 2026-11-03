@@ -39,3 +39,14 @@ def progress_view(job: Job, now: float) -> ProgressView:
     percent = round(job.progress * 100) if flow and job.status is JobStatus.RUNNING else None
     elapsed = max(0, int(now - job.started_at)) if job.started_at is not None else None
     return ProgressView(stage, percent, elapsed, max(1, job.tiles))
+
+
+def clock(seconds: int) -> str:
+    m, s = divmod(int(seconds), 60)
+    h, m = divmod(m, 60)
+    return f"{h:d}:{m:02d}:{s:02d}" if h else f"{m:d}:{s:02d}"
+
+
+def stage_word(view: ProgressView) -> str:
+    from src.i18n import tr
+    return tr(f"stage_{view.stage}") if view.stage in LIVE_STAGES else ""

@@ -51,3 +51,21 @@ def test_clock_survives_app_restart():
     job = Job("p", **state)
     assert progress_view(job, parse_ts("2026-11-03T10:01:05Z")).elapsed_s == 65
     assert progress_view(job, 0).percent is None  # no Flow percent read yet
+
+
+def test_phase_job_draws_no_bar(qapp):
+    from src.ui.generator.prompt_model import PromptTableModel
+    from src.ui.generator.prompt_model import COL_PROGRESS
+    model = PromptTableModel()
+    job = Job("p", status=JobStatus.RUNNING, progress=0.3, progress_source="phase", stage="preparing")
+    model.add_jobs([job])
+    value = model.index(0, COL_PROGRESS).data()
+    assert isinstance(value, str)  # a word, so the delegate draws no bar
+
+
+def test_queue_cell_labels_elapsed(qapp):
+    import time
+    from src.ui.generator.prompt_model import COL_PROGRESS, PromptTableModel
+    model = PromptTableModel()
+    model.add_jobs([Job("p", status=JobStatus.RUNNING, stage="generating", started_at=time.time() - 42)])
+    assert model.index(0, COL_PROGRESS).data() == "0:42 elapsed"

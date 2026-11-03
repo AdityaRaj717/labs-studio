@@ -9,6 +9,7 @@ from __future__ import annotations
 import functools
 import math
 import random
+import time
 from collections import OrderedDict
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from PySide6.QtWidgets import QAbstractItemView, QListView, QStyle, QStyledItemD
 
 from src import theme
 from src.gen.models import Job, JobStatus
+from src.gen.progress import clock, progress_view, stage_word
 from src.i18n import tr
 from src.ui import icons
 from src.ui.generator.prompt_model import COL_OUTPUT, VIDEO_EXTS
@@ -259,6 +261,13 @@ class SheetDelegate(QStyledItemDelegate):
         if job.origin == "agent" and not ident:
             ident = tr("gen_edge_agent")
         state = edge_state(job)
+        view = progress_view(job, time.time()) if live else None
+        if view is not None and view.percent is not None:
+            state = f"{view.percent}%" + (f" 1/{view.tiles}" if view.tiles > 1 else "")
+        elif view is not None and view.elapsed_s is not None:
+            state = f"{(stage_word(view) or state).upper()} {clock(view.elapsed_s)}"
+        elif view is not None and view.stage:
+            state = stage_word(view).upper()
         fm = p.fontMetrics()
         p.setPen(QColor(c["live"] if live else c["frame_text"]))
         left = strip.adjusted(8, 0, -8, 0)
@@ -273,8 +282,8 @@ class SheetDelegate(QStyledItemDelegate):
             mid = left.adjusted(fm.horizontalAdvance(number) + 9, 0, 0, 0)
             p.drawText(mid, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
                        fm.elidedText(ident, Qt.TextElideMode.ElideRight, room))
-        if live:
-            bar = QRectF(rect.left(), strip.top() - 1, rect.width() * max(0.02, min(1.0, job.progress)), 2)
+        if view is not None and view.percent is not None:  # only Flow's own number earns a bar
+            bar = QRectF(rect.left(), strip.top() - 1, rect.width() * min(1.0, view.percent / 100), 2)
             p.fillRect(bar, QColor(c["live"]))
 
 

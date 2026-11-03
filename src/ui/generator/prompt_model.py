@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPersistentModelIndex, QPointF, Qt
@@ -9,6 +10,7 @@ from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPixmap, QPolygonF
 
 from src import theme
 from src.gen.models import Job, JobStatus
+from src.gen.progress import clock, progress_view, stage_word
 from src.i18n import tr
 
 COL_INDEX, COL_PROMPT, COL_CHARACTER, COL_SCENE, COL_REFS, COL_STATUS, COL_PROGRESS, COL_OUTPUT = range(8)
@@ -133,7 +135,10 @@ class PromptTableModel(QAbstractTableModel):
                     text += f" ({job.attempts})"
                 return text
             if col == COL_PROGRESS:
-                return int(round(job.progress * 100))
+                view = progress_view(job, time.time())
+                if view.percent is not None or not (view.stage or view.elapsed_s is not None):
+                    return view.percent if view.percent is not None else int(round(job.progress * 100))
+                return tr("progress_elapsed", time=clock(view.elapsed_s)) if view.elapsed_s is not None                     else stage_word(view)
             if col == COL_OUTPUT and len(job.outputs) > 1:
                 return f"+{len(job.outputs) - 1}"
         elif role == Qt.ItemDataRole.EditRole and col == COL_PROMPT:
@@ -143,6 +148,10 @@ class PromptTableModel(QAbstractTableModel):
                 return job.prompt
             if col == COL_REFS and job.refs:
                 return "\n".join(p.name for p in job.refs)
+            if col == COL_PROGRESS and job.status is JobStatus.RUNNING:
+                view = progress_view(job, time.time())
+                return f"{view.percent}% · {tr('progress_from_flow')}" if view.percent is not None \
+                    else tr("progress_no_percent")
             if col == COL_CHARACTER and job.production_id:
                 return ", ".join(job.ref_labels) or None
             if col == COL_STATUS and job.stale:

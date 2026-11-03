@@ -32,7 +32,7 @@ class ProgressDelegate(QStyledItemDelegate):
 
     def paint(self, painter: QPainter, option, index) -> None:
         value = index.data()
-        if value is None:
+        if value is None or isinstance(value, str):  # "0:42 elapsed": no percent, so no bar
             return super().paint(painter, option, index)
         cell = QStyleOptionViewItem(option)  # the row's selection and rule, without the number
         self.initStyleOption(cell, index)

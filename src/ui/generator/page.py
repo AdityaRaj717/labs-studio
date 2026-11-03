@@ -302,6 +302,11 @@ class GeneratorPage(QWidget):
         self._save_timer.setSingleShot(True)
         self._save_timer.setInterval(800)
         self._save_timer.timeout.connect(self.save_rows)
+        # Elapsed clocks tick: once a second, only live rows repaint.
+        self._live_timer = QTimer(self)
+        self._live_timer.setInterval(1000)
+        self._live_timer.timeout.connect(self._tick_live)
+        self._live_timer.start()
         self.load_rows()
         for sig in (self.model.rowsInserted, self.model.rowsRemoved, self.model.modelReset, self.model.dataChanged):
             sig.connect(lambda *_: (self._save_timer.start(), self._refresh_stats()))
@@ -419,6 +424,13 @@ class GeneratorPage(QWidget):
             index, QItemSelectionModel.SelectionFlag.ClearAndSelect | QItemSelectionModel.SelectionFlag.Rows)
         self.sheet.scrollTo(self.model.index(row, self.sheet.modelColumn()))
         self.table.scrollTo(index)
+
+    def _tick_live(self) -> None:
+        live = [j for j in self.jobs if j.status in (JobStatus.RUNNING, JobStatus.QUEUED)]
+        for job in live:
+            self.model.refresh_job(job.id)
+        if live and self.inspector.isVisible():
+            self._refresh_take()
 
     def _scroll_to_current(self) -> None:
         rows = self.table.selected_rows()
@@ -919,6 +931,7 @@ class GeneratorPage(QWidget):
 
     def shutdown(self) -> None:
         """Stop workers and save the rows (window closing or project switch)."""
+        self._live_timer.stop()
         if self.queue.is_running():
             self.queue.stop()
             self.queue.wait(5)

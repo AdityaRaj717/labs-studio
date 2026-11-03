@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import time
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget
 
 from src.gen.models import Job, JobStatus
+from src.gen.progress import clock, progress_view, stage_word
 from src.i18n import tr
 from src.ui.generator.sheet import edge_state, frame_pixmap, is_video, picture_path
 from src.ui.kit import FlowLayout, set_icon
@@ -21,6 +24,22 @@ def can_approve(job: Job) -> bool:
 def can_reject(job: Job) -> bool:
     return job.review in ("pending_review", "approved") or (
         not job.production_id and job.status is JobStatus.DONE and job.review != "rejected")
+
+
+def live_text(job: Job) -> str:
+    """Stage, Flow's percent or the elapsed time, attempt and tile note, each only when known."""
+    view = progress_view(job, time.time())
+    if not view.stage and view.percent is None and view.elapsed_s is None:
+        return ""
+    head = " ".join(p for p in (stage_word(view),
+                                f"{view.percent}%" if view.percent is not None else
+                                tr("progress_elapsed", time=clock(view.elapsed_s)) if view.elapsed_s is not None else "") if p)
+    lines = [head, tr("progress_from_flow") if view.percent is not None else tr("progress_no_percent")]
+    if view.percent is not None and view.tiles > 1:
+        lines.append(tr("progress_tiles", tiles=view.tiles))
+    if job.attempts > 1:
+        lines.append(tr("progress_attempt", n=job.attempts))
+    return "\n".join(lines)
 
 
 class TakePanel(QScrollArea):
@@ -65,6 +84,7 @@ class TakePanel(QScrollArea):
             flow.addWidget(b)
 
         self.error = self._field("gen_take_error")
+        self.live = self._field("gen_take_progress")
         self.prompt = self._field("gen_take_prompt")
         self.cast = self._field("gen_take_cast")
         self.scene = self._field("gen_take_scene")
@@ -84,7 +104,7 @@ class TakePanel(QScrollArea):
         layout.addWidget(self.preview)
         layout.addWidget(self.edge)
         layout.addWidget(self.actions_holder)
-        for field in (self.error, self.prompt, self.cast, self.scene, self.refs):
+        for field in (self.live, self.error, self.prompt, self.cast, self.scene, self.refs):
             layout.addWidget(field)
         layout.addWidget(self.origin)
         layout.addStretch(1)
@@ -134,6 +154,7 @@ class TakePanel(QScrollArea):
         self.btn_retry.setEnabled(any(j.status is not JobStatus.RUNNING for j in jobs))
         failed = job.error if job is not None and job.status is JobStatus.FAILED else ""
         self._set(self.error, failed)
+        self._set(self.live, live_text(job) if job is not None else "")
         self._set(self.prompt, job.prompt if job is not None else "")
         self._set(self.cast, cast)
         self._set(self.scene, scene)
