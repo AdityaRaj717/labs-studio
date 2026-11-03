@@ -102,7 +102,8 @@ export async function observeGeneration(page, { before, count, previewDir, onUpd
     }
     if ((percent !== null && percent !== lastPercent) || previewPath) {
       lastPercent = percent ?? lastPercent;
-      onUpdate?.({ progress: lastPercent, source: 'flow', ...(previewPath ? { previewPath } : {}) });
+      // Flow's percent is the first running tile's; tiles says how many run, so the app can say "first of 4".
+      onUpdate?.({ progress: lastPercent, source: 'flow', tiles: Math.max(1, running.length), ...(previewPath ? { previewPath } : {}) });
     }
 
     if (images.length >= count) return { status: 'done', images, text: '' };

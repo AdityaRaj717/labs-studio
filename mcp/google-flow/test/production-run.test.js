@@ -439,13 +439,16 @@ test('detail full carries every production.item field, and events arrive in orde
   jobEvents.on('event', watch);
   const { production_id: id, run_id } = await begin();
   const job = jobOf(id, 'MD_01');
-  jobEvents.emit('event', { type: 'job.progress', runId: run_id, jobId: job.id, progress: 42, source: 'flow' });
+  jobEvents.emit('event', { type: 'job.progress', runId: run_id, jobId: job.id, progress: 42, source: 'flow', tiles: 4 });
   finishJob(job);
   jobEvents.off('event', watch);
   const events = seen.filter((e) => e.type === 'production.item' && e.item === 'MD_01');
   assert.deepEqual(events.map((e) => e.state).at(-1), 'pending_review');
   const progress = events.find((e) => e.progress === 42);
   assert.equal(progress.source, 'flow');
+  assert.equal(progress.tiles, 4);
+  assert.equal(typeof progress.job_state, 'string');
+  assert.ok('submitted_at' in progress && 'attempt' in progress);
   assert.ok(events.filter((e) => e.progress === null).every((e) => e.source === 'phase'));
   assert.ok(seen.some((e) => e.type === 'production.summary'));
   const full = orch.status({ production_id: id, detail: 'full', stage: 'reference' }).items[0];

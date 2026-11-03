@@ -53,6 +53,8 @@ export function createOrchestrator({ jobs, store = realStore, flow }) {
     const take = latestOf(item);
     const names = item.refs.map((id) => itemOf(entry, id).name);
     const stale = staleItems(entry.production).find((row) => row.item === item.id)?.because ?? [];
+    // The latest Take's job says where it is and when it reached Flow; "stage" is already the production stage.
+    const job = take?.job_id ? entry.run.jobs.find(({ id }) => id === take.job_id) : null;
     return {
       production_id: entry.production.id,
       item: item.id,
@@ -66,8 +68,12 @@ export function createOrchestrator({ jobs, store = realStore, flow }) {
       ref_names: names,
       stale,
       error: item.last_error,
+      job_state: job?.state ?? null,
+      submitted_at: job?.submittedAt ?? null,
+      attempt: job?.attempt ?? null,
       progress: null,
       source: 'phase',
+      tiles: 1,
       ...extra,
     };
   }
@@ -211,7 +217,7 @@ export function createOrchestrator({ jobs, store = realStore, flow }) {
     const entry = forRun(event.runId);
     if (event.type === 'job.progress' && entry) {
       const [, , itemId] = KEY.exec(entry.run.jobs.find(({ id }) => id === event.jobId)?.idempotencyKey ?? '') ?? [];
-      if (itemId) publishItem(entry, itemOf(entry, itemId), { progress: event.progress, source: event.source });
+      if (itemId) publishItem(entry, itemOf(entry, itemId), { progress: event.progress, source: event.source, tiles: event.tiles ?? 1 });
     }
     if (event.type !== 'job.transition') return;
     const job = entry?.run.jobs.find(({ id }) => id === event.jobId);
