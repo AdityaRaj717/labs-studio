@@ -255,3 +255,19 @@ def test_help_buttons_open_their_topic(qapp, tmp_path, monkeypatch):
             if callable(getattr(p, "shutdown", None)):
                 p.shutdown()
         window.close()
+
+
+def test_help_links_are_underlined(qapp):
+    from src.ui.help.page import HelpPage
+
+    page = HelpPage("en")
+    block, anchors = page.view.document().begin(), []
+    while block.isValid():
+        it = block.begin()
+        while not it.atEnd():
+            fmt = it.fragment().charFormat()
+            if fmt.isAnchor() and fmt.anchorHref():
+                anchors.append(fmt.fontUnderline())
+            it += 1
+        block = block.next()
+    assert anchors and all(anchors)

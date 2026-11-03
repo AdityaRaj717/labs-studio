@@ -5,13 +5,14 @@ from __future__ import annotations
 import logging
 
 from PySide6.QtCore import QTimer, QUrl, Qt
-from PySide6.QtGui import QDesktopServices, QImageReader, QTextCursor, QTextDocument, QTextImageFormat
+from PySide6.QtGui import QDesktopServices, QImageReader, QTextCharFormat, QTextCursor, QTextDocument, QTextImageFormat
 from PySide6.QtWidgets import (
     QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton, QTextBrowser, QVBoxLayout, QWidget,
 )
 
 from src.help import topics as help_topics
 from src.i18n import current_language, tr
+from src.ui.kit import PAGE_MARGIN, set_icon
 
 log = logging.getLogger(__name__)
 
@@ -38,6 +39,8 @@ class HelpPage(QWidget):
         self.result_label = QLabel()
         self.result_label.setObjectName("PageBody")
 
+        self.topic_list.setWordWrap(True)
+        self.topic_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         left = QVBoxLayout()
         left.addWidget(title)
         left.addWidget(self.search_edit)
@@ -45,11 +48,13 @@ class HelpPage(QWidget):
         left.addWidget(self.result_label)
         left_w = QWidget()
         left_w.setLayout(left)
-        left_w.setFixedWidth(260)
+        left_w.setFixedWidth(240)
         left.setContentsMargins(0, 0, 0, 0)
 
         self.btn_back = QPushButton(tr("help_back"))
+        set_icon(self.btn_back, "caret-left")
         self.btn_forward = QPushButton(tr("help_forward"))
+        set_icon(self.btn_forward, "caret-right")
         self.btn_back.clicked.connect(self.back)
         self.btn_forward.clicked.connect(self.forward)
         nav = QHBoxLayout()
@@ -72,7 +77,8 @@ class HelpPage(QWidget):
         right.addWidget(self.view, 1)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setContentsMargins(PAGE_MARGIN, 14, PAGE_MARGIN, PAGE_MARGIN)
+        layout.setSpacing(16)
         layout.addWidget(left_w)
         layout.addLayout(right, 1)
 
@@ -99,6 +105,7 @@ class HelpPage(QWidget):
         doc.setBaseUrl(QUrl.fromLocalFile(str(topic.folder) + "/"))
         self.view.setSearchPaths([str(topic.folder)])
         self.view.setMarkdown(topic.text)
+        self._underline_links()
         self._fit_images()
         if fragment:
             self.view.scrollToAnchor(fragment)
@@ -191,6 +198,23 @@ class HelpPage(QWidget):
         if obj is self.view.viewport() and event.type() == event.Type.Resize:
             self._fit_timer.start()
         return False
+
+    def _underline_links(self) -> None:
+        """Markdown links come in coloured only; colour alone does not say "link"."""
+        doc, block = self.view.document(), self.view.document().begin()
+        while block.isValid():
+            it = block.begin()
+            while not it.atEnd():
+                frag = it.fragment()
+                if frag.charFormat().isAnchor():
+                    cursor = QTextCursor(doc)
+                    cursor.setPosition(frag.position())
+                    cursor.setPosition(frag.position() + frag.length(), QTextCursor.MoveMode.KeepAnchor)
+                    fmt = QTextCharFormat()
+                    fmt.setFontUnderline(True)
+                    cursor.mergeCharFormat(fmt)
+                it += 1
+            block = block.next()
 
     def _fit_images(self) -> None:
         if self.current is None:

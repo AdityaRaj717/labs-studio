@@ -10,8 +10,8 @@
   "callouts": [
     {
       "n": 1,
-      "target": "scroll",
-      "label": "Settings"
+      "target": "inspector",
+      "label": "Take and Shot settings"
     },
     {
       "n": 2,
@@ -44,8 +44,8 @@
     },
     {
       "n": 6,
-      "target": "table",
-      "label": "Prompt table"
+      "target": "sheet",
+      "label": "Contact sheet"
     }
   ],
   "gutter": 220

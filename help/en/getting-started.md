@@ -4,7 +4,7 @@ Labs Studio runs prompts in batches and saves the results to folders on your PC.
 
 ![The main window on first launch](img/main-window.png)
 
-1. **Sidebar.** Every page of the app. The ☰ button at the top folds it down to icons.
+1. **Sidebar.** Every page of the app. The panel button at the top folds it down to icons.
 2. **Project picker.** The active project. Each project keeps its own prompts, settings and output folder. See [Projects](projects.md).
 3. **The page.** Here it's the [Flow Image page](flow-image.md), where most of the work happens.
 4. **Help button.** Opens the help topic for the page you're on.

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QLabel, QWidget
 
 from src.i18n import tr
+from src.ui.kit import page_layout, page_title
 
 
 class PlaceholderPage(QWidget):
@@ -13,14 +14,11 @@ class PlaceholderPage(QWidget):
         super().__init__(parent)
         self.title = title
 
-        title_label = QLabel(title)
-        title_label.setObjectName("PageTitle")
+        title_label = page_title(title)
         body = QLabel(tr("placeholder_body"))
         body.setObjectName("PageBody")
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(32, 28, 32, 28)
-        layout.setSpacing(8)
+        layout = page_layout(self)
         layout.addWidget(title_label, 0, Qt.AlignmentFlag.AlignLeft)
         layout.addWidget(body, 0, Qt.AlignmentFlag.AlignLeft)
         layout.addStretch(1)

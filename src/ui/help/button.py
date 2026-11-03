@@ -1,4 +1,4 @@
-"""Small round "?" button pinned to a page's top-right corner (Phase 15).
+"""Small "?" button pinned to a page's top-right corner (Phase 15).
 
 ``MainWindow.page()`` adds one to every page that has a help topic, so the
 pages themselves don't change.
@@ -12,14 +12,17 @@ from PySide6.QtCore import QEvent, QObject, Qt
 from PySide6.QtWidgets import QPushButton, QWidget
 
 from src.i18n import tr
+from src.ui.kit import set_icon
 
-SIZE = 22
-MARGIN = 8
+SIZE = 28
+MARGIN = 6
 
 
 class HelpButton(QPushButton):
     def __init__(self, topic: str, on_click: Callable[[str], None], parent: QWidget):
-        super().__init__("?", parent)
+        super().__init__(parent)
+        set_icon(self, "question")
+        self.setAccessibleName(tr("help_button_tip"))
         self.topic = topic
         self.setObjectName("HelpButton")
         self.setFixedSize(SIZE, SIZE)
@@ -30,6 +33,10 @@ class HelpButton(QPushButton):
         parent.installEventFilter(self)
         self._place()
         self.raise_()
+
+    def set_on_black(self, on: bool) -> None:
+        """Over the black viewer the ink is the frame's, else the page's."""
+        set_icon(self, "question", "frame_text" if on else "text")
 
     def _place(self) -> None:
         page = self.parentWidget()

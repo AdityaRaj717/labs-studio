@@ -6,11 +6,11 @@ import logging
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QUrl, Signal
+from PySide6.QtCore import QObject, Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QSpinBox, QVBoxLayout, QWidget,
+    QPushButton, QScrollArea, QSpinBox, QVBoxLayout, QWidget,
 )
 
 from src import config
@@ -82,7 +82,9 @@ class SiteRow(QGroupBox):
         form.addRow(tr("web_logged_in"), self.status)
         form.addRow(tr("web_used_today"), self.usage)
         form.addRow(tr("web_daily_cap"), self.cap)
+        form.setContentsMargins(0, 0, 0, 0)
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 2, 0, 6)
         layout.addLayout(form)
         layout.addLayout(buttons)
         self.refresh_usage()
@@ -116,6 +118,7 @@ class WebSessionsTab(QWidget):
 
         browser = QGroupBox(tr("web_browser"))
         form = QFormLayout(browser)
+        form.setContentsMargins(0, 2, 0, 6)
         form.addRow(tr("web_chrome_path"), PathEdit("web.chrome_path", self.store, folder=False))
         form.addRow(tr("web_profile_dir"), PathEdit("web.profile_dir", self.store, folder=True))
         form.addRow(tr("web_diag_dir"), PathEdit("web.diag_dir", self.store, folder=True))
@@ -137,12 +140,21 @@ class WebSessionsTab(QWidget):
             form.addRow(tr(label), spin)
 
         self.rows = {site: SiteRow(site, self.store, self.run_async) for site in SITE_TITLES}
-        layout = QVBoxLayout(self)
+        body = QWidget()
+        layout = QVBoxLayout(body)
+        layout.setContentsMargins(0, 8, 10, 8)
         layout.addWidget(note)
         layout.addWidget(browser)
         for row in self.rows.values():
             layout.addWidget(row)
         layout.addStretch(1)
+        scroll = QScrollArea()  # the form is taller than the minimum window
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setWidget(body)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(scroll)
 
     @property
     def session(self):

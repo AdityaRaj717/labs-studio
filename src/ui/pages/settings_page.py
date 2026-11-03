@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 from src import features
 from src.i18n import tr
 from src.keys import KeyStore, store as default_store
+from src.ui.kit import header_row, page_layout
 
 log = logging.getLogger(__name__)
 
@@ -69,6 +70,7 @@ class KeyRow(QGroupBox):
         row.addWidget(self.btn_save)
         row.addWidget(self.btn_clear)
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 2, 0, 6)
         layout.addLayout(row)
         layout.addWidget(self.status)
         layout.addWidget(link)
@@ -116,6 +118,7 @@ class ApiKeysTab(QWidget):
         intro.setWordWrap(True)
         intro.setObjectName("PageBody")
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 10, 0, 0)
         layout.addWidget(intro)
         self.rows = {p: KeyRow(p, label, url, keys, link)
                      for p, label, url, link in KEY_PROVIDERS}
@@ -132,8 +135,6 @@ class ApiKeysTab(QWidget):
 class SettingsPage(QWidget):
     def __init__(self, keys: KeyStore | None = None, parent: QWidget | None = None):
         super().__init__(parent)
-        title = QLabel(tr("nav_settings"))
-        title.setObjectName("PageTitle")
         self.tabs = QTabWidget()
         self.keys_tab = ApiKeysTab(keys or default_store())
         from src.ui.pages.web_sessions_tab import WebSessionsTab  # Phase 11
@@ -142,7 +143,6 @@ class SettingsPage(QWidget):
         if features.shown("settings:api_keys"):  # second, so the page still opens where it did
             self.tabs.addTab(self.keys_tab, tr("settings_tab_keys"))
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(32, 28, 32, 28)
-        layout.addWidget(title)
+        layout = page_layout(self)
+        layout.addLayout(header_row(tr("nav_settings")))
         layout.addWidget(self.tabs, 1)

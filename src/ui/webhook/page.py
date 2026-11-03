@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from src import features
 from src.i18n import tr
+from src.ui.kit import header_row, intro_label, page_layout
 from src.stats.store import FIELDS, StatsStore, default_stats
 from src.ui.webhook.backend import GENERATOR_PAGES, PageBackend
 from src.webhook.server import DEFAULT_HOST, DEFAULT_PORT, RequestRecord, WebhookServer, new_token
@@ -57,8 +58,10 @@ class StatsView(QWidget):
         self.table = QTableWidget(0, len(self.COLUMNS))
         self.table.setHorizontalHeaderLabels([tr(k) for k in self.COLUMNS])
         self.table.verticalHeader().setVisible(False)
+        self.table.setShowGrid(False)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.btn_reset = QPushButton(tr("wh_stats_reset"))
         self.btn_reset.clicked.connect(self.reset)
 
@@ -66,7 +69,9 @@ class StatsView(QWidget):
         top.addWidget(self.since, 1)
         top.addWidget(self.btn_reset)
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 10, 0, 0)
         note = QLabel(tr("wh_stats_note"))
+        note.setObjectName("StatsNote")
         note.setWordWrap(True)
         layout.addWidget(note)
         layout.addLayout(top)
@@ -131,24 +136,20 @@ class WebhookPage(QWidget):
         self.backend.jobs_submitted.connect(
             lambda page, n: self._append_log(tr("wh_log_submitted", count=n, page=page)))
 
-        heading = QLabel(tr("nav_webhook"))
-        heading.setStyleSheet("font-size: 18px; font-weight: 600;")
         self.tabs = QTabWidget()
         self.tabs.addTab(self._server_tab(), tr("wh_tab_server"))
         self.stats_view = StatsView(self.stats)
         self.tabs.addTab(self.stats_view, tr("wh_tab_stats"))
 
-        layout = QVBoxLayout(self)
-        layout.addWidget(heading)
+        layout = page_layout(self)
+        layout.addLayout(header_row(tr("nav_webhook")))
         layout.addWidget(self.tabs, 1)
         self._update_state()
 
     # ---- UI ----------------------------------------------------------
     def _server_tab(self) -> QWidget:
         tab = QWidget()
-        intro = QLabel(tr("wh_intro"))
-        intro.setWordWrap(True)
-        intro.setObjectName("DemoBanner")
+        intro = intro_label(tr("wh_intro"))
 
         self.status = QLabel()
         self.status.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -194,24 +195,30 @@ class WebhookPage(QWidget):
         buttons.addStretch(1)
 
         self.example = QPlainTextEdit()
+        self.example.setObjectName("CodeView")
         self.example.setReadOnly(True)
-        self.example.setMaximumHeight(130)
+        self.example.setMaximumHeight(100)
         self.btn_copy = QPushButton(tr("wh_copy"))
         self.btn_copy.clicked.connect(
             lambda: QGuiApplication.clipboard().setText(self.example.toPlainText()))
         ex_head = QHBoxLayout()
-        ex_head.addWidget(QLabel(tr("wh_example")), 1)
+        ex_title = QLabel(tr("wh_example"))
+        ex_title.setObjectName("FieldHeading")
+        ex_head.addWidget(ex_title, 1)
         ex_head.addWidget(self.btn_copy)
 
         self.requests = QListWidget()
 
         layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 10, 0, 0)
         layout.addWidget(intro)
         layout.addLayout(form)
         layout.addLayout(buttons)
         layout.addLayout(ex_head)
         layout.addWidget(self.example)
-        layout.addWidget(QLabel(tr("wh_requests")))
+        req_title = QLabel(tr("wh_requests"))
+        req_title.setObjectName("FieldHeading")
+        layout.addWidget(req_title)
         layout.addWidget(self.requests, 1)
         return tab
 

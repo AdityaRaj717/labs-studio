@@ -171,6 +171,8 @@ Start runs a preflight before any spend: `flow_doctor`, the account check, balan
 
 Each: decision, why, cost if wrong.
 
+> **Amended 2026-11-03:** the owner's Contact Sheet contract supersedes R1's colours: approved and rejected use the red marker, rose means failed only, amber means live only.
+
 **R1. Frozen UI vs review in the app.** *No new page, panel, column or button. Review lives in the existing table on `flow_image` (References, Stills) and `flow_video` (Animations).* The owner's request overrides the freeze for exactly this list:
 
 | Existing part | Change for production rows only |
