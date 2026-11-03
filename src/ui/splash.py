@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QRect, Qt
+from PySide6.QtCore import QRect, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPixmap
 from PySide6.QtWidgets import QSplashScreen
 
@@ -14,29 +14,27 @@ WIDTH, HEIGHT = 420, 220
 
 
 def _render(mode: str) -> QPixmap:
-    c = COLORS.get(mode, COLORS["dark"])
+    from src.ui.generator.sheet import draw_ring  # the mark the whole app is about
+
+    c = COLORS["dark"]  # a frame is black in both modes
     pix = QPixmap(WIDTH, HEIGHT)
-    pix.fill(QColor(c["panel"]))
+    pix.fill(QColor(c["frame"]))
     p = QPainter(pix)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    p.setPen(QColor(c["border"]))
-    p.drawRect(0, 0, WIDTH - 1, HEIGHT - 1)
+    draw_ring(p, QRectF(58, 34, WIDTH - 116, 118), 7, c["marker"])
 
-    p.setPen(QColor(c["accent"]))
-    p.fillRect(QRect(32, 64, 6, 52), QColor(c["accent"]))
-
-    title_font = QFont()
-    title_font.setPointSize(22)
-    title_font.setBold(True)
+    title_font = QFont("Bahnschrift SemiBold SemiCondensed")
+    title_font.setPixelSize(28)
     p.setFont(title_font)
-    p.setPen(QColor(c["text"]))
-    p.drawText(QRect(52, 60, WIDTH - 80, 36), Qt.AlignmentFlag.AlignVCenter, APP_NAME)
+    p.setPen(QColor(c["frame_text"]))
+    p.drawText(QRect(0, 34, WIDTH, 118), Qt.AlignmentFlag.AlignCenter, APP_NAME)
 
-    small = QFont()
-    small.setPointSize(10)
+    small = QFont("Cascadia Mono")
+    small.setPixelSize(11)
     p.setFont(small)
-    p.setPen(QColor(c["text_muted"]))
-    p.drawText(QRect(52, 94, WIDTH - 80, 24), Qt.AlignmentFlag.AlignVCenter, tr("version", version=__version__))
+    p.setPen(QColor(c["frame_muted"]))
+    p.drawText(QRect(0, 172, WIDTH - 14, 34), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom,
+               tr("version", version=__version__))
     p.end()
     return pix
 
@@ -44,7 +42,7 @@ def _render(mode: str) -> QPixmap:
 class SplashScreen(QSplashScreen):
     def __init__(self, mode: str = "dark"):
         super().__init__(_render(mode))
-        self._color = QColor(COLORS.get(mode, COLORS["dark"])["text_muted"])
+        self._color = QColor(COLORS["dark"]["frame_muted"])
         self.show_message(tr("splash_loading"))
 
     def show_message(self, text: str) -> None:

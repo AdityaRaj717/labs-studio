@@ -5,16 +5,19 @@ from __future__ import annotations
 import logging
 from typing import Callable
 
-from PySide6.QtCore import QByteArray
+from PySide6.QtCore import QByteArray, QTimer
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QMainWindow, QMessageBox, QStackedWidget, QWidget
 
 from src import APP_NAME, __version__
 from src import config, features, theme
 from src.i18n import tr
+from src.ui import kit
 from src.ui.log_panel import LogPanel
 from src.ui.help.button import attach_help_button
 from src.ui.help.page import HelpPage
 from src.ui.pages.placeholder import PlaceholderPage
+from src.ui.palette import CommandPalette
 from src.ui.sidebar import NAV_ITEMS, NAV_KEYS, Sidebar
 
 log = logging.getLogger(__name__)
@@ -64,6 +67,16 @@ class MainWindow(QMainWindow):
         self.sidebar.collapsed_changed.connect(lambda c: config.set("sidebar_collapsed", c))
         self.sidebar.version_clicked.connect(self.show_about)
 
+        self.palette_ = CommandPalette(self.palette_commands, central)
+        QShortcut(QKeySequence("Ctrl+K"), self, self.palette_.open)
+        shown = [k for k in NAV_KEYS if features.page_shown(k)]
+        for number, key in enumerate(shown[:9], start=1):
+            QShortcut(QKeySequence(f"Ctrl+{number}"), self, lambda k=key: self.switch_page(k))
+        self._live_timer = QTimer(self)
+        self._live_timer.setInterval(1000)
+        self._live_timer.timeout.connect(self._update_live)
+        self._live_timer.start()
+
         self._restore_geometry()
         self.switch_page(next((k for k in NAV_KEYS if features.page_shown(k)), NAV_KEYS[0]))
 
@@ -108,6 +121,29 @@ class MainWindow(QMainWindow):
         if key != self.current_key:
             log.info("Page: %s", key)
         self.current_key = key
+
+    def _update_live(self) -> None:
+        """The rail's amber mark: which page has a batch running, seen from anywhere."""
+        for key in PROJECT_PAGES:
+            queue = getattr(self.pages.get(key), "queue", None)
+            self.sidebar.set_live(key, queue is not None and queue.is_running())
+
+    def palette_commands(self) -> list[tuple[str, Callable[[], None]]]:
+        """The current page's own actions first, then every page, then the window."""
+        commands = []
+        own = getattr(self.pages.get(self.current_key), "palette_commands", None)
+        if callable(own):
+            commands += own()
+        for key, label_key, _ in NAV_ITEMS:
+            if features.page_shown(key):
+                commands.append((tr("palette_go", page=tr(label_key)), lambda k=key: self.switch_page(k)))
+        commands.append((tr("palette_toggle_theme"), self.toggle_theme))
+        commands.append((tr("palette_toggle_sidebar"), self.sidebar.toggle_collapsed))
+        if self.projects is not None:
+            from src.ui.projects import actions
+
+            commands.append((tr("palette_new_project"), lambda: actions.new_project(self, self.projects)))
+        return commands
 
     def open_help(self, topic: str) -> None:
         """Show the Help page on ``topic`` (the pages' "?" buttons)."""
@@ -165,6 +201,7 @@ class MainWindow(QMainWindow):
         new_mode = "light" if theme.current_mode() == "dark" else "dark"
         theme.apply_theme(QApplication.instance(), new_mode)
         config.set("theme", new_mode)
+        kit.repolish_tree()
         self.sidebar.update_theme_button()
         self.sidebar.update()
         log.info("Theme: %s", new_mode)
