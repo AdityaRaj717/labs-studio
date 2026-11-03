@@ -28,6 +28,9 @@ import { allRuns, enqueue, jobByKey, transition } from './job-store.js';
 import * as ledger from './ledger.js';
 import { createRun } from './run-folder.js';
 import { withTab } from './tab-lock.js';
+import { detectBlock } from '../flow/blocks.js';
+
+const PAGE_BLOCKS = [ErrorCodes.WAF_BLOCK, ErrorCodes.MANUAL_VERIFICATION_REQUIRED, ErrorCodes.NOT_LOGGED_IN];
 import { validateImage, validateVideo } from './validate.js';
 
 // The app's own calls, not listed to agents: an agent has no business moving the cap.
@@ -178,7 +181,15 @@ export function createRpc({ worker, session, hub, getSecret = (name) => process.
     else transition(job, 'queued', undefined, { retry: true });
   }
 
-  function control({ action, job_id, run_id, max_credits, accept_quote }) {
+  // A page block clears only when the page says so: resume looks before it lets the queue spend.
+  async function control(args) {
+    const page = args.action === 'resume' && PAGE_BLOCKS.includes(worker.status().paused) ? session.peek?.() : null;
+    const block = page ? await detectBlock(page).catch(() => null) : null;
+    if (block) throw createError(block.code, `Flow still shows the block: ${block.text}`);
+    return controlNow(args);
+  }
+
+  function controlNow({ action, job_id, run_id, max_credits, accept_quote }) {
     if (action === 'resume' || action === 'retry_failed') worker.assertSettled(); // before any job moves
     if (run_id && orchestrator.forRun(run_id) && action === 'set_budget') {
       const production = orchestrator.setBudget({ run_id, max_credits });

@@ -95,7 +95,8 @@ export function createWorker({ adapter, session, pacer, settleMs = SETTLE_MS, re
   async function settle(job, err, page) {
     const { error, screenshot } = await failureOf(err, page);
     const payload = toErrorPayload(error);
-    payload.credits_at_risk ||= Boolean(job.submittedAt);
+    // A tile that says it did not charge is believed; otherwise anything past the credit line is at risk.
+    if (error.details?.credits_at_risk === undefined) payload.credits_at_risk ||= Boolean(job.submittedAt);
     payload.screenshot = screenshot ?? null;
     const { error_code: code } = payload;
     const kind = ERROR_CLASSES[code].class;

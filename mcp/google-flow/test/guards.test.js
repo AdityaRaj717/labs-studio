@@ -290,3 +290,36 @@ test('toErrorPayload handles a foreign error as internal', () => {
 test('FlowError.toJSON stays for existing callers', () => {
   assert.deepEqual(createError(ErrorCodes.INVALID_PARAMS, 'm').toJSON(), { error: 'INVALID_PARAMS', message: 'm', details: {} });
 });
+
+// --- S2-1: a failed tile is not a page block
+
+const TILE = '<flow-grid-tile-container role="group"><p>We noticed some unusual activity. You have not been charged for this generation.</p></flow-grid-tile-container>';
+
+test('old failed tile does not block a new job', async () => {
+  assert.equal(await detectIn(`<main>${TILE}<p>A prompt about a van</p></main>`), null);
+});
+
+test('whole page interstitial still blocks', async () => {
+  const found = await detectIn('<p>We noticed some unusual activity from your network. Try again later.</p>');
+  assert.equal(found.code, ErrorCodes.WAF_BLOCK);
+});
+
+test('new failed tile stops with not-charged', async () => {
+  const { failureOf } = await import('../src/flow/image.js');
+  const err = failureOf({ status: 'failed', text: 'We noticed some unusual activity. You have not been charged for this generation.' });
+  const payload = toErrorPayload(err);
+  assert.equal(payload.error_code, ErrorCodes.FLOW_ACTIVITY_FLAG);
+  assert.equal(payload.credits_at_risk, false);
+  assert.equal(ERROR_CLASSES.FLOW_ACTIVITY_FLAG.class, 'owner');
+});
+
+test('resume refuses while the block shows', async () => {
+  const { createRpc } = await import('../src/engine/rpc.js');
+  let resumed = false;
+  const worker = { status: () => ({ paused: ErrorCodes.WAF_BLOCK, active: null }), assertSettled() {}, resume() { resumed = true; } };
+  await page.setContent('<p>We noticed some unusual activity from your network.</p>');
+  const rpc = createRpc({ worker, session: { peek: () => page }, hub: { on() {}, emit() {} } });
+  const out = await rpc('flow_job_control', { action: 'resume' });
+  assert.equal(out.error_code, ErrorCodes.WAF_BLOCK);
+  assert.equal(resumed, false);
+});

@@ -19,6 +19,7 @@ export const ErrorCodes = {
   COMBINATION_NOT_SUPPORTED: 'COMBINATION_NOT_SUPPORTED',
   BUDGET_EXCEEDED: 'BUDGET_EXCEEDED',
   WAF_BLOCK: 'WAF_BLOCK',
+  FLOW_ACTIVITY_FLAG: 'FLOW_ACTIVITY_FLAG',
   DAILY_MODEL_LIMIT: 'DAILY_MODEL_LIMIT',
   DAILY_CAP_REACHED: 'DAILY_CAP_REACHED',
   AUDIO_NO_CREDIT: 'AUDIO_NO_CREDIT',
@@ -57,6 +58,7 @@ export const ERROR_CLASSES = {
   NOT_LOGGED_IN: owner('Sign in to Google in the Flow Chrome window, then call resume.'),
   WRONG_GOOGLE_ACCOUNT: owner('Switch to the expected Google account in the Flow Chrome window, then call resume.'),
   MANUAL_VERIFICATION_REQUIRED: owner('Complete the verification yourself in the Flow Chrome window, then call resume.'),
+  FLOW_ACTIVITY_FLAG: owner('Flow flagged this generation as unusual activity. Check the Chrome window yourself, delete the failed tile, then call resume.'),
   WAF_BLOCK: owner('Stop using Flow for now, check the Chrome window yourself, then call resume once it loads normally.'),
 
   GOOGLE_LIMIT_REACHED: stopRun('Wait for the Google limit to reset, then call resume.'),

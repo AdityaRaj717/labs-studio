@@ -32,7 +32,7 @@ BLOCK_MESSAGES = {
 # Engine error code -> how the queue treats it.
 BLOCK_CODES = {
     "NOT_LOGGED_IN": "login", "WRONG_GOOGLE_ACCOUNT": "login",
-    "MANUAL_VERIFICATION_REQUIRED": "captcha", "WAF_BLOCK": "captcha",
+    "MANUAL_VERIFICATION_REQUIRED": "captcha", "WAF_BLOCK": "captcha", "FLOW_ACTIVITY_FLAG": "captcha",
     "GOOGLE_LIMIT_REACHED": "quota", "DAILY_MODEL_LIMIT": "quota",
 }
 STOP_CODES = {  # every later job would fail the same way

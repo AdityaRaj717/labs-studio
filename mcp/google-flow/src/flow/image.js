@@ -8,7 +8,7 @@ import { beat } from '../engine/pacer.js';
 import { getBalance } from '../tools/flow-status.js';
 import { createError, ErrorCodes, FlowError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
-import { locate } from './contract.js';
+import { contract, locate } from './contract.js';
 import { downloadAsset, readAssetInfo } from './download.js';
 import { addIngredient, assertChips, clearChips } from './ingredients.js';
 import { baselineTiles, observeGeneration, tileOf } from './observe.js';
@@ -21,9 +21,18 @@ const START_ENABLED_MS = 10000;
 
 const sentRequest = (spec) => spec.prompt.replace(/\s+/g, ' ').trim();
 
-function failureOf({ status, text, error }) {
+const activityRule = contract.blocks.rules.find(({ code }) => code === 'WAF_BLOCK');
+
+export function failureOf({ status, text, error }) {
   if (status === 'blocked') return createError(error, text);
   if (status === 'timeout') return createError(ErrorCodes.GENERATION_TIMEOUT, error);
+  // Google's own flag on one generation: the owner looks, nothing retries it.
+  if (new RegExp(activityRule.text, 'i').test(text)) {
+    return createError(ErrorCodes.FLOW_ACTIVITY_FLAG, `Flow flagged the generation: ${text}`, {
+      tile_text: text,
+      credits_at_risk: !/not been charged/i.test(text),
+    });
+  }
   return createError(ErrorCodes.FLOW_GENERATION_FAILED, `Flow failed the generation: ${text || 'no message shown'}`, { tile_text: text });
 }
 

@@ -13,7 +13,12 @@ export async function detectBlock(page) {
   const alerts = await page.locator('[role=alert]').allInnerTexts();
   const toasts = await page.getByRole('button', { name: toastDismiss, exact: true }).locator('..').allInnerTexts();
   const notices = [...alerts, ...toasts].join('\n');
-  const body = (await page.locator('body').allInnerTexts()).join('\n');
+  // Tile text is left out: a failed tile stays in the grid and would match every later check.
+  const body = await page.evaluate((tile) => {
+    const copy = document.body.cloneNode(true);
+    copy.querySelectorAll(`${tile}, script, style, noscript, template`).forEach((el) => el.remove());
+    return copy.textContent ?? '';
+  }, contract.keys['project.tile'].css);
 
   for (const rule of rules) {
     if (!rule.text) continue;
