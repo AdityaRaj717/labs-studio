@@ -87,10 +87,13 @@ def test_generate_passes_options_and_reads_files(store, tmp_path):
     assert call["idempotency_key"].startswith("app:") and job.engine_key == ""
 
 
-def test_count_is_clamped_and_no_refs_key_without_refs(store, tmp_path):
+def test_count_is_capped_by_the_form_and_no_refs_key_without_refs(store, tmp_path):
+    from src.ui.generator.config_panel import fields_for
+
     provider, backend, _ = make_provider(store, tmp_path)
-    provider.generate(Job("x"), {"count": 8}, ctx())
-    assert backend.calls[0]["count"] == 4 and "ingredients" not in backend.calls[0]
+    assert next(f for f in fields_for(provider) if f.key == "count").maximum == 4  # no silent clamp
+    provider.generate(Job("x"), {"count": 3}, ctx())
+    assert backend.calls[0]["count"] == 3 and "ingredients" not in backend.calls[0]
 
 
 def test_timeout_keeps_the_key_so_a_retry_spends_nothing(store, tmp_path):

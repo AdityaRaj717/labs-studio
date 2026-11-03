@@ -9,12 +9,12 @@ import pytest
 from PySide6.QtCore import Qt
 
 from fake_provider import FakeProvider
-from src import config, projects
+from src import config, projects, theme
 from src.config import Settings
 from src.gen.models import Job, JobStatus
 from src.projects.store import job_to_row, row_to_job
 from src.ui.generator.page import GeneratorPage
-from src.ui.generator.prompt_model import COL_CHARACTER, COL_OUTPUT, COL_PROMPT, COL_STATUS, COLUMN_KEYS, STATUS_COLORS, status_color
+from src.ui.generator.prompt_model import COL_CHARACTER, COL_OUTPUT, COL_PROMPT, COL_STATUS, COLUMN_KEYS, REVIEW_COLORS, STATUS_COLORS, status_color
 from src.web.engine_client import EngineError
 from src.web.run_mirror import RunMirror, banner_text, item_fields
 
@@ -102,17 +102,19 @@ def test_approved_row_names_its_approved_take_not_the_newest(page):
 
 
 def test_colours_come_only_from_status_colors(page):
-    allowed = set(STATUS_COLORS.values())
+    # One source of colour: the status and review tables (Contact Sheet contract, 2026-11-03).
+    allowed = set(STATUS_COLORS.values()) | set(REVIEW_COLORS.values())
     for state in ("planned", "generating", "pending_review", "approved", "rejected", "regenerating", "failed"):
         page.mirror.apply_production_event(item(state))
         assert status_color(page.jobs[0]) in allowed
 
 
-def test_a_rejected_row_uses_the_failed_colour(page):
+def test_a_rejected_row_uses_the_marker(page):
+    # A rejection is a decision, not a failure: red marker, rose stays for failed (R1 amended).
     page.mirror.apply_production_event(item("rejected"))
-    assert status_color(page.jobs[0]) == STATUS_COLORS[JobStatus.FAILED]
+    assert status_color(page.jobs[0]) == REVIEW_COLORS["rejected"] == theme.tokens()["marker"]
     assert page.jobs[0].status is JobStatus.DONE
-    assert cell(page, COL_STATUS, Qt.ItemDataRole.ForegroundRole).name() == STATUS_COLORS[JobStatus.FAILED]
+    assert cell(page, COL_STATUS, Qt.ItemDataRole.ForegroundRole).name() == theme.tokens()["marker"]
 
 
 def test_prompt_cell_shows_id_and_edit_role_the_prompt_alone(page):

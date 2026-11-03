@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from src.gen.models import Job, OutputFile
-from src.gen.provider import ConfigField, Provider, ProviderError, RunContext
+from src.gen.provider import ConfigField, Estimate, Provider, ProviderError, RunContext
 from src.gen.web_flow_image import SITE, WebFlowImageProvider, capabilities, run_engine_job
 
 
@@ -26,17 +26,26 @@ class WebFlowVideoProvider(Provider):
     site = SITE
     backend = WebFlowImageProvider.backend
     session = WebFlowImageProvider.session
+    max_count = 4
 
     def __init__(self, backend=None, session=None):
         self._backend = backend
         self._session = session
 
+    def estimate(self, jobs: list[Job], options: dict[str, Any]) -> Estimate:
+        cost = quote(capabilities(), options.get("model") or "omni", int(options.get("duration", 8)),
+                     options.get("resolution") or "720p")
+        return Estimate(len(jobs), cost * max(1, int(options.get("count", 1))) * len(jobs))
+
     def config_fields(self) -> list[ConfigField]:
         video = capabilities()["video"]
+        durations = {m: sorted({s for secs in e["credits"].values() for s in secs}, key=int)
+                     for m, e in video["models"].items()}
         return [
             ConfigField("model", "gen_model", "choice", video["defaultModel"], list(video["models"]), option_prefix="flow_model_"),
             ConfigField("aspect", "gen_aspect", "choice", video["ratios"][0], video["ratios"]),
-            ConfigField("duration", "gen_duration", "choice", "8", ["4", "6", "8", "10"]),
+            ConfigField("duration", "gen_duration", "choice", "8", durations[video["defaultModel"]],
+                        depends_on="model", options_by=durations),
             ConfigField("resolution", "gen_resolution", "choice", "720p", ["720p", "360p"]),
             ConfigField("silent", "gen_silent", "bool", False),
             ConfigField("timeout", "gen_timeout", "int", 600, minimum=60, maximum=1800),
@@ -45,7 +54,7 @@ class WebFlowVideoProvider(Provider):
     def generate(self, job: Job, options: dict[str, Any], ctx: RunContext) -> list[OutputFile]:
         model = options.get("model") or "omni"
         duration, resolution = int(options.get("duration", 8)), options.get("resolution") or "720p"
-        count = max(1, min(int(options.get("count", 1)), 4))
+        count = max(1, int(options.get("count", 1)))
         cost = quote(capabilities(), model, duration, resolution)
         library = set(job.character_refs) | set(job.scene_refs)
         refs = [str(Path(r).resolve()) for r in job.refs if r not in library]

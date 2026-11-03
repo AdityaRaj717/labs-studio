@@ -40,6 +40,18 @@ class ConfigField:
     minimum: float = 0
     maximum: float = 9999
     option_prefix: str = ""
+    depends_on: str = ""  # another field's key: ``options_by[its value]`` replaces ``options``
+    options_by: dict[str, list[str]] = field(default_factory=dict)
+
+
+@dataclass
+class Estimate:
+    """What a Start would ask for, before anything is spent. ``credits`` None: the provider bills it.
+    ``note`` is a language key that replaces the credit line."""
+
+    shots: int
+    credits: int | None
+    note: str = ""
 
 
 @dataclass
@@ -55,6 +67,10 @@ class RunContext:
 class Provider:
     key = "base"
     name = "Base provider"
+    max_count = 8  # takes per shot the provider accepts
+
+    def estimate(self, jobs: list[Job], options: dict[str, Any]) -> Estimate:
+        return Estimate(len(jobs), None, "gen_estimate_billed")
 
     def config_fields(self) -> list[ConfigField]:
         return []

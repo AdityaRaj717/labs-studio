@@ -107,7 +107,7 @@ def test_production_menu(page):
 def test_a_normal_rows_menu_is_unchanged(page):
     page.add_prompts(["plain"])
     menu = labels(page.table._build_menu(0, [0]))
-    assert {"Edit…", "Retry", "Remove"} <= set(menu) and "Approve" not in menu and menu["Remove"].isEnabled()
+    assert {"Edit…", "Retry", "Remove"} <= set(menu) and not menu["Approve"].isEnabled() and menu["Remove"].isEnabled()  # no picture yet
 
 
 def test_approve_is_enabled_only_with_a_pending_row(page):

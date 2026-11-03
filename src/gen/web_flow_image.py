@@ -16,7 +16,7 @@ from typing import Any
 
 from src.characters.flow_sync import SyncError
 from src.gen.models import Job, OutputFile
-from src.gen.provider import ConfigField, Provider, ProviderError, RunContext
+from src.gen.provider import ConfigField, Estimate, Provider, ProviderError, RunContext
 from src.web.engine_client import EngineError, EngineToolError
 
 log = logging.getLogger(__name__)
@@ -124,10 +124,14 @@ class WebFlowImageProvider(Provider):
     key = "web_flow_image"
     name = "Google Flow web (image)"
     site = SITE
+    max_count = 4
 
     def __init__(self, backend=None, session=None):
         self._backend = backend
         self._session = session
+
+    def estimate(self, jobs: list[Job], options: dict[str, Any]) -> Estimate:
+        return Estimate(len(jobs), capabilities()["image"]["credits"], "gen_estimate_quota")
 
     @property
     def backend(self):
@@ -164,7 +168,7 @@ class WebFlowImageProvider(Provider):
             "prompt": job.prompt,
             "model": options.get("model") or None,
             "ratio": options.get("aspect") or "1:1",
-            "count": max(1, min(int(options.get("count", 1)), 4)),
+            "count": max(1, int(options.get("count", 1))),
             "size": options.get("download_size") or "1K",
             "ingredients": [str(Path(r).resolve()) for r in refs],
         }

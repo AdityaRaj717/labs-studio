@@ -1,4 +1,4 @@
-"""GeneratorPage: config panel + toolbar + stats header + prompt table + queue."""
+"""GeneratorPage: the desk. Run bar, tool row, the sheet or queue, and the Inspector; the viewer fills it all."""
 
 from __future__ import annotations
 
@@ -7,11 +7,11 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, QUrl, Signal
+from PySide6.QtCore import QItemSelectionModel, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
-    QComboBox, QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLabel, QMessageBox, QPushButton, QScrollArea,
-    QVBoxLayout, QWidget,
+    QComboBox, QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLabel, QMessageBox, QPushButton, QScrollArea, QSlider,
+    QStackedWidget, QTabWidget, QVBoxLayout, QWidget,
 )
 
 from src import config
@@ -19,19 +19,67 @@ from src.characters import attach as char_attach
 from src.gen.importer import load_prompts, parse_text
 from src.gen.models import Job, JobStatus
 from src.gen.output import default_save_dir, output_dir, save_outputs
-from src.gen.provider import Provider
+from src.gen.provider import Provider, ProviderError
 from src.gen.queue import JobQueue, QueueSettings, count_statuses
 from src.gen.refmatch import match_refs
 from src.i18n import tr
-from src.ui.generator.config_panel import COMMON_FIELDS, ConfigPanel
+from src.ui.generator.config_panel import ConfigPanel, fields_for
 from src.ui.generator.prompt_model import COL_PROMPT, PromptTableModel
 from src.ui.generator.prompt_table import PromptTable
 from src.ui.generator.queue_bridge import QueueBridge
+from src.ui.generator.sheet import FILTERS, RunStrip, SheetView
 from src.ui.generator.stats_header import StatsHeader
+from src.ui.generator.take_panel import TakePanel
+from src.ui.generator.viewer import TakeViewer
+from src.ui.kit import HELP_GUTTER, IconButton, Segmented, flow_row, page_title, set_icon
 from src.web.production_actions import ActionError, ProductionActions
 from src.web.run_mirror import apply_item, banner_text
 
 log = logging.getLogger(__name__)
+
+INSPECTOR_WIDTH = 300
+INSPECTOR_MIN_PAGE = 900  # below this the sheet keeps the room until the panel is asked for
+FRAME_WIDTHS = (140, 480, 240)  # minimum, maximum, default
+
+
+class _EmptyState(QWidget):
+    """Nothing to show: a heading, a note, the ways in, and drop anywhere."""
+
+    files_dropped = Signal(list)
+
+    def __init__(self, title: str, hint: str, *buttons: QPushButton):
+        super().__init__()
+        self.setAcceptDrops(True)
+        heading = QLabel(title)
+        heading.setObjectName("EmptyTitle")
+        heading.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        note = QLabel(hint)
+        note.setObjectName("Hint")
+        note.setWordWrap(True)
+        note.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        note.setVisible(bool(hint))
+        row = QHBoxLayout()
+        row.setSpacing(6)
+        row.addStretch(1)
+        for b in buttons:
+            row.addWidget(b)
+        row.addStretch(1)
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+        layout.addStretch(1)
+        layout.addWidget(heading)
+        layout.addWidget(note)
+        layout.addLayout(row)
+        layout.addStretch(2)
+
+    def dragEnterEvent(self, event) -> None:  # noqa: N802 - Qt override
+        event.acceptProposedAction() if PromptTable._import_paths(event) else event.ignore()
+
+    def dropEvent(self, event) -> None:  # noqa: N802 - Qt override
+        paths = PromptTable._import_paths(event)
+        if paths:
+            event.acceptProposedAction()
+            self.files_dropped.emit(paths)
 
 
 class GeneratorPage(QWidget):
@@ -50,7 +98,7 @@ class GeneratorPage(QWidget):
         self._batch_folder: Path | None = None
         self.providers: list[tuple[Provider, str]] = [(provider, banner)] + list(alternatives or [])
 
-        self.config_panel = ConfigPanel(page_key, provider.config_fields() + COMMON_FIELDS, store)
+        self.config_panel = ConfigPanel(page_key, fields_for(provider), store)
         self.model = PromptTableModel(self)
         self.table = PromptTable(self.model)
         self.stats_header = StatsHeader()
@@ -59,20 +107,90 @@ class GeneratorPage(QWidget):
         self.bridge.job_updated.connect(self._on_job_updated)
         self.bridge.finished.connect(self._on_finished)
 
-        # Left: settings in a scroll area.
+        self._prefs = store if store is not None else config.settings()
+        self.title = title
+        self.sheet = SheetView(self.model)
+        self.sheet.setSelectionModel(self.table.selectionModel())
+        self.run_strip = RunStrip(self.model)
+        self.viewer = TakeViewer(self.model)
+        self.take_panel = TakePanel()
+
+        self.btn_import = self._button("gen_import", self.import_dialog, "upload-simple")
+        self.btn_paste = self._button("gen_paste", self.paste_dialog, "clipboard-text")
+        self.btn_match = IconButton("link-simple", tr("gen_match_refs"), self.match_refs)
+        self.btn_match_chars = IconButton("user-focus", tr("gen_match_characters"), self.match_characters)
+        self.btn_match_chars.setToolTip(tr("gen_match_characters_tip"))
+        self.btn_clear = IconButton("eraser", tr("gen_clear"), self._confirm_clear)
+        self.btn_start = self._button("gen_start", self._confirm_start, "play", "accent_text")
+        self.btn_pause = self._button("gen_pause", self.toggle_pause, "pause")
+        self.btn_stop = self._button("gen_stop", self.stop, "stop")
+        self.btn_retry = self._button("gen_retry_failed", self.retry_failed, "arrow-clockwise")
+        self.btn_folder = self._button("gen_open_folder", self.open_output_folder, "folder-open")
+        self.btn_start.setObjectName("PrimaryButton")
+
+        # Run bar: the name, what the run is doing, and the strip that reads from across the room.
+        run_row = QHBoxLayout()
+        run_row.setContentsMargins(0, 0, HELP_GUTTER - 14, 0)
+        run_row.setSpacing(6)
+        if title:
+            run_row.addWidget(page_title(title))
+            run_row.addSpacing(10)
+        run_row.addStretch(1)
+        for b in (self.btn_start, self.btn_pause, self.btn_stop, self.btn_retry, self.btn_folder):
+            run_row.addWidget(b)
+        self.stats_header.setWordWrap(True)
+        run_bar = QVBoxLayout()
+        run_bar.setContentsMargins(14, 8, 14, 0)
+        run_bar.setSpacing(6)
+        run_bar.addLayout(run_row)
+        run_bar.addWidget(self.stats_header)
+        run_bar.addWidget(self.run_strip)
+
+        # Tool row: wraps instead of clipping at the minimum window size.
+        self.view_switch = Segmented([("sheet", tr("gen_view_sheet")), ("queue", tr("gen_view_queue"))],
+                                     self._prefs.get(f"pages.{page_key}.view", "sheet"))
+        self.filter_bar = Segmented([(k, tr(f"gen_filter_{k}")) for k in FILTERS])
+        self.size_slider = QSlider(Qt.Orientation.Horizontal)
+        self.size_slider.setRange(FRAME_WIDTHS[0], FRAME_WIDTHS[1])
+        self.size_slider.setFixedWidth(110)
+        self.size_slider.setToolTip(tr("gen_frame_size"))
+        self.size_slider.setAccessibleName(tr("gen_frame_size"))
+        self.size_slider.setValue(int(self._prefs.get(f"pages.{page_key}.frame_width", FRAME_WIDTHS[2])))
+        self.btn_inspector = IconButton("sidebar-simple", tr("gen_inspector_toggle"), self.toggle_inspector, checkable=True)
+        self.tools = flow_row(self.btn_import, self.btn_paste, self.btn_match, self.btn_match_chars, self.btn_clear,
+                              self.view_switch, self.filter_bar, self.size_slider, self.btn_inspector)
+        tool_box = QVBoxLayout()
+        tool_box.setContentsMargins(14, 8, 14, 8)
+        tool_box.addWidget(self.tools)
+
+        # Centre: empty state, sheet, queue, or the filter's empty note.
+        self.run_notice = QLabel()
+        self.run_notice.setObjectName("RunNotice")
+        self.run_notice.setWordWrap(True)
+        self.run_notice.setContentsMargins(14, 0, 14, 6)
+        self.run_notice.hide()
+        empty_import = self._button("gen_import", self.import_dialog, "upload-simple")
+        empty_paste = self._button("gen_paste", self.paste_dialog, "clipboard-text")
+        self.empty = _EmptyState(tr("gen_empty_title"), tr("gen_empty_hint"), empty_import, empty_paste)
+        self.empty.files_dropped.connect(self.import_files)
+        self.empty_buttons = (empty_import, empty_paste)
+        show_all = QPushButton(tr("gen_filter_all"))
+        show_all.clicked.connect(lambda _checked=False: self.set_filter("all"))
+        self.filter_empty = _EmptyState(tr("gen_filter_empty"), "", show_all)
+        self.views = QStackedWidget()
+        for w in (self.empty, self.sheet, self.table, self.filter_empty):
+            self.views.addWidget(w)
+
+        # Inspector: the selected take, and the settings for the next shots.
         self.scroll = scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setWidget(self.config_panel)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setFixedWidth(330)
-
-        # Right: banner, toolbar, stats, table.
-        right = QVBoxLayout()
-        if title:
-            heading = QLabel(title)
-            heading.setStyleSheet("font-size: 18px; font-weight: 600;")
-            right.addWidget(heading)
+        settings = QWidget()
+        settings_box = QVBoxLayout(settings)
+        settings_box.setContentsMargins(12, 12, 4, 0)
+        settings_box.setSpacing(8)
         self.provider_combo: QComboBox | None = None
         if len(self.providers) > 1:
             self.provider_combo = QComboBox()
@@ -80,43 +198,85 @@ class GeneratorPage(QWidget):
                 self.provider_combo.addItem(p.name, p.key)
             pick = QHBoxLayout()
             pick.addWidget(QLabel(tr("gen_provider")))
-            pick.addWidget(self.provider_combo)
-            pick.addStretch(1)
-            right.addLayout(pick)
+            pick.addWidget(self.provider_combo, 1)
+            settings_box.addLayout(pick)
         self._provider_banner = banner
         self._production_banner = ""
         self.banner_label = QLabel(banner)
         self.banner_label.setWordWrap(True)
         self.banner_label.setObjectName("DemoBanner")
         self.banner_label.setVisible(bool(banner))
-        right.addWidget(self.banner_label)
+        settings_box.addWidget(self.banner_label)
+        settings_box.addWidget(scroll, 1)
+        self.inspector_tabs = QTabWidget()
+        self.inspector_tabs.setDocumentMode(True)
+        self.inspector_tabs.tabBar().setDrawBase(False)
+        self.inspector_tabs.addTab(self.take_panel, tr("gen_tab_take"))
+        self.inspector_tabs.addTab(settings, tr("gen_tab_settings"))
+        self.inspector = QFrame()
+        self.inspector.setObjectName("Inspector")
+        self.inspector.setFixedWidth(INSPECTOR_WIDTH)
+        inspector_box = QVBoxLayout(self.inspector)
+        inspector_box.setContentsMargins(0, 4, 0, 0)
+        inspector_box.addWidget(self.inspector_tabs)
+        self._inspector_wanted = bool(self._prefs.get(f"pages.{page_key}.inspector", True))
+        self._narrow = False
 
-        self.btn_import = self._button("gen_import", self.import_dialog)
-        self.btn_paste = self._button("gen_paste", self.paste_dialog)
-        self.btn_match = self._button("gen_match_refs", self.match_refs)
-        self.btn_match_chars = self._button("gen_match_characters", self.match_characters)
-        self.btn_match_chars.setToolTip(tr("gen_match_characters_tip"))
-        self.btn_clear = self._button("gen_clear", self.clear)
-        self.btn_start = self._button("gen_start", self.start)
-        self.btn_pause = self._button("gen_pause", self.toggle_pause)
-        self.btn_stop = self._button("gen_stop", self.stop)
-        self.btn_retry = self._button("gen_retry_failed", self.retry_failed)
-        self.btn_folder = self._button("gen_open_folder", self.open_output_folder)
-        self.btn_start.setObjectName("PrimaryButton")
+        centre = QVBoxLayout()
+        centre.setContentsMargins(0, 0, 0, 0)
+        centre.setSpacing(0)
+        centre.addWidget(self.run_notice)
+        centre.addWidget(self.views, 1)
+        work = QHBoxLayout()
+        work.setContentsMargins(0, 0, 0, 0)
+        work.setSpacing(0)
+        work.addLayout(centre, 1)
+        work.addWidget(self.inspector)
 
-        bar = QHBoxLayout()
-        for b in (self.btn_import, self.btn_paste, self.btn_match, self.btn_match_chars, self.btn_clear):
-            bar.addWidget(b)
-        bar.addStretch(1)
-        for b in (self.btn_start, self.btn_pause, self.btn_stop, self.btn_retry, self.btn_folder):
-            bar.addWidget(b)
-        right.addLayout(bar)
-        right.addWidget(self.stats_header)
-        right.addWidget(self.table, 1)
+        desk_box = QVBoxLayout()
+        desk_box.setContentsMargins(0, 0, 0, 0)
+        desk_box.setSpacing(0)
+        desk_box.addLayout(run_bar)
+        desk_box.addLayout(tool_box)
+        desk_box.addLayout(work, 1)
+        self.desk = QWidget()
+        self.desk.setLayout(desk_box)
+        self.surface = QStackedWidget()
+        self.surface.addWidget(self.desk)
+        self.surface.addWidget(self.viewer)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.surface)
 
-        layout = QHBoxLayout(self)
-        layout.addWidget(scroll)
-        layout.addLayout(right, 1)
+        self.sheet.set_frame_width(self.size_slider.value())
+        self.size_slider.valueChanged.connect(self._on_frame_width)
+        self.view_switch.changed.connect(self.set_view)
+        self.filter_bar.changed.connect(self.set_filter)
+        self.sheet.filter_changed.connect(lambda _n: self._on_filtered())
+        self.sheet.files_dropped.connect(self.import_files)
+        self.sheet.open_requested.connect(self.open_viewer)
+        self.sheet.approve_requested.connect(self.approve_rows)
+        self.sheet.reject_requested.connect(self.reject_rows)
+        self.sheet.retry_requested.connect(self._confirm_retry)
+        self.sheet.edit_requested.connect(self.edit_row)
+        self.sheet.menu_requested.connect(self._sheet_menu)
+        self.run_strip.row_clicked.connect(self.select_row)
+        self.viewer.closed.connect(self.close_viewer)
+        self.viewer.row_changed.connect(self._on_viewer_row)
+        self.viewer.approve_requested.connect(self.approve_rows)
+        self.viewer.reject_requested.connect(self.reject_rows)
+        self.viewer.retry_requested.connect(self._confirm_retry)
+        self.viewer.edit_requested.connect(self.edit_row)
+        self.viewer.open_requested.connect(self._open)
+        self.take_panel.approve_requested.connect(self.approve_rows)
+        self.take_panel.reject_requested.connect(self.reject_rows)
+        self.take_panel.retry_requested.connect(self._confirm_retry)
+        self.take_panel.edit_requested.connect(self.edit_row)
+        self.take_panel.view_requested.connect(self.open_viewer)
+        self.take_panel.open_requested.connect(self.open_output)
+        self.table.selectionModel().selectionChanged.connect(lambda *_: self._refresh_take())
+        self.model.dataChanged.connect(lambda *_: self._refresh_take())
+        self.model.modelReset.connect(lambda *_: self._refresh_take())
 
         self.table.files_dropped.connect(self.import_files)
         self.table.edit_requested.connect(self.edit_row)
@@ -152,6 +312,8 @@ class GeneratorPage(QWidget):
             self.provider_combo.currentIndexChanged.connect(self._on_provider_picked)
             self._on_provider_picked(self.provider_combo.currentIndex(), save=False)
         self._update_controls()
+        self.set_view(self.view_switch.current(), save=False)
+        self._update_inspector()
 
     # ---- provider picker ----------------------------------------------
     def set_provider(self, key: str) -> bool:
@@ -180,7 +342,7 @@ class GeneratorPage(QWidget):
             return
         self.provider = provider
         self.queue.provider = provider
-        self.config_panel = ConfigPanel(self.page_key, provider.config_fields() + COMMON_FIELDS, self._store)
+        self.config_panel = ConfigPanel(self.page_key, fields_for(provider), self._store)
         self.scroll.setWidget(self.config_panel)
         log.info("%s: provider set to %s", self.page_key, provider.name)
 
@@ -188,15 +350,161 @@ class GeneratorPage(QWidget):
         text = "\n".join(filter(None, [self._provider_banner, self._production_banner]))
         self.banner_label.setText(text)
         self.banner_label.setVisible(bool(text))
+        self.run_notice.setText(self._production_banner)
+        self.run_notice.setVisible(bool(self._production_banner))
 
     def set_production_summary(self, summary: dict, name: str) -> None:
         self._production_banner = banner_text(summary, name)
+        self.run_notice.setProperty("live", summary.get("status") == "running")
+        self.run_notice.style().unpolish(self.run_notice)
+        self.run_notice.style().polish(self.run_notice)
         self._show_banner()
 
-    def _button(self, key: str, slot) -> QPushButton:
+    def _button(self, key: str, slot, icon: str = "", token: str = "text") -> QPushButton:
         b = QPushButton(tr(key))
+        if icon:
+            set_icon(b, icon, token)
         b.clicked.connect(lambda _checked=False: slot())
         return b
+
+    # ---- the desk: views, filter, Inspector, viewer ---------------------
+    def set_view(self, key: str, save: bool = True) -> None:
+        self.view_switch.set_current(key)
+        if save:
+            self._prefs.set(f"pages.{self.page_key}.view", key)
+        self._update_view()
+
+    def set_filter(self, key: str) -> None:
+        self.filter_bar.set_current(key)
+        self.sheet.set_filter(key)
+
+    def _on_frame_width(self, width: int) -> None:
+        self.sheet.set_frame_width(width)
+        self._prefs.set(f"pages.{self.page_key}.frame_width", width)
+
+    def _on_filtered(self) -> None:
+        """The queue shows what the sheet shows, and a decided frame hands the selection on."""
+        rows = range(self.model.rowCount())
+        for row in rows:
+            self.table.setRowHidden(row, self.sheet.isRowHidden(row))
+        selected = self.table.selected_rows()
+        if selected and all(self.sheet.isRowHidden(r) for r in selected):
+            shown = [r for r in rows if not self.sheet.isRowHidden(r)]
+            following = [r for r in shown if r > selected[-1]]
+            if shown:
+                self.select_row((following or shown)[0])
+            else:
+                self.table.clearSelection()
+        self._update_view()
+
+    def _update_view(self) -> None:
+        if not self.model.rowCount():
+            target = self.empty
+        elif not self.sheet.visible_count():
+            target = self.filter_empty
+        else:
+            target = self.sheet if self.view_switch.current() == "sheet" else self.table
+        self.views.setCurrentWidget(target)
+        # Nothing to filter or size until there are rows.
+        has_rows = self.model.rowCount() > 0
+        for w, shown in ((self.view_switch, has_rows), (self.filter_bar, has_rows), (self.run_strip, has_rows),
+                         (self.size_slider, has_rows and self.view_switch.current() == "sheet")):
+            if w.isHidden() == shown:
+                w.setVisible(shown)
+                self.tools.updateGeometry()
+
+    def select_row(self, row: int) -> None:
+        index = self.model.index(row, COL_PROMPT)
+        self.table.selectionModel().setCurrentIndex(
+            index, QItemSelectionModel.SelectionFlag.ClearAndSelect | QItemSelectionModel.SelectionFlag.Rows)
+        self.sheet.scrollTo(self.model.index(row, self.sheet.modelColumn()))
+        self.table.scrollTo(index)
+
+    def _scroll_to_current(self) -> None:
+        rows = self.table.selected_rows()
+        if rows:
+            self.sheet.scrollTo(self.model.index(rows[0], self.sheet.modelColumn()))
+            self.table.scrollTo(self.model.index(rows[0], COL_PROMPT))
+
+    def _refresh_take(self) -> None:
+        if self.inspector.isHidden():
+            return
+        rows = self.table.selected_rows()
+        if len(rows) == 1:
+            job = self.model.job_at(rows[0])
+            self.take_panel.show_rows(self.model, rows, char_attach.character_label(job, self.characters),
+                                      char_attach.scene_label(job, self.scenes))
+        else:
+            self.take_panel.show_rows(self.model, rows)
+
+    def toggle_inspector(self) -> None:
+        shown = self.inspector.isHidden()
+        if not self._narrow:
+            self._inspector_wanted = shown
+            self._prefs.set(f"pages.{self.page_key}.inspector", shown)
+        self.inspector.setVisible(shown)
+        self.btn_inspector.setChecked(shown)
+        self._refresh_take()
+        QTimer.singleShot(0, self._scroll_to_current)  # after the reflow, or the row slides out of view
+
+    def _update_inspector(self) -> None:
+        shown = self._inspector_wanted and not self._narrow
+        self.inspector.setVisible(shown)
+        self.btn_inspector.setChecked(shown)
+        self._refresh_take()
+        QTimer.singleShot(0, self._scroll_to_current)  # after the reflow, or the row slides out of view
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt override
+        super().resizeEvent(event)
+        narrow = event.size().width() < INSPECTOR_MIN_PAGE
+        if narrow != self._narrow:
+            self._narrow = narrow
+            self._update_inspector()
+
+    def open_viewer(self, row: int) -> None:
+        self.viewer.open_row(row, [r for r in range(self.model.rowCount()) if not self.sheet.isRowHidden(r)])
+        self.surface.setCurrentWidget(self.viewer)
+        self.viewer.setFocus()
+        if getattr(self, "help_button", None) is not None:
+            self.help_button.set_on_black(True)
+
+    def close_viewer(self) -> None:
+        self.surface.setCurrentWidget(self.desk)
+        self.views.currentWidget().setFocus()
+        if getattr(self, "help_button", None) is not None:
+            self.help_button.set_on_black(False)
+
+    def _on_viewer_row(self, row: int) -> None:
+        if row not in self.table.selected_rows():
+            self.select_row(row)
+
+    def _sheet_menu(self, pos) -> None:
+        rows = self.sheet.selected_rows()
+        if rows:
+            current = self.sheet.currentIndex().row()
+            self.table._build_menu(current if current in rows else rows[0], rows).exec(pos)
+
+    def palette_commands(self) -> list[tuple[str, object]]:
+        out = [(b.text() or b.accessibleName(), b.click) for b in (
+            self.btn_start, self.btn_pause, self.btn_stop, self.btn_retry, self.btn_folder, self.btn_import,
+            self.btn_paste, self.btn_match, self.btn_match_chars, self.btn_clear) if b.isEnabled()]
+        out += [(tr("palette_view", name=tr(f"gen_view_{k}")), lambda k=k: self.set_view(k)) for k in ("sheet", "queue")]
+        out += [(tr("palette_filter", name=tr(f"gen_filter_{k}")), lambda k=k: self.set_filter(k)) for k in FILTERS]
+        out.append((tr("gen_inspector_toggle"), self.toggle_inspector))
+        return out
+
+    def _confirm_clear(self) -> None:
+        if self.jobs and QMessageBox.question(
+                self, self.page_key, tr("gen_clear_confirm", count=len(self.jobs))) == QMessageBox.StandardButton.Yes:
+            self.clear()
+
+    def _confirm_retry(self, rows: list[int]) -> None:
+        """One key must not spend again on a frame that already has a picture."""
+        done = sum(1 for r in rows if self.model.job_at(r).status is JobStatus.DONE)
+        if done and QMessageBox.question(
+                self, self.page_key, tr("gen_retry_confirm", count=done)) != QMessageBox.StandardButton.Yes:
+            return
+        self.retry_rows(rows)
 
     # ---- project rows (Phase 12) ---------------------------------------
     def load_rows(self) -> int:
@@ -363,13 +671,26 @@ class GeneratorPage(QWidget):
             apply_item(job, item)
             self.model.refresh_job(job.id)
 
+    def _mark_local(self, rows: list[int], mark: str) -> None:
+        """A local still is decided here; the same mark again takes it back."""
+        for job in map(self.model.job_at, rows):
+            if job.production_id or job.status is not JobStatus.DONE:
+                continue
+            job.review = "" if job.review == mark else mark
+            self.model.refresh_job(job.id)
+            if job.review == "approved":
+                self.sheet.draw_ring_on(job)
+
     def approve_rows(self, rows: list[int]) -> None:
+        self._mark_local(rows, "approved")
         jobs = [j for j in map(self.model.job_at, rows) if j.review == "pending_review"]
         if jobs:
             self._act(lambda: self.actions.approve(jobs), jobs=jobs)
 
     def reject_rows(self, rows: list[int]) -> None:
-        jobs = [j for j in map(self.model.job_at, rows) if j.review in ("pending_review", "approved")]
+        self._mark_local(rows, "rejected")
+        jobs = [j for j in map(self.model.job_at, rows)
+                if j.production_id and j.review in ("pending_review", "approved")]
         if jobs:
             self._act(lambda: self.actions.reject(jobs), jobs=jobs)
 
@@ -462,6 +783,27 @@ class GeneratorPage(QWidget):
         folder = self._batch_folder or self._base_dir()
         return save_outputs(job, files, folder)
 
+    def _confirm_start(self) -> int:
+        """The Start button: say what the run asks for first. ``start`` itself stays unasked for the webhook."""
+        if self.queue.is_running():
+            return 0
+        todo = [j for j in self.jobs if j.status is JobStatus.PENDING and j.origin != "agent"]
+        if not todo:
+            return 0
+        options = self.config_panel.values()
+        try:
+            est = self.provider.estimate(todo, options)
+        except ProviderError as exc:
+            QMessageBox.warning(self, self.page_key, str(exc))
+            return 0
+        cost = tr(est.note) if est.note else tr("gen_start_confirm_credits", credits=est.credits)
+        text = " ".join((tr("gen_start_confirm_shots", shots=est.shots), cost,
+                         tr("gen_start_confirm_retries", retries=int(options.get("max_retries", 0))),
+                         tr("gen_start_confirm_quote")))
+        if QMessageBox.question(self, self.page_key, text) != QMessageBox.StandardButton.Yes:
+            return 0
+        return self.start()
+
     def start(self) -> int:
         if self.queue.is_running():
             return 0
@@ -494,6 +836,8 @@ class GeneratorPage(QWidget):
         jobs = [j for j in jobs if j.origin != "agent"]  # a new try would spend: the agent decides
         if not jobs:
             return 0
+        for job in jobs:
+            job.review = ""
         self._apply_config()
         if self._batch_folder is None:
             self._batch_folder = output_dir(self._base_dir(), self.config_panel.value("subdir_mode"))
@@ -529,6 +873,9 @@ class GeneratorPage(QWidget):
 
     def _refresh_stats(self) -> None:
         self.stats_header.update_stats(count_statuses(self.jobs))
+        for key, test in FILTERS.items():
+            count = sum(1 for j in self.jobs if test(j))
+            self.filter_bar.set_label(key, f"{tr(f'gen_filter_{key}')} {count}")
         self._update_controls()
 
     def _update_controls(self) -> None:
@@ -537,11 +884,16 @@ class GeneratorPage(QWidget):
         self.model.editable = not running
         for b in (self.btn_import, self.btn_paste, self.btn_match, self.btn_match_chars, self.btn_clear):
             b.setEnabled(not running)
+        for b in self.empty_buttons:
+            b.setEnabled(not running)
         self.btn_start.setEnabled(not running and stats.get("pending", 0) > 0)
         self.btn_pause.setEnabled(running)
         self.btn_pause.setText(tr("gen_resume") if self.queue.paused else tr("gen_pause"))
         self.btn_stop.setEnabled(running)
         self.btn_retry.setEnabled(stats.get("failed", 0) + stats.get("stopped", 0) > 0)
+        if not running and not self.jobs:
+            for b in (self.btn_match, self.btn_match_chars, self.btn_clear):
+                b.setEnabled(False)
         if self.provider_combo is not None:
             self.provider_combo.setEnabled(not running)
 

@@ -5,8 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPersistentModelIndex, QPointF, Qt
-from PySide6.QtGui import QColor, QPainter, QPixmap, QPolygonF
+from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPixmap, QPolygonF
 
+from src import theme
 from src.gen.models import Job, JobStatus
 from src.i18n import tr
 
@@ -16,47 +17,58 @@ COLUMN_KEYS = ("gen_col_index", "gen_col_prompt", "gen_col_character", "gen_col_
 THUMB_HEIGHT = 56
 VIDEO_EXTS = {".mp4", ".webm", ".mov"}
 
-STATUS_COLORS = {
-    JobStatus.PENDING: "#8b919c",
-    JobStatus.QUEUED: "#d29922",
-    JobStatus.RUNNING: "#4f8cff",
-    JobStatus.DONE: "#3fb950",
-    JobStatus.FAILED: "#f85149",
-    JobStatus.STOPPED: "#8b919c",
-}
+STATUS_COLORS: dict[JobStatus, str] = {}
+REVIEW_COLORS: dict[str, str] = {}
 
-REVIEW_COLORS = {
-    "pending_review": STATUS_COLORS[JobStatus.QUEUED],
-    "approved": STATUS_COLORS[JobStatus.DONE],
-    "rejected": STATUS_COLORS[JobStatus.FAILED],
-    "regenerating": STATUS_COLORS[JobStatus.RUNNING],
-}
+
+def _sync_colors() -> None:
+    """Status colours follow the theme: amber alone means live, red alone means decided."""
+    c = theme.tokens()
+    STATUS_COLORS.update({
+        JobStatus.PENDING: c["text_muted"],
+        JobStatus.QUEUED: c["text_muted"],
+        JobStatus.RUNNING: c["live"],
+        JobStatus.DONE: c["done"],
+        JobStatus.FAILED: c["failed"],
+        JobStatus.STOPPED: c["text_muted"],
+    })
+    REVIEW_COLORS.update({
+        "pending_review": c["done"],
+        "approved": c["marker"],
+        "rejected": c["marker"],
+        "regenerating": c["live"],
+    })
+
+
+_sync_colors()
 
 Index = QModelIndex | QPersistentModelIndex
 
 _video_pix: QPixmap | None = None
 
 
+def device_ratio() -> float:
+    app = QGuiApplication.instance()
+    return app.devicePixelRatio() if app else 1.0
+
+
 def status_color(job: Job) -> str:
+    _sync_colors()
     return REVIEW_COLORS.get(job.review) or STATUS_COLORS[job.status]
 
 
 def video_placeholder() -> QPixmap:
-    """A drawn 16:9 film tile with a play triangle (no decoding of the video)."""
+    """A black 16:9 tile with a play triangle (no decoding of the video)."""
     global _video_pix
     if _video_pix is None:
         h = THUMB_HEIGHT
         w = h * 16 // 9
         pix = QPixmap(w, h)
-        pix.fill(QColor("#1f2430"))
+        pix.fill(QColor("#000000"))
         p = QPainter(pix)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor("#3a4150"))
-        for x in range(4, w, 12):  # sprocket holes
-            p.drawRect(x, 3, 6, 4)
-            p.drawRect(x, h - 7, 6, 4)
-        p.setBrush(QColor("#4f8cff"))
+        p.setBrush(QColor("#9b9890"))
         cx, cy, r = w / 2, h / 2, h / 5
         p.drawPolygon(QPolygonF([QPointF(cx - r * 0.7, cy - r), QPointF(cx - r * 0.7, cy + r),
                                  QPointF(cx + r, cy)]))
@@ -111,6 +123,8 @@ class PromptTableModel(QAbstractTableModel):
                 return self.scene_name(job) if self.scene_name else ""
             if col == COL_REFS:
                 return str(len(job.refs)) if job.refs else ""
+            if col == COL_STATUS and job.review and not job.production_id:
+                return tr(f"gen_filter_{job.review}")  # a local still has no takes to count
             if col == COL_STATUS and job.review:
                 return tr(f"review_{job.review}", take=job.take)
             if col == COL_STATUS:
@@ -122,8 +136,6 @@ class PromptTableModel(QAbstractTableModel):
                 return int(round(job.progress * 100))
             if col == COL_OUTPUT and len(job.outputs) > 1:
                 return f"+{len(job.outputs) - 1}"
-            if col == COL_OUTPUT and not job.outputs and job.error:
-                return job.error  # failed row: show why, where the image would be
         elif role == Qt.ItemDataRole.EditRole and col == COL_PROMPT:
             return job.prompt
         elif role == Qt.ItemDataRole.ToolTipRole:
@@ -173,7 +185,9 @@ class PromptTableModel(QAbstractTableModel):
             pix = QPixmap(str(path))
             if pix.isNull():
                 return None
-            pix = pix.scaledToHeight(THUMB_HEIGHT, Qt.TransformationMode.SmoothTransformation)
+            ratio = device_ratio()
+            pix = pix.scaledToHeight(round(THUMB_HEIGHT * ratio), Qt.TransformationMode.SmoothTransformation)
+            pix.setDevicePixelRatio(ratio)
             self._thumbs[path] = pix
         return pix
 

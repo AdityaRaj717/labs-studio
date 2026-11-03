@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -297,7 +298,9 @@ def build_export(project: Project, out_path: str | Path, settings: ExportSetting
         mix = (f"{''.join(a_labels)}amix=inputs={len(a_labels)}:normalize=0:dropout_transition=0,"
                if len(a_labels) > 1 else f"{a_labels[0]}")
         level = f",loudnorm=I={_f(project.loudness)}:TP=-1.5:LRA=11,aresample=48000" if project.loudness is not None else ""
-        graph.append(f"{mix}apad,atrim=0:{_f(total)}{level}[aout]")
+        # apad=whole_dur, not a bare apad: an endless audio branch makes ffmpeg 9 busy-spin with no
+        # output on ~1 in 3 runs (stuck at 100% CPU, no progress line). Pad to the length, stay finite.
+        graph.append(f"{mix}apad=whole_dur={_f(total)},atrim=0:{_f(total)}{level}[aout]")
         maps += ["-map", "[aout]"]
         out += ["-c:a", "aac", "-b:a", settings.audio_bitrate]
     else:
@@ -336,9 +339,12 @@ def _tail(path: Path, n: int = 12) -> str:
 def run_export(exe: str, plan: ExportPlan, workdir: str | Path,
                on_progress: Callable[[float], None] = lambda f: None,
                should_stop: Callable[[], bool] = lambda: False,
-               popen=subprocess.Popen) -> Path:
+               popen=subprocess.Popen, stall_seconds: float | None = 120.0) -> Path:
     """Run the plan. Writes subs/graph into ``workdir`` (ffmpeg runs there, so the ass filter
-    gets a bare file name and no Windows-path escaping). Returns the output path."""
+    gets a bare file name and no Windows-path escaping). Returns the output path.
+
+    ``stall_seconds``: if ffmpeg prints no line at all for that long it is killed and
+    ExportError is raised (None turns the watchdog off)."""
     workdir = Path(workdir)
     workdir.mkdir(parents=True, exist_ok=True)
     out_path = Path(plan.output[-1])
@@ -367,6 +373,8 @@ def run_export(exe: str, plan: ExportPlan, workdir: str | Path,
 
         threading.Thread(target=pump, daemon=True).start()
         cancelled = False
+        stalled = False
+        last_line = time.monotonic()
         while True:
             if should_stop():
                 cancelled = True
@@ -374,7 +382,11 @@ def run_export(exe: str, plan: ExportPlan, workdir: str | Path,
             try:
                 line = lines.get(timeout=0.2)
             except queue.Empty:
+                if stall_seconds is not None and time.monotonic() - last_line > stall_seconds:
+                    stalled = True
+                    break
                 continue
+            last_line = time.monotonic()
             if line is None:
                 break
             t = parse_progress(line)
@@ -382,7 +394,16 @@ def run_export(exe: str, plan: ExportPlan, workdir: str | Path,
                 on_progress(min(1.0, t / plan.duration))
         if cancelled:
             _stop(proc)
+        elif stalled:
+            _kill(proc)
         code = proc.wait()
+
+    if stalled:
+        try:
+            out_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise ExportError(f"ffmpeg stalled: no progress for {stall_seconds:g} s, killed.\n{_tail(log_path)}")
 
     if cancelled:
         try:
@@ -409,6 +430,13 @@ def _stop(proc) -> None:
         proc.wait(timeout=2)
     except subprocess.TimeoutExpired:
         proc.kill()
+
+
+def _kill(proc) -> None:
+    try:
+        proc.kill()
+    except OSError:
+        pass
 
 
 def default_workdir() -> Path:
