@@ -6,6 +6,7 @@ disagree. Approved frames get a hand-drawn red ring, rejected ones a red cross; 
 
 from __future__ import annotations
 
+import functools
 import math
 import random
 from collections import OrderedDict
@@ -67,6 +68,9 @@ def is_video(path: Path) -> bool:
     return path.suffix.lower() in VIDEO_EXTS
 
 
+RING_STEPS = 180
+
+
 def ring_points(rect: QRectF, seed: int) -> list[QPointF]:
     """One hand-drawn lap and a bit, slightly off-round: no two rings on a sheet are the same."""
     rng = random.Random(seed)
@@ -76,26 +80,47 @@ def ring_points(rect: QRectF, seed: int) -> list[QPointF]:
     lap = 2 * math.pi * rng.uniform(1.05, 1.13)
     wobble_a, wobble_b = rng.uniform(0.012, 0.03), rng.uniform(0.01, 0.022)
     phase_a, phase_b = rng.uniform(0, 6), rng.uniform(0, 6)
+    # a slow lean, one bulge per lap, so the ring is not a perfect ellipse with ripples
+    lean, phase_c = rng.uniform(0.012, 0.026), rng.uniform(0, 6)
     drift = rng.uniform(0.012, 0.03)
     points = []
-    steps = 180
-    for i in range(steps + 1):
-        t = i / steps
+    for i in range(RING_STEPS + 1):
+        t = i / RING_STEPS
         a = start + lap * t
-        k = 1 + wobble_a * math.sin(2 * a + phase_a) + wobble_b * math.sin(3 * a + phase_b) - drift * t
+        k = 1 + lean * math.sin(a + phase_c) + wobble_a * math.sin(2 * a + phase_a) + wobble_b * math.sin(3 * a + phase_b) - drift * t
         points.append(QPointF(cx + rx * k * math.cos(a), cy + ry * k * math.sin(a)))
     return points
 
 
+@functools.lru_cache(maxsize=512)
+def ring_path(seed: int, w: float, h: float, width: float, count: int) -> QPainterPath:
+    """The ring as a filled stroke that swells mid-lap and thins where the pen lands and lifts."""
+    points = ring_points(QRectF(5, 5, w - 10, h - 10), seed)[:count]
+    left, right = [], []
+    for i, pt in enumerate(points):
+        a, b = points[max(0, i - 1)], points[min(len(points) - 1, i + 1)]
+        dx, dy = b.x() - a.x(), b.y() - a.y()
+        n = math.hypot(dx, dy) or 1.0
+        t = i / RING_STEPS
+        half = width / 2 * (0.4 + 0.6 * math.sin(math.pi * min(1.0, t * 1.15)) ** 0.5)
+        ox, oy = -dy / n * half, dx / n * half
+        left.append(QPointF(pt.x() + ox, pt.y() + oy))
+        right.append(QPointF(pt.x() - ox, pt.y() - oy))
+    path = QPainterPath()
+    path.addPolygon(QPolygonF(left + right[::-1]))
+    path.closeSubpath()
+    return path
+
+
 def draw_ring(p: QPainter, rect: QRectF, seed: int, color: str, width: float = 3.4, progress: float = 1.0) -> None:
-    points = ring_points(rect.adjusted(5, 5, -5, -5), seed)
-    count = max(2, round(len(points) * progress))
-    pen = QPen(QColor(color), width)
-    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-    p.setPen(pen)
-    p.setBrush(Qt.BrushStyle.NoBrush)
-    p.drawPolyline(QPolygonF(points[:count]))
+    count = max(2, round((RING_STEPS + 1) * progress))
+    path = ring_path(seed, round(rect.width()), round(rect.height()), width, count)
+    p.save()
+    p.translate(rect.topLeft())
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor(color))
+    p.drawPath(path)
+    p.restore()
 
 
 def draw_cross(p: QPainter, rect: QRectF, seed: int, color: str, width: float = 3.4) -> None:
@@ -117,7 +142,7 @@ def draw_cross(p: QPainter, rect: QRectF, seed: int, color: str, width: float = 
 def draw_hatch(p: QPainter, rect: QRectF, color: str) -> None:
     """A failed frame reads as spoiled even without colour vision."""
     tint = QColor(color)
-    tint.setAlpha(46)
+    tint.setAlpha(110)
     pen = QPen(tint, 1)
     p.save()
     p.setClipRect(rect)
@@ -190,6 +215,10 @@ class SheetDelegate(QStyledItemDelegate):
             draw_ring(p, pic, job.id, c["marker"], progress=self.view.ring_progress(job.id))
 
         self._paint_rebate(p, rect, job, c)
+        if job.status is JobStatus.RUNNING or job.review == "regenerating":
+            p.setPen(QPen(QColor(c["live"]), 2))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawRect(QRectF(rect).adjusted(1, 1, -1, -1))
 
         if option.state & QStyle.StateFlag.State_Selected:
             pen = QPen(QColor(marks["text"]), 2)

@@ -316,3 +316,19 @@ def test_run_notice_is_amber_only_while_running(page):
     assert page.run_notice.property("live") is True
     page.set_production_summary({"status": "complete"}, "Ep 1")
     assert page.run_notice.property("live") is False
+
+
+def test_retry_disabled_on_running_frame(page):
+    page.jobs[0].status = JobStatus.RUNNING
+    page.model.refresh_all()
+    page.select_row(0)
+    assert not page.take_panel.btn_retry.isEnabled()
+    page.select_row(1)
+    assert page.take_panel.btn_retry.isEnabled()
+
+
+def test_ring_path_is_cached_and_tapered():
+    from src.ui.generator.sheet import ring_path
+    a = ring_path(7, 200, 120, 3.4, 181)
+    assert ring_path(7, 200, 120, 3.4, 181) is a
+    assert not a.isEmpty() and a.boundingRect().width() > 180

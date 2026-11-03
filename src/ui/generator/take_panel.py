@@ -131,6 +131,7 @@ class TakePanel(QScrollArea):
             b.setVisible(job is not None)
         self.btn_approve.setEnabled(any(can_approve(j) for j in jobs))
         self.btn_reject.setEnabled(any(can_reject(j) for j in jobs))
+        self.btn_retry.setEnabled(any(j.status is not JobStatus.RUNNING for j in jobs))
         failed = job.error if job is not None and job.status is JobStatus.FAILED else ""
         self._set(self.error, failed)
         self._set(self.prompt, job.prompt if job is not None else "")

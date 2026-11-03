@@ -200,9 +200,16 @@ class HelpPage(QWidget):
         return False
 
     def _underline_links(self) -> None:
-        """Markdown links come in coloured only; colour alone does not say "link"."""
+        """Markdown links come in coloured only; colour alone does not say "link". The H1 takes the title face."""
         doc, block = self.view.document(), self.view.document().begin()
         while block.isValid():
+            if block.blockFormat().headingLevel() == 1:
+                cursor = QTextCursor(block)
+                cursor.select(QTextCursor.SelectionType.BlockUnderCursor)
+                title = QTextCharFormat()
+                title.setFontFamilies(["Bahnschrift SemiBold SemiCondensed", "Bahnschrift", "Segoe UI"])
+                title.setFontPointSize(15)  # 20 px at 96 dpi
+                cursor.mergeCharFormat(title)
             it = block.begin()
             while not it.atEnd():
                 frag = it.fragment()
