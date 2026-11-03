@@ -195,8 +195,13 @@ class HelpPage(QWidget):
 
     # ---- images fit the view -----------------------------------------
     def eventFilter(self, obj, event) -> bool:  # noqa: N802 - Qt override
-        if obj is self.view.viewport() and event.type() == event.Type.Resize:
-            self._fit_timer.start()
+        if event.type() != event.Type.Resize:
+            return False
+        try:
+            if obj is self.view.viewport():
+                self._fit_timer.start()
+        except RuntimeError:  # the view is already deleted on the C++ side during teardown
+            pass
         return False
 
     def _underline_links(self) -> None:

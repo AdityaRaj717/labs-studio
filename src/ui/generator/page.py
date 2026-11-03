@@ -445,14 +445,14 @@ class GeneratorPage(QWidget):
         self.inspector.setVisible(shown)
         self.btn_inspector.setChecked(shown)
         self._refresh_take()
-        QTimer.singleShot(0, self._scroll_to_current)  # after the reflow, or the row slides out of view
+        QTimer.singleShot(0, self.table, self._scroll_to_current)  # after the reflow, or the row slides out of view
 
     def _update_inspector(self) -> None:
         shown = self._inspector_wanted and not self._narrow
         self.inspector.setVisible(shown)
         self.btn_inspector.setChecked(shown)
         self._refresh_take()
-        QTimer.singleShot(0, self._scroll_to_current)  # after the reflow, or the row slides out of view
+        QTimer.singleShot(0, self.table, self._scroll_to_current)  # after the reflow, or the row slides out of view
 
     def resizeEvent(self, event) -> None:  # noqa: N802 - Qt override
         super().resizeEvent(event)
