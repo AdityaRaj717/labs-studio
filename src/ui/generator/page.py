@@ -30,6 +30,7 @@ from src.ui.generator.queue_bridge import QueueBridge
 from src.ui.generator.credit_meter import CreditMeter
 from src.ui.generator.sheet import FILTERS, RunStrip, SheetView
 from src.ui.generator.stats_header import StatsHeader
+from src.ui.generator.runs_panel import RunsPanel, rows_in_run
 from src.ui.generator.take_panel import TakePanel
 from src.ui.generator.viewer import TakeViewer
 from src.ui.kit import HELP_GUTTER, IconButton, Segmented, flow_row, page_title, set_icon
@@ -243,6 +244,13 @@ class GeneratorPage(QWidget):
         self.inspector_tabs.tabBar().setDrawBase(False)
         self.inspector_tabs.addTab(self.take_panel, tr("gen_tab_take"))
         self.inspector_tabs.addTab(settings, tr("gen_tab_settings"))
+        self.runs_panel = RunsPanel()
+        self.inspector_tabs.addTab(self.runs_panel, tr("gen_tab_runs"))
+        self.runs_panel.refresh_requested.connect(self.refresh_runs)
+        self.runs_panel.jump_requested.connect(self.jump_to_run)
+        self.runs_panel.folder_requested.connect(self._open)
+        self.inspector_tabs.currentChanged.connect(
+            lambda i: self.inspector_tabs.widget(i) is self.runs_panel and self.refresh_runs())
         self.inspector = QFrame()
         self.inspector.setObjectName("Inspector")
         self.inspector.setFixedWidth(INSPECTOR_WIDTH)
@@ -1112,6 +1120,23 @@ class GeneratorPage(QWidget):
         self.model.add_jobs([shot])
         self._refresh_stats()
         return shot
+
+    def refresh_runs(self) -> None:
+        self._act(lambda: self.actions.list_runs(), self.runs_panel.show_runs,
+                  failed=lambda e: self.runs_panel.show_error(tr("gen_engine_error", message=e.message)))
+
+    def jump_to_run(self, run) -> None:
+        """Select the run's frames on the sheet, in the All filter so none is hidden."""
+        rows = rows_in_run(self.jobs, run or {})
+        if not rows:
+            self.runs_panel.note.setText(tr("gen_runs_no_frames"))
+            return
+        self.set_filter("all")
+        self.select_row(rows[0])
+        sel = self.table.selectionModel()
+        for r in rows[1:]:
+            sel.select(self.model.index(r, COL_PROMPT),
+                       QItemSelectionModel.SelectionFlag.Select | QItemSelectionModel.SelectionFlag.Rows)
 
     def set_shot_override(self, rows: list[int], key: str, value) -> None:
         """A shot's own setting; None goes back to the page's."""

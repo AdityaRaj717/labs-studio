@@ -49,6 +49,14 @@ export function recordSpend(job, credits) {
   return all[key];
 }
 
+// What the ledger recorded for these jobs, every paid attempt included.
+export function creditsFor(jobIds) {
+  const ids = new Set(jobIds);
+  return Object.entries(spends())
+    .filter(([key]) => ids.has(key.slice(0, key.lastIndexOf('#'))))
+    .reduce((sum, [, spend]) => sum + spend.credits, 0);
+}
+
 export function monthTotal() {
   const month = today().slice(0, 7);
   return Object.values(spends())

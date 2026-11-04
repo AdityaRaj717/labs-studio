@@ -72,6 +72,10 @@ function runView(run) {
     name: cut(run.name, 60),
     total: run.jobs.length,
     counts,
+    kind: run.jobs[0]?.spec?.kind ?? null,
+    dir: run.dir ?? null,
+    credits: ledger.creditsFor(run.jobs.map(({ id }) => id)),
+    created_at: run.createdAt ?? null,
     failed: failed.slice(0, MAX_LISTED_FAILURES).map((job) => ({ job_id: job.id, error_code: job.data.error?.error_code })),
   };
 }

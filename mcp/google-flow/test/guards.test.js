@@ -323,3 +323,13 @@ test('resume refuses while the block shows', async () => {
   assert.equal(out.error_code, ErrorCodes.WAF_BLOCK);
   assert.equal(resumed, false);
 });
+
+test('creditsFor sums a run\'s jobs, paid retries included', () => {
+  reset();
+  ledger.recordSpend(job('r1'), 10);
+  ledger.recordSpend({ ...job('r1'), attempt: 2 }, 10);
+  ledger.recordSpend(job('r2'), 5);
+  ledger.recordSpend(job('other'), 99);
+  assert.equal(ledger.creditsFor(['r1', 'r2']), 25);
+  assert.equal(ledger.creditsFor([]), 0);
+});

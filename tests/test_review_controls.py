@@ -486,3 +486,26 @@ def test_extend_sends_its_source_and_nothing_else(tmp_path, monkeypatch):
     assert sent["extend_from"] == "u1" and sent["count"] == 1 and "ingredients" not in sent and sent["max_credits"] == 6
     with pytest.raises(wfv.ProviderError, match="can't extend"):
         wfv.WebFlowVideoProvider().generate(shot, {"model": "omni", "duration": "8"}, None)
+
+
+def test_run_row_jumps_to_frames(page, qapp, tmp_path):
+    from src.ui.generator.runs_panel import run_row
+    run_dir = tmp_path / "runs" / "r1"
+    (run_dir / "images").mkdir(parents=True)
+    inside = Job("in", status=JobStatus.DONE, outputs=[run_dir / "images" / "a.png"])
+    outside = Job("out", status=JobStatus.DONE, outputs=[tmp_path / "b.png"])
+    page.model.add_jobs([outside, inside])
+    run = {"run_id": "r1", "name": "Ep 1", "total": 2, "counts": {"done": 1, "generating": 1},
+           "kind": "video", "dir": str(run_dir), "credits": 20}
+    page.runs_panel.show_runs([run])
+    assert run_row(run) == ["Ep 1", "video", "1 of 2", "20", "running"]
+    page.jump_to_run(run)
+    assert page.table.selected_rows() == [1]
+    page.jump_to_run({"dir": str(tmp_path / "nowhere")})
+    assert page.runs_panel.note.text() == "None of this page's frames are in that run's folder."
+
+
+def test_runs_tab_asks_the_engine(page, qapp):
+    page.refresh_runs()
+    settle(qapp)
+    assert page.client.sent("flow_list_runs") == [{"limit": 20}]

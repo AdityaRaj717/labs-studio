@@ -79,6 +79,9 @@ class ProductionActions:
     def set_budget(self, run_id: str, max_credits: int) -> dict[str, Any]:
         return self._call("flow_job_control", {"action": "set_budget", "run_id": run_id, "max_credits": max_credits})
 
+    def list_runs(self, limit: int = 20) -> list[dict[str, Any]]:
+        return self._call("flow_list_runs", {"limit": limit}).get("runs") or []
+
     def current(self, job) -> dict[str, Any] | None:
         """The engine's view of a row's Item, to show after a conflict."""
         cursor = 0
