@@ -342,3 +342,48 @@ def test_stage_survives_a_save():
     fields = item_fields({"production_id": "p", "item": "REF_01", "state": "pending_review", "stage": "reference"})
     job = Job("x", production_stage=fields["production_stage"])
     assert row_to_job(job_to_row(job), 1).production_stage == "reference"
+
+
+def test_animate_from_still_sets_start_frame(page, video, tmp_path):
+    still = tmp_path / "s.png"
+    still.write_bytes(b"x")
+    done = Job("a fox at dawn", status=JobStatus.DONE, outputs=[still])
+    page.model.add_jobs([done])
+    menu = labels(page.table._build_menu(0, [0]))
+    sent = []
+    page.animate_stills.connect(sent.append)
+    menu["Animate from this still"].trigger()
+    assert sent == [[("a fox at dawn", still)]]
+    jobs = video.add_frame_shots(sent[0])
+    assert jobs[0].start_frame == still and jobs[0].prompt == "a fox at dawn"
+    assert "Animate from this still" not in labels(video.table._build_menu(0, [0]))
+
+
+def test_last_frame_chains_next_row(video, qapp, tmp_path, monkeypatch):
+    from src.editor import ffmpeg, stitch
+    clip = tmp_path / "c.mp4"
+    clip.write_bytes(b"x")
+    calls = []
+    monkeypatch.setattr(stitch, "resolve_ffmpeg", lambda configured=None: "ffmpeg.exe")
+    monkeypatch.setattr(ffmpeg.subprocess, "run", lambda cmd, **kw: calls.append(cmd))
+    first, second = Job("one", status=JobStatus.DONE, outputs=[clip]), Job("two")
+    video.model.add_jobs([first, second])
+    labels(video.table._build_menu(0, [0]))["Use last frame as next start"].trigger()
+    settle(qapp)
+    assert calls and calls[0][:6] == ["ffmpeg.exe", "-y", "-v", "error", "-sseof", "-3"]
+    assert second.start_frame == tmp_path / "c_last.png"
+    labels(video.table._build_menu(1, [1]))  # a pending row has no clip to chain from
+    video.take_panel.show_rows(video.model, [1])
+    assert video.take_panel.frame_slots["start_frame"][0].text() == "c_last.png"
+    video.set_frame(1, "start_frame", None)
+    assert second.start_frame is None
+
+
+def test_frames_and_references_stop_before_any_call(tmp_path, monkeypatch):
+    from src.gen.provider import ProviderError
+    import src.gen.web_flow_video as wfv
+    caps = {"video": {"models": {"omni": {"credits": {"720p": {"8": 10}}}}, "defaultModel": "omni", "ratios": ["16:9"]}}
+    monkeypatch.setattr(wfv, "capabilities", lambda: caps)
+    job = Job("x", refs=[tmp_path / "r.png"], start_frame=tmp_path / "s.png")
+    with pytest.raises(ProviderError, match="Frames can't be combined"):
+        wfv.WebFlowVideoProvider().generate(job, {}, None)

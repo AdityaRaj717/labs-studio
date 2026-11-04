@@ -77,6 +77,17 @@ class MediaInfo:
     height: int = 0
 
 
+def last_frame(exe: str, video: str | Path, run=None, timeout: float = 60) -> Path:
+    """The video's last frame as ``<stem>_last.png`` beside it, as the engine's ``last_frame`` makes it."""
+    video = Path(video)
+    out = video.with_name(f"{video.stem}_last.png")
+    # Decode the last 3 s and keep overwriting one file: the last write is the last frame.
+    (run or subprocess.run)([exe, "-y", "-v", "error", "-sseof", "-3", "-i", str(video), "-map", "0:v:0", "-update", "1", str(out)],
+        check=True, capture_output=True, timeout=timeout,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    return out
+
+
 def parse_probe(stderr: str) -> MediaInfo:
     info = MediaInfo()
     m = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", stderr)

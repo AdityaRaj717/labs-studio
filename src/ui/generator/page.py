@@ -95,6 +95,7 @@ def _flow_status() -> dict:
 
 class GeneratorPage(QWidget):
     _action_back = Signal(object)  # a callable to run on the GUI thread
+    animate_stills = Signal(list)  # [(prompt, still path)] for the video page, wired by the app
 
     def __init__(self, page_key: str, provider: Provider, title: str = "", banner: str = "",
                  store=None, parent: QWidget | None = None, characters=None,
@@ -318,6 +319,12 @@ class GeneratorPage(QWidget):
         self._actions = None
         self._action_back.connect(self._run_back)
         self.table.open_output_requested.connect(self.open_output)
+        self.table.animate_enabled = page_key == "flow_image"
+        self.table.chain_enabled = page_key == "flow_video"
+        self.table.animate_requested.connect(self.animate_rows)
+        self.table.chain_requested.connect(self.chain_last_frame)
+        self.take_panel.frames_enabled = page_key == "flow_video"
+        self.take_panel.frame_changed.connect(self.set_frame)
         self.table.open_folder_requested.connect(self.open_row_folder)
         self.table.characters_source = lambda: [(c.id, c.name) for c in self.characters.all()]
         self.table.character_requested.connect(self.set_character)
@@ -1034,6 +1041,49 @@ class GeneratorPage(QWidget):
         job = self.model.job_at(row)
         if job.outputs:
             self._open(job.outputs[0])
+
+    # ---- frames and chaining (Flow's Frames mode) ----------------------
+    def animate_rows(self, rows: list[int]) -> None:
+        """Each still goes to the video page as a new shot that starts on it."""
+        stills = [(j.prompt, j.outputs[0]) for j in map(self.model.job_at, rows) if j.outputs]
+        if stills:
+            self.animate_stills.emit(stills)
+
+    def add_frame_shots(self, stills: list[tuple[str, Path]]) -> list[Job]:
+        jobs = self.model.add_jobs([Job(prompt, start_frame=Path(path)) for prompt, path in stills])
+        self._refresh_stats()
+        return jobs
+
+    def set_frame(self, row: int, which: str, path) -> None:
+        """``which``: start_frame or end_frame; ``path`` None clears it."""
+        job = self.model.job_at(row)
+        setattr(job, which, Path(path) if path else None)
+        self.model.refresh_job(job.id)
+
+    def chain_last_frame(self, row: int) -> None:
+        """The clip's last frame (free, local FFmpeg) becomes the start of the next shot, made if missing."""
+        job = self.model.job_at(row)
+        if not job.outputs:
+            return
+        from src.editor import ffmpeg
+        from src.editor.stitch import resolve_ffmpeg
+
+        def work():
+            try:
+                return ffmpeg.last_frame(resolve_ffmpeg(), job.outputs[0])
+            except Exception as exc:  # noqa: BLE001 - shown to the owner as is
+                raise ActionError("LAST_FRAME_FAILED", tr("gen_last_frame_failed", error=exc)) from None
+
+        def done(frame: Path) -> None:
+            nxt = job.index  # rows are 1-based; the next row's position is this index
+            target = self.model.job_at(nxt) if nxt < self.model.rowCount() else None
+            if target is not None and target.status in (JobStatus.PENDING, JobStatus.FAILED) and not target.production_id:
+                target.start_frame = frame
+                self.model.refresh_job(target.id)
+            else:
+                self.add_frame_shots([(job.prompt, frame)])
+
+        self._act(work, done, failed=lambda e: QMessageBox.warning(self, self.page_key, e.message))
 
     def open_row_folder(self, row: int) -> None:
         job = self.model.job_at(row)

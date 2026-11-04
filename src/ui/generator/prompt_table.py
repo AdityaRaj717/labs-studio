@@ -88,6 +88,8 @@ class PromptTable(QTableView):
     approve_requested = Signal(list)         # rows
     reject_requested = Signal(list)          # rows
     regenerate_requested = Signal(list)      # rows
+    animate_requested = Signal(list)         # rows: stills to animate on the video page
+    chain_requested = Signal(int)            # row: its video's last frame starts the next shot
 
     def __init__(self, model, parent=None):
         super().__init__(parent)
@@ -121,6 +123,8 @@ class PromptTable(QTableView):
         self.doubleClicked.connect(self._double_clicked)
         self.characters_source = None  # callable -> list[(id, name)], set by GeneratorPage
         self.scenes_source = None  # callable -> list[(id, name)], set by GeneratorPage (Phase 14b)
+        self.animate_enabled = False  # the image page: a still can go on to the video page
+        self.chain_enabled = False  # the video page: a clip's last frame starts the next shot
 
     def resizeEvent(self, event) -> None:  # noqa: N802 - Qt override
         super().resizeEvent(event)
@@ -195,12 +199,26 @@ class PromptTable(QTableView):
                 self._character_menu(menu, rows, job)
             if self.scenes_source is not None:
                 self._scene_menu(menu, rows, job)
+        self._frames_menu(menu, row, rows)
         menu.addSeparator()
         out = menu.addAction(tr("gen_open_output"), lambda: self.open_output_requested.emit(row))
         folder = menu.addAction(tr("gen_open_folder"), lambda: self.open_folder_requested.emit(row))
         out.setEnabled(bool(job.outputs))
         folder.setEnabled(bool(job.outputs))
         return menu
+
+    def _frames_menu(self, menu: QMenu, row: int, rows: list[int]) -> None:
+        """Stills go on to the video page; a finished clip hands its last frame to the next shot."""
+        from src.ui.generator.sheet import is_video
+        job = self.model().job_at(row)
+        if self.animate_enabled:
+            stills = [r for r in rows if (j := self.model().job_at(r)).outputs and not is_video(j.outputs[0])]
+            menu.addSeparator()
+            menu.addAction(tr("gen_animate_still"), lambda: self.animate_requested.emit(stills)).setEnabled(bool(stills))
+        if self.chain_enabled:
+            clip = bool(job.outputs) and is_video(job.outputs[0]) and len(rows) == 1
+            menu.addSeparator()
+            menu.addAction(tr("gen_chain_last_frame"), lambda: self.chain_requested.emit(row)).setEnabled(clip)
 
     def _pending(self, rows: list[int]) -> bool:
         return any(self.model().job_at(r).review == "pending_review" for r in rows)

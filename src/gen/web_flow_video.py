@@ -9,6 +9,7 @@ from typing import Any
 
 from src.gen.models import Job, OutputFile
 from src.gen.provider import ConfigField, Estimate, Provider, ProviderError, RunContext
+from src.i18n import tr
 from src.gen.web_flow_image import SITE, WebFlowImageProvider, capabilities, run_engine_job
 
 
@@ -84,6 +85,10 @@ class WebFlowVideoProvider(Provider):
         args = {"prompt": job.prompt, "model": model, "ratio": options.get("aspect") or "16:9", "count": count,
                 "duration": duration, "resolution": resolution, "silent": bool(options.get("silent")),
                 "max_credits": limit, "max_generation_retries": 0}  # the app's retries are the only ones
+        frames = {k: str(Path(v).resolve()) for k, v in (("start_frame", job.start_frame), ("end_frame", job.end_frame)) if v}
+        if frames and refs:  # the engine refuses the mix too; say so before any call
+            raise ProviderError(tr("gen_frames_and_refs"))
+        args.update(frames)
         if refs:
             args["ingredients"] = refs
         return run_engine_job(self, job, "flow_generate_video", args, float(options.get("timeout", 600)), ctx, "video")

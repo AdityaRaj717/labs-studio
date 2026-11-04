@@ -6,7 +6,9 @@ import time
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QLabel, QLineEdit, QPushButton, QScrollArea, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QFileDialog, QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea, QVBoxLayout, QWidget,
+)
 
 from src.gen.models import Job, JobStatus, Take
 from src.gen.progress import clock, progress_view, stage_word
@@ -77,6 +79,7 @@ class TakePanel(QScrollArea):
     view_requested = Signal(int)
     open_requested = Signal(int)
     take_review_requested = Signal(int, int, str, str)  # row, take, approve or reject, note
+    frame_changed = Signal(int, str, object)  # row, start_frame or end_frame, Path or None
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -86,6 +89,7 @@ class TakePanel(QScrollArea):
         self.row = -1
         self.model_ = None
         self.take_n = 0  # the Take the strip shows; 0 is the row's own
+        self.frames_enabled = False  # the video page sets this: Flow's Frames mode per shot
 
         self.preview = QLabel()
         self.preview.setObjectName("TakePreview")
@@ -126,6 +130,33 @@ class TakePanel(QScrollArea):
         self.note.setPlaceholderText(tr("gen_take_note"))
         self.note.setAccessibleName(tr("gen_take_note"))
 
+        self.frames_title = QLabel(tr("gen_take_frames"))
+        self.frames_title.setObjectName("FieldHeading")
+        self.frames = QWidget()
+        frames = QVBoxLayout(self.frames)
+        frames.setContentsMargins(0, 0, 0, 0)
+        frames.setSpacing(4)
+        self.frame_slots = {}
+        for which, key in (("start_frame", "gen_take_start_frame"), ("end_frame", "gen_take_end_frame")):
+            line = QHBoxLayout()
+            line.setSpacing(6)
+            name = QLabel()
+            name.setObjectName("Hint")
+            choose = QPushButton(tr("gen_take_frame_choose"))
+            choose.setAccessibleName(f"{tr(key)} {tr('gen_take_frame_choose')}")
+            choose.clicked.connect(lambda _c=False, w=which: self._choose_frame(w))
+            clear = QPushButton(tr("gen_take_frame_clear"))
+            clear.setAccessibleName(f"{tr(key)} {tr('gen_take_frame_clear')}")
+            clear.clicked.connect(lambda _c=False, w=which: self.frame_changed.emit(self.row, w, None))
+            title = QLabel(tr(key))
+            title.setMinimumWidth(36)
+            line.addWidget(title)
+            line.addWidget(name, 1)
+            line.addWidget(choose)
+            line.addWidget(clear)
+            frames.addLayout(line)
+            self.frame_slots[which] = (name, choose, clear)
+
         self.error = self._field("gen_take_error")
         self.live = self._field("gen_take_progress")
         self.prompt = self._field("gen_take_prompt")
@@ -151,6 +182,8 @@ class TakePanel(QScrollArea):
         layout.addWidget(self.actions_holder)
         for field in (self.live, self.error, self.prompt, self.cast, self.scene, self.refs):
             layout.addWidget(field)
+        layout.addWidget(self.frames_title)
+        layout.addWidget(self.frames)
         layout.addWidget(self.origin)
         layout.addStretch(1)
         self.setWidget(body)
@@ -180,6 +213,25 @@ class TakePanel(QScrollArea):
     def _set(self, field: QWidget, text: str) -> None:
         field.value.setText(text)
         field.setVisible(bool(text))
+
+    def _choose_frame(self, which: str) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, tr("gen_take_frames"), "", "Images (*.png *.jpg *.jpeg *.webp)")
+        if path:
+            self.frame_changed.emit(self.row, which, Path(path))
+
+    def _show_frames(self, job: Job | None) -> None:
+        shown = self.frames_enabled and job is not None and not job.production_id
+        self.frames_title.setVisible(shown)
+        self.frames.setVisible(shown)
+        if not shown:
+            return
+        editable = job.status not in (JobStatus.RUNNING, JobStatus.QUEUED)
+        for which, (name, choose, clear) in self.frame_slots.items():
+            path = getattr(job, which)
+            name.setText(path.name if path else tr("gen_take_frame_none"))
+            name.setToolTip(str(path) if path else "")
+            choose.setEnabled(editable)
+            clear.setEnabled(editable and path is not None)
 
     def _single_take_job(self) -> Job | None:
         """The one selected Production frame that has a Take history, else None."""
@@ -259,6 +311,7 @@ class TakePanel(QScrollArea):
             w.setVisible(take is not None)
         self.btn_approve.setText(tr("gen_take_approve_n", n=take.n) if take is not None else tr("gen_approve"))
         self.btn_reject.setText(tr("gen_take_reject_n", n=take.n) if take is not None else tr("gen_reject"))
+        self._show_frames(job)
         if job is None:
             return
         self.edge.setText("  ".join(p for p in (f"{job.index:03d}", job.item_id, edge_state(job)) if p))

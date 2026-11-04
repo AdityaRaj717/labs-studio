@@ -23,8 +23,16 @@ def register_pages(window) -> None:
 
     from src.gen.web_flow_image import WebFlowImageProvider  # Phase 11a
 
-    window.register_page("flow_image", lambda: GeneratorPage(
-        "flow_image", WebFlowImageProvider(), title=tr("nav_img"), banner=tr("web_flow_banner")))
+    def image_page():
+        page = GeneratorPage("flow_image", WebFlowImageProvider(), title=tr("nav_img"), banner=tr("web_flow_banner"))
+
+        def animate(stills):  # S4-4: a still starts a new shot on the video page
+            window.page("flow_video").add_frame_shots(stills)
+            window.switch_page("flow_video")
+        page.animate_stills.connect(animate)
+        return page
+
+    window.register_page("flow_image", image_page)
     from src.gen.web_flow_video import WebFlowVideoProvider
     window.register_page("flow_video", lambda: GeneratorPage(
         "flow_video", WebFlowVideoProvider(), title=tr("nav_video"), banner=tr("web_flow_video_banner")))
