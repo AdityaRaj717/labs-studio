@@ -73,6 +73,7 @@ def test_regenerated_file_replaces_thumb(qapp, tmp_path):
     st = os.stat(path)
     os.utime(path, (st.st_atime, st.st_mtime + 5))
     model.refresh_job(job.id)  # the job update stats the file again
+    model.flush()
     svc.get(path, 240, 160)
     svc.wait()
     assert svc.get(path, 240, 160).toImage().pixelColor(5, 5).blue() > 200
@@ -108,3 +109,30 @@ def test_ready_repaints_one_rect(sheet, monkeypatch):
     monkeypatch.setattr(vp, "update", lambda *a: calls.append(a))
     service().ready.emit(str(model.job_at(2).outputs[0]))
     assert calls == [(sheet.visualRect(model.index(2, COL_OUTPUT)),)]
+
+
+# ---- S6-4: coalesced updates ---------------------------------------------------
+def test_burst_of_updates_coalesces(sheet):
+    model = sheet.model()
+    emitted = []
+    model.dataChanged.connect(lambda tl, br, *_: emitted.append((tl.row(), br.row())))
+    for _ in range(50):
+        for job in model.jobs[:2]:
+            model.refresh_job(job.id)
+    assert emitted == [] and model._flush_timer.isActive() and model._flush_timer.interval() == 100
+    model.flush()
+    assert sorted(emitted) == [(0, 0), (1, 1)]  # one dataChanged per changed row
+
+
+def test_filter_touches_changed_row_only(sheet, monkeypatch):
+    from src.ui.generator import sheet as sheet_mod
+
+    seen = []
+    monkeypatch.setitem(sheet_mod.FILTERS, "failed", lambda job: (seen.append(job.id), False)[1])
+    sheet.set_filter("failed")
+    assert len(seen) == 4 and sheet.visible_count() == 0
+    seen.clear()
+    model = sheet.model()
+    model.refresh_job(model.jobs[3].id)
+    model.flush()
+    assert seen == [model.jobs[3].id]

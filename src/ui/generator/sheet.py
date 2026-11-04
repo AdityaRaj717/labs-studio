@@ -41,6 +41,11 @@ def is_video(path: Path) -> bool:
 RING_STEPS = 180
 
 
+@functools.lru_cache(maxsize=512)
+def _ring_points(seed: int, w: float, h: float) -> list[QPointF]:
+    return ring_points(QRectF(5, 5, w - 10, h - 10), seed)
+
+
 def ring_points(rect: QRectF, seed: int) -> list[QPointF]:
     """One hand-drawn lap and a bit, slightly off-round: no two rings on a sheet are the same."""
     rng = random.Random(seed)
@@ -65,7 +70,7 @@ def ring_points(rect: QRectF, seed: int) -> list[QPointF]:
 @functools.lru_cache(maxsize=512)
 def ring_path(seed: int, w: float, h: float, width: float, count: int) -> QPainterPath:
     """The ring as a filled stroke that swells mid-lap and thins where the pen lands and lifts."""
-    points = ring_points(QRectF(5, 5, w - 10, h - 10), seed)[:count]
+    points = _ring_points(seed, w, h)[:count]  # the lap is drawn once per frame size, then sliced
     left, right = [], []
     for i, pt in enumerate(points):
         a, b = points[max(0, i - 1)], points[min(len(points) - 1, i + 1)]
@@ -325,6 +330,8 @@ class SheetView(QListView):
         self.setObjectName("Sheet")
         self._width = 240
         self._filter = "all"
+        self.filtered_rows = range(0)
+        self._hidden = 0  # rows the filter hides, kept as rows change so a count never loops them all
         self._rings: dict[int, float] = {}
         self._animations: dict[int, QVariantAnimation] = {}
         self.setModel(model)
@@ -351,8 +358,10 @@ class SheetView(QListView):
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._context_menu)
         self.doubleClicked.connect(lambda index: self.open_requested.emit(index.row()))
-        for sig in (model.rowsInserted, model.rowsRemoved, model.modelReset, model.dataChanged):
+        for sig in (model.rowsRemoved, model.modelReset):
             sig.connect(lambda *_: self.apply_filter())
+        model.rowsInserted.connect(lambda _parent, first, last: self.apply_filter(first, last))
+        model.dataChanged.connect(lambda tl, br, *_: self.apply_filter(tl.row(), br.row()))
         thumbs().ready.connect(self._thumb_ready)
 
     # ---- layout ------------------------------------------------------
@@ -394,14 +403,25 @@ class SheetView(QListView):
         self.apply_filter()
 
     def visible_count(self) -> int:
-        return sum(1 for r in range(self.model().rowCount()) if not self.isRowHidden(r))
+        return self.model().rowCount() - self._hidden
 
-    def apply_filter(self) -> None:
+    def apply_filter(self, first: int = 0, last: int | None = None) -> None:
+        """All rows, or only ``first``..``last`` when a model signal says just those changed."""
         test = FILTERS[self._filter]
-        for row in range(self.model().rowCount()):
+        whole = last is None
+        if whole:
+            last = self.model().rowCount() - 1
+            self._hidden = 0
+        for row in range(first, last + 1):
             hide = not test(self.model().job_at(row))
-            if self.isRowHidden(row) != hide:
+            was = self.isRowHidden(row)
+            if was != hide:
                 self.setRowHidden(row, hide)
+            if whole:
+                self._hidden += hide
+            elif was != hide:
+                self._hidden += 1 if hide else -1
+        self.filtered_rows = range(first, last + 1)  # what this pass looked at, for the queue to mirror
         self.filter_changed.emit(self.visible_count())
 
     def group_start(self, row: int) -> str:
@@ -505,8 +525,17 @@ class RunStrip(QWidget):
         self.model_ = model
         self.setFixedHeight(8)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        for sig in (model.rowsInserted, model.rowsRemoved, model.modelReset, model.dataChanged):
+        for sig in (model.rowsInserted, model.rowsRemoved, model.modelReset):
             sig.connect(lambda *_: self.update())
+        model.dataChanged.connect(self._rows_changed)
+
+    def _rows_changed(self, tl, br, *_) -> None:
+        """Repaint only the ticks of the changed rows."""
+        n = len(self.model_.jobs)
+        if n and self.width():
+            tick = self.width() / n
+            x0, x1 = int(tl.row() * tick), math.ceil((br.row() + 1) * tick)
+            self.update(QRect(x0, 0, max(1, x1 - x0), self.height()))
 
     def _color(self, job: Job, c: dict) -> QColor:
         if job.status is JobStatus.RUNNING or job.review == "regenerating":
@@ -529,7 +558,11 @@ class RunStrip(QWidget):
         p = QPainter(self)
         gap = 1 if len(jobs) * 3 < self.width() else 0
         tick = self.width() / len(jobs)
-        for i, job in enumerate(jobs):
+        area = event.rect()
+        first = max(0, int(area.left() / tick) - 1)
+        last = min(len(jobs), int((area.right() + 1) / tick) + 2)
+        for i in range(first, last):
+            job = jobs[i]
             p.fillRect(QRectF(i * tick, 0, max(1.0, tick - gap), self.height()), self._color(job, c))
         p.end()
 

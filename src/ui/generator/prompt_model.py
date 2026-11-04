@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPersistentModelIndex, QPointF, Qt
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPersistentModelIndex, QPointF, Qt, QTimer
 from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPixmap, QPolygonF
 
 from src import theme
@@ -85,6 +85,11 @@ class PromptTableModel(QAbstractTableModel):
         super().__init__(parent)
         self.jobs: list[Job] = []
         self._rows: dict[int, int] = {}
+        self._dirty: set[int] = set()  # job ids waiting for the next coalesced dataChanged
+        self._flush_timer = QTimer(self)
+        self._flush_timer.setSingleShot(True)
+        self._flush_timer.setInterval(100)
+        self._flush_timer.timeout.connect(self.flush)
         self.editable = True
         self.character_name = None  # callable(job) -> str, set by GeneratorPage (Phase 6)
         self.scene_name = None  # callable(job) -> str, set by GeneratorPage (Phase 14b)
@@ -233,8 +238,20 @@ class PromptTableModel(QAbstractTableModel):
         self._reindex()
 
     def refresh_job(self, job_id: int) -> None:
-        row = self._rows.get(job_id)
-        if row is not None:
+        """Coalesced: one dataChanged per changed row at most every 100 ms."""
+        if job_id in self._rows:
+            self._dirty.add(job_id)
+            if not self._flush_timer.isActive():
+                self._flush_timer.start()
+
+    def flush(self) -> None:
+        """Emit the rows ``refresh_job`` collected; tests call it instead of waiting 100 ms."""
+        self._flush_timer.stop()
+        dirty, self._dirty = self._dirty, set()
+        for job_id in dirty:
+            row = self._rows.get(job_id)
+            if row is None:
+                continue
             job = self.jobs[row]
             if job.outputs or job.preview:
                 thumbs().refresh(job.outputs[0] if job.outputs else job.preview)

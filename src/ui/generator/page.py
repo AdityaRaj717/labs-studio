@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
@@ -21,7 +22,7 @@ from src.gen.importer import load_prompts, parse_text
 from src.gen.models import Job, JobStatus
 from src.gen.output import default_save_dir, output_dir, save_outputs
 from src.gen.provider import Provider, ProviderError, shot_options
-from src.gen.queue import JobQueue, QueueSettings, count_statuses
+from src.gen.queue import JobQueue, QueueSettings
 from src.gen.refmatch import match_refs
 from src.i18n import tr
 from src.ui.generator.assets_panel import AssetsPanel
@@ -377,8 +378,9 @@ class GeneratorPage(QWidget):
         self._live_timer.timeout.connect(self._tick_live)
         self._live_timer.start()
         self.load_rows()
-        for sig in (self.model.rowsInserted, self.model.rowsRemoved, self.model.modelReset, self.model.dataChanged):
+        for sig in (self.model.rowsInserted, self.model.rowsRemoved, self.model.modelReset):
             sig.connect(lambda *_: (self._save_timer.start(), self._refresh_stats()))
+        self.model.dataChanged.connect(lambda tl, br, *_: (self._save_timer.start(), self._refresh_stats(tl.row(), br.row())))
         if self.provider_combo is not None:
             store_ = store if store is not None else config.settings()
             saved = store_.get(f"pages.{page_key}.provider", provider.key)
@@ -479,11 +481,11 @@ class GeneratorPage(QWidget):
 
     def _on_filtered(self) -> None:
         """The queue shows what the sheet shows, and a decided frame hands the selection on."""
-        rows = range(self.model.rowCount())
-        for row in rows:
+        for row in self.sheet.filtered_rows:  # only the rows the sheet just looked at
             self.table.setRowHidden(row, self.sheet.isRowHidden(row))
         selected = self.table.selected_rows()
         if selected and all(self.sheet.isRowHidden(r) for r in selected):
+            rows = range(self.model.rowCount())
             shown = [r for r in rows if not self.sheet.isRowHidden(r)]
             following = [r for r in shown if r > selected[-1]]
             if shown:
@@ -786,7 +788,7 @@ class GeneratorPage(QWidget):
     def _show_item(self, job: Job, item: dict | None) -> None:
         if item is not None:
             apply_item(job, item)
-            self.model.refresh_job(job.id)
+            self.model.refresh_job(job.id); self.model.flush()
 
     def _mark_local(self, rows: list[int], mark: str) -> None:
         """A local still is decided here; the same mark again takes it back."""
@@ -794,7 +796,7 @@ class GeneratorPage(QWidget):
             if job.production_id or job.status is not JobStatus.DONE:
                 continue
             job.review = "" if job.review == mark else mark
-            self.model.refresh_job(job.id)
+            self.model.refresh_job(job.id); self.model.flush()
             if job.review == "approved":
                 self.sheet.draw_ring_on(job)
 
@@ -1042,11 +1044,27 @@ class GeneratorPage(QWidget):
         self._update_controls()
         self.credit_meter.refresh()
 
-    def _refresh_stats(self) -> None:
-        self.stats_header.update_stats(count_statuses(self.jobs))
-        for key, test in FILTERS.items():
-            count = sum(1 for j in self.jobs if test(j))
-            self.filter_bar.set_label(key, f"{tr(f'gen_filter_{key}')} {count}")
+    @staticmethod
+    def _tally(job: Job) -> tuple:
+        return (job.status.value, *(("filter", k) for k, test in FILTERS.items() if test(job)))
+
+    def _refresh_stats(self, first: int | None = None, last: int | None = None) -> None:
+        """Running counts: a dataChanged recounts only its rows; anything else recounts all."""
+        if first is None or not hasattr(self, "_tallies"):
+            self._tallies = {job.id: self._tally(job) for job in self.jobs}
+            self._counts = Counter(t for tally in self._tallies.values() for t in tally)
+        else:
+            for job in self.jobs[first:last + 1]:
+                new, old = self._tally(job), self._tallies.get(job.id, ())
+                if new != old:
+                    self._counts.subtract(old)
+                    self._counts.update(new)
+                    self._tallies[job.id] = new
+        stats = {status.value: self._counts[status.value] for status in JobStatus}
+        stats["total"] = len(self.jobs)
+        self.stats_header.update_stats(stats)
+        for key in FILTERS:
+            self.filter_bar.set_label(key, f"{tr(f'gen_filter_{key}')} {self._counts[('filter', key)]}")
         self._update_controls()
 
     def _tab_idle(self) -> bool:
@@ -1170,7 +1188,7 @@ class GeneratorPage(QWidget):
         def restored(files: list[str]) -> None:
             if files:
                 job.outputs = [Path(f) for f in files]
-                self.model.refresh_job(job.id)
+                self.model.refresh_job(job.id); self.model.flush()
                 self.save_rows()
         self._act(lambda: self.actions.redownload(job.engine_job), restored)
 
@@ -1244,13 +1262,13 @@ class GeneratorPage(QWidget):
                 job.overrides.pop(key, None)
             else:
                 job.overrides[key] = value
-            self.model.refresh_job(job.id)
+            self.model.refresh_job(job.id); self.model.flush()
 
     def set_frame(self, row: int, which: str, path) -> None:
         """``which``: start_frame or end_frame; ``path`` None clears it."""
         job = self.model.job_at(row)
         setattr(job, which, Path(path) if path else None)
-        self.model.refresh_job(job.id)
+        self.model.refresh_job(job.id); self.model.flush()
 
     def chain_last_frame(self, row: int) -> None:
         """The clip's last frame (free, local FFmpeg) becomes the start of the next shot, made if missing."""
@@ -1271,7 +1289,7 @@ class GeneratorPage(QWidget):
             target = self.model.job_at(nxt) if nxt < self.model.rowCount() else None
             if target is not None and target.status in (JobStatus.PENDING, JobStatus.FAILED) and not target.production_id:
                 target.start_frame = frame
-                self.model.refresh_job(target.id)
+                self.model.refresh_job(target.id); self.model.flush()
             else:
                 self.add_frame_shots([(job.prompt, frame)])
 
