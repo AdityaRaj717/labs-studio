@@ -16,7 +16,7 @@ from typing import Any
 
 from PySide6.QtCore import QObject, Signal
 
-from src.gen.models import Job, JobStatus
+from src.gen.models import Job, JobStatus, Take
 from src.gen.progress import parse_ts
 from src.i18n import tr
 from src.projects.store import job_to_row, row_to_job
@@ -81,6 +81,8 @@ def item_fields(event: dict[str, Any]) -> dict[str, Any]:
         "stage": str(event.get("job_state") or "") if status in (JobStatus.RUNNING, JobStatus.QUEUED) else "",
         "started_at": parse_ts(event.get("submitted_at")),
         "tiles": int(event.get("tiles") or 1),
+        # Only a full status read carries the history; an event without it keeps what the row has.
+        **({"takes": [Take.from_engine(t) for t in event["takes"]]} if "takes" in event else {}),
     }
 
 

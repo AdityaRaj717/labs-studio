@@ -15,11 +15,12 @@ import re
 import secrets
 import shutil
 import threading
+from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
-from src.gen.models import Job, JobStatus
+from src.gen.models import Job, JobStatus, Take
 
 log = logging.getLogger(__name__)
 
@@ -65,6 +66,7 @@ def job_to_row(job: Job) -> dict[str, Any]:
         "latest_take": job.latest_take,
         "stale": job.stale,
         "ref_labels": list(job.ref_labels),
+        "takes": [asdict(t) for t in job.takes],
     }
 
 
@@ -98,6 +100,7 @@ def row_to_job(row: dict[str, Any], index: int) -> Job:
         latest_take=int(row.get("latest_take", 0)),
         stale=str(row.get("stale", "")),
         ref_labels=[str(c) for c in row.get("ref_labels", [])],
+        takes=[Take.from_engine(t) for t in row.get("takes", [])],
     )
 
 

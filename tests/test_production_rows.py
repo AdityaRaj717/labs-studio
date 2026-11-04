@@ -245,3 +245,19 @@ def test_a_take_under_review_shows_its_own_file_is_what_the_row_carries(page):
 def test_column_count_and_keys_are_unchanged():
     assert COLUMN_KEYS == ("gen_col_index", "gen_col_prompt", "gen_col_character", "gen_col_scene", "gen_col_refs",
                            "gen_col_status", "gen_col_progress", "gen_col_output")
+
+
+def test_item_fields_keep_all_takes(tmp_path):
+    from src.gen.models import Job, Take
+    from src.projects.store import job_to_row, row_to_job
+
+    takes = [{"n": 1, "prompt": "a fox", "status": "done", "file": "images/v1.jpg", "quoted_credits": 0, "verdict": "rejected",
+              "actor": "app", "at": "2026-11-04T10:00:00Z", "note": "too dark", "refs_used": ["r.png"]},
+             {"n": 2, "prompt": "a fox, dawn", "status": "done", "file": "images/v2.jpg", "verdict": None}]
+    fields = item_fields(item(take=2, takes=takes))
+    assert [t.n for t in fields["takes"]] == [1, 2]
+    assert fields["takes"][0] == Take(1, "a fox", ["r.png"], "done", "images/v1.jpg", 0, "rejected", "app",
+                                      "2026-11-04T10:00:00Z", "too dark")
+    assert "takes" not in item_fields(item())  # a light event keeps the row's history
+    job = Job("a fox", takes=fields["takes"])
+    assert row_to_job(job_to_row(job), 1).takes == fields["takes"]

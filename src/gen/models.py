@@ -32,6 +32,29 @@ class OutputFile:
 
 
 @dataclass
+class Take:
+    """One attempt at a Production Item, as the engine keeps it (``item.takes[]``)."""
+    n: int
+    prompt: str = ""
+    refs_used: list[str] = field(default_factory=list)
+    status: str = ""  # generating, done, failed
+    file: str = ""
+    quoted_credits: int = 0
+    verdict: str = ""  # "", approved, rejected
+    actor: str = ""
+    at: str = ""
+    note: str = ""
+
+    @classmethod
+    def from_engine(cls, take: dict) -> "Take":
+        return cls(n=int(take.get("n") or 0), prompt=str(take.get("prompt") or ""),
+                   refs_used=[str(r) for r in take.get("refs_used") or []], status=str(take.get("status") or ""),
+                   file=str(take.get("file") or ""), quoted_credits=int(take.get("quoted_credits") or 0),
+                   verdict=str(take.get("verdict") or ""), actor=str(take.get("actor") or ""),
+                   at=str(take.get("at") or ""), note=str(take.get("note") or ""))
+
+
+@dataclass
 class Job:
     prompt: str
     index: int = 0
@@ -62,6 +85,7 @@ class Job:
     latest_take: int = 0  # the newest Take, which a regeneration names
     stale: str = ""  # the dependency IDs whose Approved Take changed since this row's
     ref_labels: list[str] = field(default_factory=list)  # Cast names
+    takes: list[Take] = field(default_factory=list)  # a Production Item's every Take, oldest first
 
     def reset(self) -> None:
         self.status = JobStatus.PENDING
