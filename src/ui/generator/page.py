@@ -292,11 +292,13 @@ class GeneratorPage(QWidget):
         self.viewer.row_changed.connect(self._on_viewer_row)
         self.viewer.approve_requested.connect(self.approve_rows)
         self.viewer.reject_requested.connect(self.reject_rows)
+        self.viewer.take_review_requested.connect(self.review_take)
         self.viewer.retry_requested.connect(self._confirm_retry)
         self.viewer.edit_requested.connect(self.edit_row)
         self.viewer.open_requested.connect(self._open)
         self.take_panel.approve_requested.connect(self.approve_rows)
         self.take_panel.reject_requested.connect(self.reject_rows)
+        self.take_panel.take_review_requested.connect(self.review_take)
         self.take_panel.retry_requested.connect(self._confirm_retry)
         self.take_panel.edit_requested.connect(self.edit_row)
         self.take_panel.view_requested.connect(self.open_viewer)
@@ -746,6 +748,12 @@ class GeneratorPage(QWidget):
         jobs = [j for j in map(self.model.job_at, rows) if j.review == "pending_review"]
         if jobs:
             self._act(lambda: self.actions.approve(jobs), jobs=jobs)
+
+    def review_take(self, row: int, take: int, action: str, note: str = "") -> None:
+        """A verdict on one named Take of a Production frame; the row changes when the engine's event returns."""
+        job = self.model.job_at(row)
+        if job.production_id:
+            self._act(lambda: self.actions.review_take(job, take, action, note), jobs=[job])
 
     def reject_rows(self, rows: list[int]) -> None:
         self._mark_local(rows, "rejected")

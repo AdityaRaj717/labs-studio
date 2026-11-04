@@ -158,6 +158,12 @@ def draw_hatch(p: QPainter, rect: QRectF, color: str) -> None:
     p.restore()
 
 
+def take_badge(job: Job) -> str:
+    """``T2/3`` on the rebate once an Item has more than one Take: the shown one of how many."""
+    total = max(job.latest_take, len(job.takes))
+    return f"T{job.take}/{total}" if job.production_id and total > 1 and job.take else ""
+
+
 def edge_state(job: Job) -> str:
     """The word on the frame's edge."""
     if job.review == "approved":
@@ -258,6 +264,9 @@ class SheetDelegate(QStyledItemDelegate):
         ident = job.item_id if job.production_id else ""
         if job.outputs and len(job.outputs) > 1:
             ident = f"{ident} +{len(job.outputs) - 1}".strip()
+        badge = take_badge(job)
+        if badge:
+            ident = f"{ident} {badge}".strip()
         if job.origin == "agent" and not ident:
             ident = tr("gen_edge_agent")
         state = edge_state(job)

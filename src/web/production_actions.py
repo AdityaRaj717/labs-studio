@@ -43,6 +43,14 @@ class ProductionActions:
     def reject(self, jobs) -> None:
         self._verdict(jobs, "reject")
 
+    def review_take(self, job, take: int, action: str, note: str = "") -> dict[str, Any]:
+        """A verdict on one named Take, older ones included, with the owner's note when given."""
+        args = {"production_id": job.production_id, "items": [{"id": job.item_id, "take": take}],
+                "action": action, "actor": "app"}
+        if note.strip():
+            args["note"] = note.strip()
+        return self._call("flow_production_review", args)
+
     def regenerate(self, job, prompt: str | None = None, dry_run: bool = False) -> dict[str, Any]:
         args = {"production_id": job.production_id, "item": job.item_id, "expected_take": job.latest_take,
                 "auto_confirm": True, "actor": "app"}

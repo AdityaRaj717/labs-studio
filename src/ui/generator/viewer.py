@@ -9,11 +9,12 @@ from PySide6.QtGui import QColor, QImageReader, QPainter, QPixmap
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
 from src import theme
-from src.gen.models import Job, JobStatus
+from src.gen.models import Job, JobStatus, Take
 from src.i18n import tr
 from src.ui import icons
 from src.ui.generator.sheet import draw_cross, draw_ring, edge_state, is_video
-from src.ui.kit import IconButton
+from src.ui.generator.take_panel import take_can_approve, take_can_reject
+from src.ui.kit import IconButton, data_font
 
 
 class _Canvas(QWidget):
@@ -24,9 +25,14 @@ class _Canvas(QWidget):
         self.job: Job | None = None
         self.pix: QPixmap | None = None
         self.message = ""
+        self.verdict = ""
+        self.label = ""
 
-    def show_job(self, job: Job | None, path: Path | None) -> None:
+    def show_job(self, job: Job | None, path: Path | None, verdict: str | None = None, label: str = "") -> None:
+        """``verdict``: the shown Take's own mark, when it is not the row's."""
         self.job = job
+        self.verdict = (job.review if job is not None else "") if verdict is None else verdict
+        self.label = label
         self.pix = None
         self.message = ""
         if path is None:
@@ -58,10 +64,15 @@ class _Canvas(QWidget):
         else:
             p.setPen(QColor(c["frame_muted"]))
             p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.message)
-        if self.job is not None and self.job.review == "approved":
+        if self.job is not None and self.verdict == "approved":
             draw_ring(p, area, self.job.id, c["marker"], width=4.5)
-        elif self.job is not None and self.job.review == "rejected":
+        elif self.job is not None and self.verdict == "rejected":
             draw_cross(p, area, self.job.id, c["marker"], width=4.5)
+        if self.label:
+            p.setFont(data_font())
+            p.setPen(QColor(c["frame_text"]))
+            p.drawText(QRectF(self.rect()).adjusted(10, 8, -10, -8),
+                       Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, self.label)
         p.end()
 
 
@@ -70,6 +81,7 @@ class TakeViewer(QWidget):
     row_changed = Signal(int)
     approve_requested = Signal(list)
     reject_requested = Signal(list)
+    take_review_requested = Signal(int, int, str, str)  # row, take, approve or reject, note
     retry_requested = Signal(list)
     edit_requested = Signal(int)
     open_requested = Signal(object)  # path
@@ -82,6 +94,8 @@ class TakeViewer(QWidget):
         self.model_ = model
         self.row = -1
         self.output = 0
+        self.take_n = 0  # the Take shown on the left; 0 is the row's own
+        self.compare_n = 0  # the Take beside it while comparing; 0 is off
         self.rows: list[int] = []
 
         ink = theme.COLORS["dark"]["frame_text"]
@@ -100,18 +114,31 @@ class TakeViewer(QWidget):
         top.addWidget(self.btn_back)
         top.addSpacing(10)
         top.addWidget(self.edge, 1)
+        self.btn_compare = QPushButton(tr("gen_viewer_compare"))
+        self.btn_compare.setIcon(icons.icon("squares-four", ink))
+        self.btn_compare.setToolTip(tr("gen_viewer_compare_tip"))
+        self.btn_compare.setCheckable(True)
+        self.btn_compare.clicked.connect(lambda _checked=False: self.toggle_compare())
+        top.addWidget(self.btn_compare)
         for b in (self.btn_prev_take, self.btn_next_take, self.btn_prev, self.btn_next):
             top.addWidget(b)
 
         self.canvas = _Canvas()
+        self.canvas_b = _Canvas()
+        self.canvas_b.hide()
+        pictures = QHBoxLayout()
+        pictures.setContentsMargins(0, 0, 0, 0)
+        pictures.setSpacing(2)
+        pictures.addWidget(self.canvas, 1)
+        pictures.addWidget(self.canvas_b, 1)
         self.prompt = QLabel()
         self.prompt.setObjectName("ViewerPrompt")
         self.prompt.setWordWrap(True)
         self.prompt.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self.btn_approve = self._action("gen_approve", "check", lambda: self.approve_requested.emit([self.row]))
+        self.btn_approve = self._action("gen_approve", "check", lambda: self.verdict("approve"))
         self.btn_approve.setObjectName("PrimaryButton")
         self.btn_approve.setToolTip(tr("gen_approve_tip"))
-        self.btn_reject = self._action("gen_reject", "x", lambda: self.reject_requested.emit([self.row]))
+        self.btn_reject = self._action("gen_reject", "x", lambda: self.verdict("reject"))
         self.btn_reject.setToolTip(tr("gen_reject_tip"))
         self.btn_retry = self._action("gen_retry", "arrow-clockwise", lambda: self.retry_requested.emit([self.row]))
         self.btn_retry.setToolTip(tr("gen_retry_tip"))
@@ -131,7 +158,7 @@ class TakeViewer(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addLayout(top)
-        layout.addWidget(self.canvas, 1)
+        layout.addLayout(pictures, 1)
         layout.addLayout(bottom)
         model.dataChanged.connect(lambda *_: self.isVisible() and self.refresh())
 
@@ -153,6 +180,7 @@ class TakeViewer(QWidget):
         self.rows = rows or [row]
         self.row = row
         self.output = 0
+        self.take_n = self.compare_n = 0
         self.refresh()
         self.setFocus()
 
@@ -161,7 +189,26 @@ class TakeViewer(QWidget):
             return self.model_.job_at(self.row)
         return None
 
+    def take(self, job: Job, n: int | None = None) -> Take | None:
+        """The shown Take of a Production row, or None for a row without a history."""
+        if not job.takes:
+            return None
+        n = self.take_n if n is None else n
+        return next((t for t in job.takes if t.n == n), None) or next(
+            (t for t in job.takes if t.n == job.take), job.takes[-1])
+
+    def _take_path(self, job: Job, take: Take) -> Path | None:
+        if take.file:
+            return Path(take.file)
+        return self._output_path(job) if take.n == job.take else None
+
     def _path(self, job: Job) -> Path | None:
+        take = self.take(job)
+        if take is not None:
+            return self._take_path(job, take)
+        return self._output_path(job)
+
+    def _output_path(self, job: Job) -> Path | None:
         if job.outputs:
             return job.outputs[min(self.output, len(job.outputs) - 1)]
         return job.preview
@@ -172,10 +219,23 @@ class TakeViewer(QWidget):
             self.closed.emit()
             return
         path = self._path(job)
-        self.canvas.show_job(job, path)
+        take = self.take(job)
+        if take is None:
+            self.canvas.show_job(job, path)
+        else:
+            self.take_n = take.n
+            self.canvas.show_job(job, path, take.verdict, f"T{take.n}")
+        other = self.take(job, self.compare_n) if take is not None and self.compare_n else None
+        self.canvas_b.setVisible(other is not None)
+        self.btn_compare.setChecked(other is not None)
+        self.btn_compare.setVisible(len(job.takes) > 1)
+        if other is not None:
+            self.canvas_b.show_job(job, self._take_path(job, other), other.verdict, f"T{other.n}")
         pos = self.rows.index(self.row) + 1 if self.row in self.rows else 1
         parts = [f"{job.index:03d}", job.item_id, edge_state(job), f"{pos}/{len(self.rows)}"]
-        if len(job.outputs) > 1:
+        if take is not None and len(job.takes) > 1:
+            parts.append(f"T{take.n}/{len(job.takes)}")
+        elif len(job.outputs) > 1:
             parts.append(f"{min(self.output, len(job.outputs) - 1) + 1}/{len(job.outputs)} files")
         self.edge.setText("  ".join(p for p in parts if p))
         self.prompt.setText((job.error + "\n" if job.status is JobStatus.FAILED and job.error else "") + job.prompt)
@@ -183,8 +243,13 @@ class TakeViewer(QWidget):
             not job.production_id and job.status is JobStatus.DONE and job.review != "approved"))
         self.btn_reject.setEnabled(job.review in ("pending_review", "approved") or (
             not job.production_id and job.status is JobStatus.DONE and job.review != "rejected"))
+        if take is not None and job.production_id:
+            self.btn_approve.setEnabled(take_can_approve(job, take))
+            self.btn_reject.setEnabled(take_can_reject(job, take))
         self.btn_open.setEnabled(path is not None)
-        many = len(job.outputs) > 1
+        many = len(job.takes) > 1 or (not job.takes and len(job.outputs) > 1)
+        self.btn_prev_take.setToolTip(tr("gen_viewer_prev_take_n" if job.takes else "gen_viewer_prev_take"))
+        self.btn_next_take.setToolTip(tr("gen_viewer_next_take_n" if job.takes else "gen_viewer_next_take"))
         self.btn_prev_take.setVisible(many)
         self.btn_next_take.setVisible(many)
         self.btn_prev.setEnabled(len(self.rows) > 1)
@@ -196,11 +261,41 @@ class TakeViewer(QWidget):
             return
         self.row = self.rows[(self.rows.index(self.row) + delta) % len(self.rows)]
         self.output = 0
+        self.take_n = self.compare_n = 0
+        self.refresh()
+
+    def verdict(self, action: str) -> None:
+        """A Production row with a history is decided on the shown Take; anything else on the row."""
+        job = self.job()
+        take = self.take(job) if job is not None and job.production_id else None
+        if take is not None:
+            self.take_review_requested.emit(self.row, take.n, action, "")
+        elif action == "approve":
+            self.approve_requested.emit([self.row])
+        else:
+            self.reject_requested.emit([self.row])
+
+    def toggle_compare(self) -> None:
+        """Two-up: the shown Take beside the approved one, or beside the one before it."""
+        job = self.job()
+        if job is None or len(job.takes) < 2 or self.compare_n:
+            self.compare_n = 0
+        else:
+            shown = self.take(job).n
+            approved = job.take if job.review == "approved" and job.take != shown else 0
+            others = [t.n for t in job.takes if t.n != shown]
+            self.compare_n = approved or max((n for n in others if n < shown), default=others[-1])
         self.refresh()
 
     def step_output(self, delta: int) -> None:
         job = self.job()
-        if job is not None and len(job.outputs) > 1:
+        if job is not None and len(job.takes) > 1:
+            ns = [t.n for t in job.takes]
+            self.take_n = ns[(ns.index(self.take(job).n) + delta) % len(ns)]
+            if self.take_n == self.compare_n:
+                self.compare_n = 0
+            self.refresh()
+        elif job is not None and len(job.outputs) > 1:
             self.output = (self.output + delta) % len(job.outputs)
             self.refresh()
 
@@ -224,11 +319,13 @@ class TakeViewer(QWidget):
             self.step_output(1)
         elif key == Qt.Key.Key_P or (key in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
                                      and event.modifiers() & Qt.KeyboardModifier.ControlModifier):
-            self.approve_requested.emit([self.row])
+            self.verdict("approve")
         elif key == Qt.Key.Key_X:
-            self.reject_requested.emit([self.row])
+            self.verdict("reject")
         elif key == Qt.Key.Key_R:
             self.retry_requested.emit([self.row])
+        elif key == Qt.Key.Key_C:
+            self.toggle_compare()
         elif key == Qt.Key.Key_E:
             self.edit_requested.emit(self.row)
         else:

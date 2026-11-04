@@ -250,3 +250,67 @@ def test_the_row_changes_only_on_the_engines_event(qapp, page):
     page.approve_rows([0])
     settle(qapp)
     assert page.jobs[0].review == "pending_review"
+
+
+def _takes_row(tmp_path):
+    from src.gen.models import Take
+    from PIL import Image
+    files = []
+    for n in (1, 2):
+        f = tmp_path / f"v{n}.png"
+        Image.new("RGB", (32, 18), (n * 60, 0, 0)).save(f)
+        files.append(f)
+    job = row(review="pending_review", take=2)
+    job.takes = [Take(1, "a fox", ["r.png"], "done", str(files[0]), 0, "rejected", "app", "2026-11-04T10:00:00Z"),
+                 Take(2, "a red fox", [], "done", str(files[1]), 0)]
+    job.outputs = [files[1]]
+    return job
+
+
+def test_older_take_can_be_approved(page, qapp, tmp_path):
+    page.model.add_jobs([_takes_row(tmp_path)])
+    panel = page.take_panel
+    panel.show_rows(page.model, [0])
+    assert [b.text() for b in panel.take_buttons] == ["T1", "T2"]
+    assert panel.shown_take().n == 2
+    panel.take_buttons[0].click()
+    assert panel.shown_take().n == 1 and panel.btn_approve.text() == "Approve take 1"
+    assert "rejected by app" in panel.take_info.text()
+    panel.btn_approve.click()
+    settle(qapp)
+    assert page.client.sent("flow_production_review")[-1] == {
+        "production_id": "p", "items": [{"id": "IMG_01", "take": 1}], "action": "approve", "actor": "app"}
+
+
+def test_note_is_sent(page, qapp, tmp_path):
+    page.model.add_jobs([_takes_row(tmp_path)])
+    panel = page.take_panel
+    panel.show_rows(page.model, [0])
+    panel.note.setText("  better light  ")
+    panel.btn_reject.click()
+    settle(qapp)
+    sent = page.client.sent("flow_production_review")[-1]
+    assert sent["note"] == "better light" and sent["action"] == "reject" and sent["items"] == [{"id": "IMG_01", "take": 2}]
+    assert panel.note.text() == ""
+
+
+def test_compare_shows_two_takes(page, qapp, tmp_path):
+    page.model.add_jobs([_takes_row(tmp_path)])
+    viewer = page.viewer
+    viewer.open_row(0, [0])
+    assert viewer.canvas.label == "T2" and viewer.canvas_b.isHidden()
+    viewer.toggle_compare()
+    assert not viewer.canvas_b.isHidden() and viewer.canvas_b.label == "T1"
+    assert viewer.canvas_b.verdict == "rejected" and viewer.canvas.pix is not None and viewer.canvas_b.pix is not None
+    viewer.step_output(-1)  # stepping onto the compared take ends the compare
+    assert viewer.canvas.label == "T1" and viewer.canvas_b.isHidden()
+    viewer.verdict("approve")
+    settle(qapp)
+    assert page.client.sent("flow_production_review")[-1]["items"] == [{"id": "IMG_01", "take": 1}]
+
+
+def test_rebate_badge_names_the_take():
+    from src.ui.generator.sheet import take_badge
+    job = row(take=2)
+    assert take_badge(job) == "T2/2"
+    assert take_badge(row(take=1)) == ""
