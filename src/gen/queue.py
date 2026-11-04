@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable
 
 from src.gen.models import RETRYABLE_STATUSES, Job, JobStatus, OutputFile
-from src.gen.provider import Provider, ProviderError, RunContext, StopRequested
+from src.gen.provider import Provider, ProviderError, RunContext, StopRequested, shot_options
 
 log = logging.getLogger(__name__)
 
@@ -231,7 +231,7 @@ class JobQueue:
 
         ctx = RunContext(progress=progress, should_stop=self._stop.is_set, partial=partial, note=note, info=info)
         try:
-            files = self.provider.generate(job, self.options, ctx)
+            files = self.provider.generate(job, shot_options(job, self.options), ctx)
             paths = self.saver(job, files)
             with self._lock:
                 job.outputs = paths

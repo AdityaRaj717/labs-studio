@@ -68,6 +68,7 @@ def job_to_row(job: Job) -> dict[str, Any]:
         "ref_labels": list(job.ref_labels),
         "takes": [asdict(t) for t in job.takes],
         "production_stage": job.production_stage,
+        "overrides": dict(job.overrides),
         "start_frame": str(job.start_frame) if job.start_frame else "",
         "end_frame": str(job.end_frame) if job.end_frame else "",
     }
@@ -105,6 +106,7 @@ def row_to_job(row: dict[str, Any], index: int) -> Job:
         ref_labels=[str(c) for c in row.get("ref_labels", [])],
         takes=[Take.from_engine(t) for t in row.get("takes", [])],
         production_stage=str(row.get("production_stage", "")),
+        overrides=dict(row.get("overrides") or {}),
         start_frame=Path(row["start_frame"]) if row.get("start_frame") else None,
         end_frame=Path(row["end_frame"]) if row.get("end_frame") else None,
     )

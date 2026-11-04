@@ -6,6 +6,7 @@ import enum
 import itertools
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 _ids = itertools.count(1)
 
@@ -88,6 +89,7 @@ class Job:
     takes: list[Take] = field(default_factory=list)  # a Production Item's every Take, oldest first
     start_frame: Path | None = None  # video: Flow's Frames mode, the first frame
     end_frame: Path | None = None  # video: Frames mode, the last frame
+    overrides: dict[str, Any] = field(default_factory=dict)  # this shot's own settings (``SHOT_KEYS``)
     production_stage: str = ""  # reference, still or animation: the Production stage this Item belongs to
 
     def reset(self) -> None:

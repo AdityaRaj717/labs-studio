@@ -78,6 +78,8 @@ STRINGS: dict[str, str] = {
     "gen_animate_still": "Animate from this still",
     "gen_chain_last_frame": "Use last frame as next start",
     "gen_take_frames": "Frames",
+    "gen_take_shot": "This shot",
+    "gen_take_shot_page": "Page setting ({value})",
     "gen_take_start_frame": "Start",
     "gen_take_end_frame": "End",
     "gen_take_frame_none": "none",

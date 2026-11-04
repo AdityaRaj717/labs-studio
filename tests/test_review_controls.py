@@ -387,3 +387,49 @@ def test_frames_and_references_stop_before_any_call(tmp_path, monkeypatch):
     job = Job("x", refs=[tmp_path / "r.png"], start_frame=tmp_path / "s.png")
     with pytest.raises(ProviderError, match="Frames can't be combined"):
         wfv.WebFlowVideoProvider().generate(job, {}, None)
+
+
+def test_shot_override_changes_estimate(qapp, monkeypatch):
+    import src.gen.web_flow_video as wfv
+    caps = {"video": {"models": {"omni": {"credits": {"720p": {"8": 10, "4": 5}, "360p": {"8": 4}}}},
+                      "defaultModel": "omni", "ratios": ["16:9"]}}
+    monkeypatch.setattr(wfv, "capabilities", lambda: caps)
+    a, b = Job("a"), Job("b")
+    options = {"model": "omni", "duration": "8", "resolution": "720p", "count": 1}
+    provider = wfv.WebFlowVideoProvider()
+    assert provider.estimate([a, b], options).credits == 20
+    b.overrides = {"duration": "4", "count": 2}
+    assert provider.estimate([a, b], options).credits == 20  # 10 + 5 x 2
+    b.overrides = {"resolution": "360p"}
+    assert provider.estimate([a, b], options).credits == 14
+
+
+def test_override_survives_project_reload():
+    from src.projects.store import job_to_row, row_to_job
+    job = Job("x", overrides={"duration": "4", "count": 2})
+    assert row_to_job(job_to_row(job), 1).overrides == {"duration": "4", "count": 2}
+
+
+def test_panel_sets_and_clears_a_shot_setting(page):
+    page.add_prompts(["one"])
+    panel = page.take_panel
+    panel.show_rows(page.model, [0])
+    assert not panel.shot.isHidden() and "count" in panel.shot_boxes
+    box = panel.shot_boxes["count"]
+    assert box.itemData(0) is None and box.itemText(0).startswith("Page setting")
+    box.setCurrentIndex(box.findData(3))
+    box.activated.emit(box.currentIndex())
+    assert page.model.job_at(0).overrides == {"count": 3}
+    panel.show_rows(page.model, [0])
+    assert panel.shot_boxes["count"].currentData() == 3
+    panel.shot_boxes["count"].setCurrentIndex(0)
+    panel.shot_boxes["count"].activated.emit(0)
+    assert page.model.job_at(0).overrides == {}
+
+
+def test_shared_tally_survives_an_override():
+    from src.gen.provider import shot_options
+    options = {"count": 1}
+    merged = shot_options(Job("x", overrides={"count": 2}), options)
+    assert merged["count"] == 2 and merged["_shared"] is options
+    assert shot_options(Job("y"), options) is options

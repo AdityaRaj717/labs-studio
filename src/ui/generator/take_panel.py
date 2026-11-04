@@ -7,10 +7,12 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QFileDialog, QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea, QVBoxLayout, QWidget,
+    QComboBox, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea, QVBoxLayout,
+    QWidget,
 )
 
 from src.gen.models import Job, JobStatus, Take
+from src.gen.provider import SHOT_KEYS, ConfigField
 from src.gen.progress import clock, progress_view, stage_word
 from src.i18n import tr
 from src.ui.generator.sheet import edge_state, frame_pixmap, is_video, picture_path
@@ -80,6 +82,7 @@ class TakePanel(QScrollArea):
     open_requested = Signal(int)
     take_review_requested = Signal(int, int, str, str)  # row, take, approve or reject, note
     frame_changed = Signal(int, str, object)  # row, start_frame or end_frame, Path or None
+    shot_override_changed = Signal(list, str, object)  # rows, a SHOT_KEYS key, value or None for the page's
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -157,6 +160,17 @@ class TakePanel(QScrollArea):
             frames.addLayout(line)
             self.frame_slots[which] = (name, choose, clear)
 
+        self.shot_title = QLabel(tr("gen_take_shot"))
+        self.shot_title.setObjectName("FieldHeading")
+        self.shot = QWidget()
+        self.shot_form = QFormLayout(self.shot)
+        self.shot_form.setContentsMargins(0, 0, 0, 0)
+        self.shot_fields: list[ConfigField] = []
+        self.shot_boxes: dict[str, QComboBox] = {}
+        self.page_values = lambda: {}  # the page's own settings, set by GeneratorPage
+        self.shot_title.hide()
+        self.shot.hide()
+
         self.error = self._field("gen_take_error")
         self.live = self._field("gen_take_progress")
         self.prompt = self._field("gen_take_prompt")
@@ -184,6 +198,8 @@ class TakePanel(QScrollArea):
             layout.addWidget(field)
         layout.addWidget(self.frames_title)
         layout.addWidget(self.frames)
+        layout.addWidget(self.shot_title)
+        layout.addWidget(self.shot)
         layout.addWidget(self.origin)
         layout.addStretch(1)
         self.setWidget(body)
@@ -213,6 +229,60 @@ class TakePanel(QScrollArea):
     def _set(self, field: QWidget, text: str) -> None:
         field.value.setText(text)
         field.setVisible(bool(text))
+
+    # ---- this shot's own settings (S4-5) ------------------------------
+    def set_shot_fields(self, fields: list[ConfigField], page_values) -> None:
+        """The page's choice fields a shot may set for itself; ``page_values()`` gives the defaults."""
+        self.page_values = page_values
+        self.shot_fields = [f for f in fields if f.key in SHOT_KEYS and f.kind in ("choice", "int")]
+        while self.shot_form.rowCount():
+            self.shot_form.removeRow(0)
+        self.shot_boxes = {}
+        for f in self.shot_fields:
+            box = QComboBox()
+            box.setAccessibleName(tr(f.label_key))
+            box.activated.connect(lambda _i, key=f.key: self._shot_picked(key))
+            self.shot_form.addRow(tr(f.label_key), box)
+            self.shot_boxes[f.key] = box
+
+    def _shot_options(self, f: ConfigField, values: dict) -> list[str]:
+        if f.kind == "int":
+            return [str(n) for n in range(int(max(1, f.minimum)), int(f.maximum) + 1)]
+        if f.depends_on and f.options_by:
+            return [str(o) for o in f.options_by.get(values.get(f.depends_on), f.options)]
+        return [str(o) for o in f.options]
+
+    def _label(self, f: ConfigField, value) -> str:
+        return tr(f.option_prefix + str(value)) if f.option_prefix else str(value)
+
+    def _shot_picked(self, key: str) -> None:
+        value = self.shot_boxes[key].currentData()
+        self.shot_override_changed.emit(self.rows, key, value)
+
+    def _show_shot(self, jobs: list[Job]) -> None:
+        own = [j for j in jobs if not j.production_id]
+        shown = bool(self.shot_fields) and bool(own) and len(own) == len(jobs)
+        self.shot_title.setVisible(shown)
+        self.shot.setVisible(shown)
+        if not shown:
+            return
+        page = self.page_values()
+        first = own[0]
+        effective = {**page, **first.overrides}
+        editable = all(j.status not in (JobStatus.RUNNING, JobStatus.QUEUED) for j in own)
+        for f in self.shot_fields:
+            box = self.shot_boxes[f.key]
+            box.blockSignals(True)
+            box.clear()
+            box.addItem(tr("gen_take_shot_page", value=self._label(f, page.get(f.key, f.default))), None)
+            for option in self._shot_options(f, effective):
+                box.addItem(self._label(f, option), int(option) if f.kind == "int" else option)
+            mine = {j.overrides.get(f.key) for j in own}
+            pick = mine.pop() if len(mine) == 1 else None
+            at = box.findData(int(pick) if f.kind == "int" and pick is not None else pick) if pick is not None else 0
+            box.setCurrentIndex(max(0, at))
+            box.setEnabled(editable)
+            box.blockSignals(False)
 
     def _choose_frame(self, which: str) -> None:
         path, _ = QFileDialog.getOpenFileName(self, tr("gen_take_frames"), "", "Images (*.png *.jpg *.jpeg *.webp)")
@@ -312,6 +382,7 @@ class TakePanel(QScrollArea):
         self.btn_approve.setText(tr("gen_take_approve_n", n=take.n) if take is not None else tr("gen_approve"))
         self.btn_reject.setText(tr("gen_take_reject_n", n=take.n) if take is not None else tr("gen_reject"))
         self._show_frames(job)
+        self._show_shot(jobs)
         if job is None:
             return
         self.edge.setText("  ".join(p for p in (f"{job.index:03d}", job.item_id, edge_state(job)) if p))

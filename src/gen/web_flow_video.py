@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from src.gen.models import Job, OutputFile
-from src.gen.provider import ConfigField, Estimate, Provider, ProviderError, RunContext
+from src.gen.provider import ConfigField, Estimate, Provider, ProviderError, RunContext, shot_options
 from src.i18n import tr
 from src.gen.web_flow_image import SITE, WebFlowImageProvider, capabilities, run_engine_job
 
@@ -53,9 +53,13 @@ class WebFlowVideoProvider(Provider):
         self._session = session
 
     def estimate(self, jobs: list[Job], options: dict[str, Any]) -> Estimate:
-        cost = quote(capabilities(), options.get("model") or "omni", int(options.get("duration", 8)),
-                     options.get("resolution") or "720p")
-        return Estimate(len(jobs), cost * max(1, int(options.get("count", 1))) * len(jobs))
+        """Summed per shot: a shot's own settings change its quote."""
+        caps, total = capabilities(), 0
+        for job in jobs:
+            o = shot_options(job, options)
+            cost = quote(caps, o.get("model") or "omni", int(o.get("duration", 8)), o.get("resolution") or "720p")
+            total += cost * max(1, int(o.get("count", 1)))
+        return Estimate(len(jobs), total)
 
     def config_fields(self) -> list[ConfigField]:
         video = capabilities()["video"]
@@ -81,7 +85,7 @@ class WebFlowVideoProvider(Provider):
         refs = [str(Path(r).resolve()) for r in job.refs if r not in library]
         # The owner chose this mix, so the engine's default cap of 30 is not the limit; a run cap is.
         cap = int(options.get("run_cap") or 0)
-        limit = options.setdefault("_run_tally", RunTally()).take(cost * count, cap) if cap else cost * count
+        limit = options.get("_shared", options).setdefault("_run_tally", RunTally()).take(cost * count, cap) if cap else cost * count
         args = {"prompt": job.prompt, "model": model, "ratio": options.get("aspect") or "16:9", "count": count,
                 "duration": duration, "resolution": resolution, "silent": bool(options.get("silent")),
                 "max_credits": limit, "max_generation_retries": 0}  # the app's retries are the only ones

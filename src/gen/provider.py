@@ -23,6 +23,18 @@ class StopRequested(Exception):
     """Raised by a provider when ``ctx.should_stop()`` turned true mid-job."""
 
 
+SHOT_KEYS = ("model", "aspect", "count", "duration", "resolution")  # settings one shot may set for itself
+
+
+def shot_options(job: Job, options: dict[str, Any]) -> dict[str, Any]:
+    """The page's options with this shot's own settings on top. ``_shared`` is the page's dict,
+    where state a whole run shares (the video run tally) lives."""
+    own = {k: v for k, v in job.overrides.items() if k in SHOT_KEYS}
+    if not own:
+        return options
+    return {**options, **own, "_shared": options.get("_shared", options)}
+
+
 @dataclass
 class ConfigField:
     """One setting on a page's config panel.

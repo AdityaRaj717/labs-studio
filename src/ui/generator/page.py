@@ -325,6 +325,8 @@ class GeneratorPage(QWidget):
         self.table.chain_requested.connect(self.chain_last_frame)
         self.take_panel.frames_enabled = page_key == "flow_video"
         self.take_panel.frame_changed.connect(self.set_frame)
+        self.take_panel.set_shot_fields(fields_for(self.provider), lambda: self.config_panel.values())
+        self.take_panel.shot_override_changed.connect(self.set_shot_override)
         self.table.open_folder_requested.connect(self.open_row_folder)
         self.table.characters_source = lambda: [(c.id, c.name) for c in self.characters.all()]
         self.table.character_requested.connect(self.set_character)
@@ -386,6 +388,7 @@ class GeneratorPage(QWidget):
         self.queue.provider = provider
         self.config_panel = ConfigPanel(self.page_key, fields_for(provider), self._store)
         self.scroll.setWidget(self.config_panel)
+        self.take_panel.set_shot_fields(fields_for(provider), lambda: self.config_panel.values())
         log.info("%s: provider set to %s", self.page_key, provider.name)
 
     def _show_banner(self) -> None:
@@ -1053,6 +1056,17 @@ class GeneratorPage(QWidget):
         jobs = self.model.add_jobs([Job(prompt, start_frame=Path(path)) for prompt, path in stills])
         self._refresh_stats()
         return jobs
+
+    def set_shot_override(self, rows: list[int], key: str, value) -> None:
+        """A shot's own setting; None goes back to the page's."""
+        for job in map(self.model.job_at, rows):
+            if job.production_id or job.status in (JobStatus.RUNNING, JobStatus.QUEUED):
+                continue
+            if value is None:
+                job.overrides.pop(key, None)
+            else:
+                job.overrides[key] = value
+            self.model.refresh_job(job.id)
 
     def set_frame(self, row: int, which: str, path) -> None:
         """``which``: start_frame or end_frame; ``path`` None clears it."""
