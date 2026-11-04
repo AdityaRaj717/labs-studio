@@ -17,13 +17,16 @@ class ActionError(Exception):
         self.code, self.message, self.details = code, message, details or {}
 
 
+AUDIO_TIMEOUT = 300  # s: Stable Audio polls until its file is ready
+
+
 class ProductionActions:
     def __init__(self, client):
         self.client = client
 
-    def _call(self, tool: str, args: dict[str, Any]) -> dict[str, Any]:
+    def _call(self, tool: str, args: dict[str, Any], timeout: float = 60) -> dict[str, Any]:
         try:
-            return self.client.call(tool, args)
+            return self.client.call(tool, args, timeout)
         except EngineToolError as exc:
             raise ActionError(exc.code, str(exc), exc.payload.get("details")) from None
         except (EngineError, TimeoutError) as exc:
@@ -78,6 +81,13 @@ class ProductionActions:
 
     def set_budget(self, run_id: str, max_credits: int) -> dict[str, Any]:
         return self._call("flow_job_control", {"action": "set_budget", "run_id": run_id, "max_credits": max_credits})
+
+    def audio(self, tool: str, args: dict[str, Any]) -> dict[str, Any]:
+        """An audio tool call; making a file waits on Fish or Stability, so it gets longer than a read."""
+        return self._call(tool, args, AUDIO_TIMEOUT)
+
+    def run_audio(self, run_id: str) -> list[dict[str, Any]]:
+        return self._call("flow_list_assets", {"run_id": run_id}).get("audio") or []
 
     def list_runs(self, limit: int = 20) -> list[dict[str, Any]]:
         return self._call("flow_list_runs", {"limit": limit}).get("runs") or []

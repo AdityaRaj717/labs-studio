@@ -543,3 +543,46 @@ def test_assemble_waits_for_an_approved_clip(video):
     video.model.add_jobs([Job("one", status=JobStatus.DONE, outputs=[Path("a.mp4")])])
     video._update_controls()
     assert not video.btn_assemble.isEnabled()
+
+
+def test_paid_voice_model_needs_confirm(video, qapp, boxes):
+    panel = video.audio_panel
+    panel.voice_text.setPlainText("Hello there.")
+    panel.model_combo.setCurrentIndex(panel.model_combo.findData("s1"))
+    boxes["answer"] = QMessageBox.StandardButton.No
+    panel.btn_voice.click()
+    settle(qapp)
+    assert video.client.sent("audio_voice_generate") == []
+    assert "costs Fish Audio money" in boxes["question"][-1]
+    boxes["answer"] = QMessageBox.StandardButton.Yes
+    panel.btn_voice.click()
+    settle(qapp)
+    assert video.client.sent("audio_voice_generate")[0]["model"] == "s1"
+    asked = len(boxes["question"])
+    panel.model_combo.setCurrentIndex(0)  # the free model goes without asking
+    panel.btn_voice.click()
+    settle(qapp)
+    assert len(boxes["question"]) == asked and video.client.sent("audio_voice_generate")[1]["model"] == "s2.1-pro-free"
+
+
+def test_stable_needs_estimate_then_confirm(video, qapp, boxes):
+    panel = video.audio_panel
+    video.client.call = lambda tool, args=None, timeout=60: (video.client.calls.append((tool, args)),
+                                                             {"estimated_stability_credits": 8} if not (args or {}).get("auto_confirm") else {"run_id": "r1"})[1]
+    panel.sound_prompt.setText("soft rain on a tin roof")
+    assert not panel.btn_sound.isEnabled()  # no spend before an estimate
+    panel.btn_estimate.click()
+    settle(qapp)
+    assert "auto_confirm" not in video.client.sent("audio_stable_generate")[0]
+    assert panel.btn_sound.isEnabled() and "8 Stability credits" in panel.estimate_label.text()
+    boxes["answer"] = QMessageBox.StandardButton.No
+    panel.btn_sound.click()
+    settle(qapp)
+    assert len(video.client.sent("audio_stable_generate")) == 1
+    boxes["answer"] = QMessageBox.StandardButton.Yes
+    panel.btn_sound.click()
+    settle(qapp)
+    assert video.client.sent("audio_stable_generate")[1]["auto_confirm"] is True
+    assert "8 Stability credits" in boxes["question"][-1]
+    panel.duration.setValue(30)  # a changed request needs a new estimate
+    assert not panel.btn_sound.isEnabled()

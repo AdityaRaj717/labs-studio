@@ -128,6 +128,11 @@ if want("selected_failed"):
     pg.select_row(6); pg.inspector.setVisible(True); pg._refresh_take(); shot("selected_failed"); pg._update_inspector()
 if want("settings_tab"):
     pg.inspector.setVisible(True); pg.inspector_tabs.setCurrentIndex(1); shot("settings_tab"); pg.inspector_tabs.setCurrentIndex(0); pg._update_inspector()
+if want("audio_tab"):
+    pg.inspector.setVisible(True); pg.inspector_tabs.setCurrentWidget(pg.audio_panel)
+    pg.audio_panel.show_files([{"kind": "voice", "file": "C:/run/voice/001_hello.mp3", "provider": "fish", "model": "s2.1-pro-free"},
+                               {"kind": "bgm", "file": "C:/run/bgm/002_rain.wav", "provider": "stability"}])
+    pg.audio_panel.show_estimate(8); shot("audio_tab"); pg.inspector_tabs.setCurrentIndex(0); pg._update_inspector()
 if want("queue"):
     pg.set_view("queue", save=False); shot("queue"); pg.set_view("sheet", save=False)
 if want("filter_empty"):

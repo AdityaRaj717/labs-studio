@@ -24,6 +24,7 @@ from src.gen.provider import Provider, ProviderError, shot_options
 from src.gen.queue import JobQueue, QueueSettings, count_statuses
 from src.gen.refmatch import match_refs
 from src.i18n import tr
+from src.ui.generator.audio_panel import FREE_VOICE_MODEL, AudioPanel
 from src.ui.generator.config_panel import ConfigPanel, fields_for
 from src.ui.generator.prompt_model import COL_PROMPT, PromptTableModel
 from src.ui.generator.prompt_table import PromptTable
@@ -174,7 +175,7 @@ class GeneratorPage(QWidget):
         self.filter_bar = Segmented([(k, tr(f"gen_filter_{k}")) for k in FILTERS])
         self.size_slider = QSlider(Qt.Orientation.Horizontal)
         self.size_slider.setRange(FRAME_WIDTHS[0], FRAME_WIDTHS[1])
-        self.size_slider.setFixedWidth(110)
+        self.size_slider.setFixedWidth(72)
         self.size_slider.setToolTip(tr("gen_frame_size"))
         self.size_slider.setAccessibleName(tr("gen_frame_size"))
         self.size_slider.setValue(int(self._prefs.get(f"pages.{page_key}.frame_width", FRAME_WIDTHS[2])))
@@ -253,8 +254,17 @@ class GeneratorPage(QWidget):
         self.runs_panel.refresh_requested.connect(self.refresh_runs)
         self.runs_panel.jump_requested.connect(self.jump_to_run)
         self.runs_panel.folder_requested.connect(self._open)
+        self.audio_panel = AudioPanel()
+        self.inspector_tabs.addTab(self.audio_panel, tr("gen_tab_audio"))
+        self.audio_panel.voices_requested.connect(self.list_voices)
+        self.audio_panel.voice_requested.connect(self.make_voice)
+        self.audio_panel.estimate_requested.connect(self.estimate_sound)
+        self.audio_panel.sound_requested.connect(self.make_sound)
+        self.audio_panel.play_requested.connect(self._open)
+        self._audio_run = ""  # the run the audio tools saved into, until a Production run is current
         self.inspector_tabs.currentChanged.connect(
-            lambda i: self.inspector_tabs.widget(i) is self.runs_panel and self.refresh_runs())
+            lambda i: self.refresh_runs() if self.inspector_tabs.widget(i) is self.runs_panel
+            else self.inspector_tabs.widget(i) is self.audio_panel and self.refresh_audio())
         self.inspector = QFrame()
         self.inspector.setObjectName("Inspector")
         self.inspector.setFixedWidth(INSPECTOR_WIDTH)
@@ -1129,6 +1139,54 @@ class GeneratorPage(QWidget):
     def refresh_runs(self) -> None:
         self._act(lambda: self.actions.list_runs(), self.runs_panel.show_runs,
                   failed=lambda e: self.runs_panel.show_error(tr("gen_engine_error", message=e.message)))
+
+    # ---- audio (S5-4) ------------------------------------------------
+    def _audio_target(self) -> dict:
+        run_id = self._engine_run() or self._audio_run
+        return {"run_id": run_id} if run_id else {"output_root": str(self._base_dir())}
+
+    def _audio_failed(self, error: ActionError) -> None:
+        self.audio_panel.set_busy(False)
+        QMessageBox.warning(self, tr("gen_tab_audio"), tr("gen_engine_error", message=error.message))
+
+    def _audio_saved(self, reply: dict) -> None:
+        self._audio_run = str(reply.get("run_id") or self._audio_run)
+        self.audio_panel.set_busy(False)
+        self.refresh_audio()
+
+    def refresh_audio(self) -> None:
+        run_id = self._engine_run() or self._audio_run
+        if run_id:
+            self._act(lambda: self.actions.run_audio(run_id), self.audio_panel.show_files, failed=self._audio_failed)
+
+    def list_voices(self) -> None:
+        self._act(lambda: self.actions.audio("audio_voice_list", {"limit": 50}),
+                  lambda reply: self.audio_panel.show_voices(reply.get("voices") or []), failed=self._audio_failed)
+
+    def make_voice(self, args: dict) -> None:
+        """The free model goes at once; any other costs Fish Audio money, so it is asked first."""
+        if args.get("model") != FREE_VOICE_MODEL and QMessageBox.question(
+                self, tr("gen_tab_audio"), tr("audio_paid_confirm", model=args.get("model"))) != QMessageBox.StandardButton.Yes:
+            return
+        self.audio_panel.set_busy(True, tr("audio_making"))
+        self._act(lambda: self.actions.audio("audio_voice_generate", {**args, **self._audio_target()}),
+                  self._audio_saved, failed=self._audio_failed)
+
+    def estimate_sound(self, args: dict) -> None:
+        if not args.get("prompt"):
+            return
+        self._act(lambda: self.actions.audio("audio_stable_generate", {**args, **self._audio_target()}),
+                  lambda reply: self.audio_panel.show_estimate(int(reply.get("estimated_stability_credits") or 0)),
+                  failed=self._audio_failed)
+
+    def make_sound(self, args: dict) -> None:
+        """Stable Audio spends Stability credits: the estimate was shown, and the owner says yes here."""
+        credits = self.audio_panel.estimate_label.text()
+        if QMessageBox.question(self, tr("gen_tab_audio"), tr("audio_stable_confirm", estimate=credits)) != QMessageBox.StandardButton.Yes:
+            return
+        self.audio_panel.set_busy(True, tr("audio_making"))
+        self._act(lambda: self.actions.audio("audio_stable_generate", {**args, **self._audio_target(), "auto_confirm": True}),
+                  self._audio_saved, failed=self._audio_failed)
 
     def jump_to_run(self, run) -> None:
         """Select the run's frames on the sheet, in the All filter so none is hidden."""
