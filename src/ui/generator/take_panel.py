@@ -123,6 +123,7 @@ class TakePanel(QScrollArea):
         self.strip_title = QLabel(tr("gen_take_takes"))
         self.strip_title.setObjectName("FieldHeading")
         self.strip = QWidget()
+        self.strip.setObjectName("TakeStrip")
         self.strip_flow = FlowLayout(self.strip)
         self.take_buttons: list[QPushButton] = []
         self.take_info = QLabel()

@@ -85,6 +85,12 @@ def rows(page):
             job.error = "Flow refused the prompt: the request was flagged by the content filter."
     jobs[0].review = "approved"; jobs[1].review = "approved"; jobs[2].review = "rejected"
     jobs[3].origin = "agent"; jobs[3].production_id = "demo"; jobs[3].item_id = "ep01-s03"; jobs[3].review = "pending_review"
+    from src.gen.models import Take
+    jobs[3].takes = [Take(1, PROMPTS[3], ["ref_van.png"], "done", str(jobs[0].outputs[0]), 10, "rejected", "app",
+                          "2026-11-04T10:12:00Z", "horizon too high"),
+                     Take(2, PROMPTS[3] + ", lower horizon", [], "done", str(jobs[3].outputs[0]), 10)]
+    jobs[3].take = jobs[3].latest_take = 2
+    jobs[3].stale = "ref-van"
     page.model.refresh_all()
     page._refresh_stats()
 
@@ -132,6 +138,14 @@ if want("filter_empty"):
     pg.jobs[6].status = saved; pg.model.refresh_all(); pg.set_filter("all")
 if want("viewer"):
     pg.open_viewer(0); shot("viewer_approved"); pg.viewer.step(2); shot("viewer_rejected"); pg.close_viewer()
+if want("takes"):
+    pg.inspector.setVisible(True); pg.inspector_tabs.setCurrentIndex(0); pg.select_row(3); pg._refresh_take()
+    pg.take_panel.take_buttons[0].click(); shot("takes")
+    pg.open_viewer(3); pg.viewer.toggle_compare(); shot("compare"); pg.close_viewer()
+if want("video"):
+    vp = win.page("flow_video"); win.switch_page("flow_video"); pump()
+    vp.clear(); vp.add_prompts(PROMPTS[:4]); vp.select_row(0); vp.inspector.setVisible(True); vp._refresh_take(); shot("video")
+    win.switch_page("flow_image"); pump()
 if want("menu"):
     pg.select_row(4)
     menu = pg.table._build_menu(4, [4]); menu.setAttribute(Qt.WidgetAttribute.WA_DontShowOnScreen, True); menu.adjustSize(); menu.show(); pump()

@@ -93,6 +93,9 @@ def _flow_status() -> dict:
     return flow_mcp().status()
 
 
+RUN_BAR_COMPACT = 1200  # page width below which Pause, Stop, Retry and Open folder go icon-only
+
+
 class GeneratorPage(QWidget):
     _action_back = Signal(object)  # a callable to run on the GUI thread
     animate_stills = Signal(list)  # [(prompt, still path)] for the video page, wired by the app
@@ -534,6 +537,21 @@ class GeneratorPage(QWidget):
         if narrow != self._narrow:
             self._narrow = narrow
             self._update_inspector()
+        compact = event.size().width() < RUN_BAR_COMPACT
+        if compact != getattr(self, "_compact", False):
+            self._compact = compact
+            for b in (self.btn_pause, self.btn_stop, self.btn_retry, self.btn_folder):
+                self._label_run_button(b, b.property("label") or b.text())
+
+    def _label_run_button(self, b: QPushButton, text: str) -> None:
+        """Below ``RUN_BAR_COMPACT`` the run bar's secondary buttons show their icon only; the name stays
+        in the tooltip and the accessible name, so nothing is clipped at 900 px."""
+        b.setProperty("label", text)
+        b.setAccessibleName(text)
+        compact = getattr(self, "_compact", False)
+        b.setText("" if compact else text)
+        if compact:
+            b.setToolTip(text)
 
     def open_viewer(self, row: int) -> None:
         self.viewer.open_row(row, [r for r in range(self.model.rowCount()) if not self.sheet.isRowHidden(r)])
@@ -1028,7 +1046,7 @@ class GeneratorPage(QWidget):
         engine_run = bool(self._engine_run())
         held = self.queue.paused or (engine_run and self._production_run.get("status") == "paused")
         self.btn_pause.setEnabled(running or engine_run)
-        self.btn_pause.setText(tr("gen_resume") if held else tr("gen_pause"))
+        self._label_run_button(self.btn_pause, tr("gen_resume") if held else tr("gen_pause"))
         self.btn_stop.setEnabled(running or engine_run)
         self.btn_retry.setEnabled(stats.get("failed", 0) + stats.get("stopped", 0) > 0)
         if not running and not self.jobs:

@@ -278,6 +278,18 @@ QToolButton#Segment {{
 QToolButton#Segment:hover {{ color: {c['text']}; }}
 QToolButton#Segment:focus {{ color: {c['text']}; background-color: {c['hover']}; }}
 QToolButton#Segment:checked {{ color: {c['text']}; border-bottom-color: {c['text']}; font-weight: 600; }}
+#Inspector QWidget#TakeStrip {{ background-color: transparent; border: none; }}
+#Inspector QPushButton#TakeChip {{ background-color: transparent; }}
+QPushButton#TakeChip {{
+    background-color: transparent;
+    border: 1px solid {c['border']};
+    color: {c['text_muted']};
+    font-family: 'Cascadia Mono';
+    padding: 3px 8px;
+    min-width: 0;
+}}
+QPushButton#TakeChip:hover {{ color: {c['text']}; }}
+QPushButton#TakeChip:checked {{ color: {c['text']}; border: 2px solid {c['text']}; font-weight: 600; }}
 QPushButton#HelpButton {{ background-color: transparent; border-color: transparent; padding: 0; }}
 QPushButton#HelpButton:hover {{ background-color: {c['hover']}; }}
 
