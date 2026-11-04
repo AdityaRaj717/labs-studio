@@ -11,12 +11,13 @@ import threading
 from datetime import datetime, timezone
 from typing import Any, Callable
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import QLabel
 
 from src.i18n import tr
 
 log = logging.getLogger(__name__)
+RETRY_MS = 5000
 
 
 def age_text(at: str | None, now: datetime | None = None) -> str:
@@ -79,9 +80,17 @@ class CreditMeter(QLabel):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setToolTip(tr("meter_tip"))
         self._got.connect(self.show_status)
+        self._retry = QTimer(self, singleShot=True, interval=RETRY_MS)  # the tab was busy: ask again later
+        self._retry.timeout.connect(self.refresh)
+        self._clock = QTimer(self, interval=60_000)  # "just now" turns into "4 min ago" without a new read
+        self._clock.timeout.connect(self._redraw)
+        self._clock.start()
 
     def refresh(self) -> None:
-        if self._busy or not self.isVisibleTo(self.parentWidget()) or not self.idle():
+        if self._busy or not self.isVisibleTo(self.parentWidget()):
+            return
+        if not self.idle():  # a run just ended and the engine may still hold the tab
+            self._retry.start()
             return
         self._busy = True
         threading.Thread(target=self._read, name="credit-meter", daemon=True).start()
@@ -101,8 +110,16 @@ class CreditMeter(QLabel):
             self.setText(tr("meter_unreachable"))
             self.setProperty("stale", True)
         else:
-            self.setText(meter_text(status))
-            self.setProperty("stale", stale(status))
+            self._redraw()
+            return
+        self.style().unpolish(self)
+        self.style().polish(self)
+
+    def _redraw(self) -> None:
+        if self.status is None:
+            return
+        self.setText(meter_text(self.status))
+        self.setProperty("stale", stale(self.status))
         self.style().unpolish(self)
         self.style().polish(self)
 

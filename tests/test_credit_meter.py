@@ -44,3 +44,22 @@ def test_meter_waits_while_the_tab_is_busy(qapp):
     meter.show()
     meter.refresh()
     assert calls == []
+
+
+def test_meter_reads_again_once_the_tab_is_free(qapp):
+    """L5: at the end of a run the engine still held the tab, the refresh was dropped and the meter
+    kept the balance from before the run (830 after 24 more credits went out)."""
+    meter = CreditMeter(lambda: STATUS, lambda: False)
+    meter.show()
+    meter.refresh()
+    assert meter._retry.isActive()  # asks again later instead of giving up
+
+
+def test_meter_age_moves_on_without_a_new_read(qapp, monkeypatch):
+    """L5: '(just now)' stayed on screen for many minutes; the age is redrawn from the kept status."""
+    import src.ui.generator.credit_meter as cm
+    meter = CreditMeter(lambda: STATUS, lambda: True)
+    meter.show_status(STATUS)
+    monkeypatch.setattr(cm, "meter_text", lambda status, now=None: "later")
+    meter._redraw()
+    assert meter.text() == "later"
