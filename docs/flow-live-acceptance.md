@@ -30,3 +30,8 @@ Run log: `tools/flow_spike/out/ltrack-2026-11-04.log`, results `tools/flow_spike
 | L3 | ~4, cap 10 | `--only 8,9,10,11,13,18,19`: all PASS, 10.1 included (two named ingredients, the step the WAF block stopped). 19.2 failed on its pre-S5-3 contract; runner fixed (ac1a894) and rerun alone: PASS, 2264781 B MP4. Spent 4 credits |
 
 App defect seen live and fixed: the rail chip said "Flow engine off" while a job held the tab (6dac140).
+
+### L5 in the app (2026-11-04, computer use, 1280 only)
+- Pass: Start confirm with cost, Pause/Resume, Stop, Frames + last-frame chain (engine spec mode=frames), Edit this clip (20 credits, via mediaId), Assemble (12.1 s film). Spend 28 credits.
+- Fixed: e7dde30 (Retry after Stop, Extend/Edit source, held icon, dialog title, Take panel at 1280), dec573b (meter refresh after run, ageing label).
+- Open: the Audio voice line fails silently on MISSING_API_KEY; Stable SFX, Assets, Productions, the rail chip ("account not read" on the clip edit page), screenshots at 1920, L4, L6 not done.
