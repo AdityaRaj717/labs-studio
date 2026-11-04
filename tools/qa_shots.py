@@ -133,6 +133,11 @@ if want("audio_tab"):
     pg.audio_panel.show_files([{"kind": "voice", "file": "C:/run/voice/001_hello.mp3", "provider": "fish", "model": "s2.1-pro-free"},
                                {"kind": "bgm", "file": "C:/run/bgm/002_rain.wav", "provider": "stability"}])
     pg.audio_panel.show_estimate(8); shot("audio_tab"); pg.inspector_tabs.setCurrentIndex(0); pg._update_inspector()
+if want("assets_tab"):
+    pg.inspector.setVisible(True); pg.inspector_tabs.setCurrentWidget(pg.assets_panel)
+    pg.assets_panel.show_assets({"assets": [{"mediaId": "CAMSJDk3Y2E", "label": "a red fox at dawn"}, {"mediaId": "CAMSJGQ0ZjE", "label": "an owl on a branch"}],
+                                 "note": "Only the grid window shows here: the newest 28 tiles."})
+    shot("assets_tab"); pg.inspector_tabs.setCurrentIndex(0); pg._update_inspector()
 if want("queue"):
     pg.set_view("queue", save=False); shot("queue"); pg.set_view("sheet", save=False)
 if want("filter_empty"):

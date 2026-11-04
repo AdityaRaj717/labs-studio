@@ -50,11 +50,12 @@ class ProjectsPage(QWidget):
         self.btn_folder = self._button("proj_open_folder", lambda: self._do(lambda _p, s, pid: actions.open_folder(s, pid)))
         self.btn_out = self._button("proj_output_dir", lambda: self._do(actions.change_output_dir))
         self.btn_flow = self._button("proj_open_flow", lambda: self._do(actions.open_in_flow))
+        self.btn_bind = self._button("proj_bind_flow", lambda: self._do(actions.bind_flow))
         self.btn_delete = self._button("proj_delete", lambda: self._do(actions.delete_project))
         self.btn_refresh = self._button("proj_refresh", self.refresh)
 
         bar = flow_row(self.btn_switch, self.btn_new, self.btn_rename, self.btn_dup, self.btn_folder,
-                       self.btn_out, self.btn_flow, self.btn_delete, self.btn_refresh)
+                       self.btn_out, self.btn_flow, self.btn_bind, self.btn_delete, self.btn_refresh)
 
         self.root_label = QLabel()
         self.root_label.setObjectName("Hint")
@@ -115,7 +116,7 @@ class ProjectsPage(QWidget):
     def _update_buttons(self) -> None:
         has = self.selected_id() is not None
         for b in (self.btn_switch, self.btn_rename, self.btn_dup, self.btn_folder, self.btn_out,
-                  self.btn_flow, self.btn_delete):
+                  self.btn_flow, self.btn_bind, self.btn_delete):
             b.setEnabled(has)
 
     def change_root(self) -> None:

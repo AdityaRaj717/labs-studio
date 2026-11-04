@@ -26,12 +26,15 @@ class FakeClient:
         self.fail = {}  # tool -> exception, used once
         self.delay = 0
         self.cost = 10
+        self.replies = {}  # tool -> reply
 
     def call(self, tool, args=None, timeout=60):
         time.sleep(self.delay)
         self.calls.append((tool, args))
         if tool in self.fail:
             raise self.fail.pop(tool)
+        if tool in self.replies:
+            return self.replies[tool]
         if tool == "flow_production_status":
             return {"items": [{"production_id": "p", "item": "IMG_01", "state": "approved", "take": 1, "approved_take": 1, "prompt": "new truth"}]}
         return {"take": 2, "estimated_credits": self.cost}
@@ -586,3 +589,44 @@ def test_stable_needs_estimate_then_confirm(video, qapp, boxes):
     assert "8 Stability credits" in boxes["question"][-1]
     panel.duration.setValue(30)  # a changed request needs a new estimate
     assert not panel.btn_sound.isEnabled()
+
+
+# ---- S5-5: assets, re-download, Flow project binding ---------------------
+def test_redownload_restores_missing_file(qapp, page, tmp_path):
+    job = Job("a fox", status=JobStatus.DONE, engine_job="job_7", outputs=[tmp_path / "gone.png"])
+    page.model.add_jobs([job])
+    back = tmp_path / "back.png"
+    back.write_bytes(b"png")
+    page.client.replies["flow_download"] = {"files": [str(back)]}
+    action = labels(page.table._build_menu(0, [0]))["Download again from Flow"]
+    assert action.isEnabled()
+    action.trigger()
+    settle(qapp)
+    assert page.client.sent("flow_download") == [{"job_id": "job_7"}]
+    assert job.outputs == [back]
+    assert not labels(page.table._build_menu(0, [0]))["Download again from Flow"].isEnabled()  # file is there now
+
+
+def test_listing_states_window(qapp, page):
+    projects.current().set_flow("https://labs.google/fx/tools/flow/project/abc", "Fox")
+    note = "Only the grid window shows here: the newest 28 tiles."
+    page.client.replies["flow_list_assets"] = {"assets": [{"mediaId": "m1", "label": "a fox"}], "note": note}
+    page.inspector_tabs.setCurrentWidget(page.assets_panel)
+    settle(qapp)
+    assert page.client.sent("flow_list_assets") == [{"project_url": "https://labs.google/fx/tools/flow/project/abc"}]
+    assert page.assets_panel.window_note.text() == note
+    assert page.assets_panel.tree.topLevelItem(0).text(1) == "m1"
+    page.assets_panel.show_assets({"assets": []})  # no note from the engine: the window is still stated
+    assert "28" in page.assets_panel.window_note.text()
+
+
+def test_bind_flow_project_stores_its_url(qapp, page, monkeypatch):
+    from src.ui.projects import actions as proj_actions
+
+    client = FakeClient()
+    client.replies["flow_list_projects"] = {"projects": [{"title": "Fox", "url": "https://flow/p/1"},
+                                                         {"title": "Owl", "url": "https://flow/p/2"}]}
+    monkeypatch.setattr(QInputDialog, "getItem", lambda _p, _t, _l, items, _c, _e: (items[1], True))
+    store = projects.store()
+    project = proj_actions.bind_flow(page, store, store.active.id, client)
+    assert project.flow_url == "https://flow/p/2" and project.flow_title == "Owl"

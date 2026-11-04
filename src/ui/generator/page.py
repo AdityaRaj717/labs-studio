@@ -24,6 +24,7 @@ from src.gen.provider import Provider, ProviderError, shot_options
 from src.gen.queue import JobQueue, QueueSettings, count_statuses
 from src.gen.refmatch import match_refs
 from src.i18n import tr
+from src.ui.generator.assets_panel import AssetsPanel
 from src.ui.generator.audio_panel import FREE_VOICE_MODEL, AudioPanel
 from src.ui.generator.config_panel import ConfigPanel, fields_for
 from src.ui.generator.prompt_model import COL_PROMPT, PromptTableModel
@@ -262,9 +263,10 @@ class GeneratorPage(QWidget):
         self.audio_panel.sound_requested.connect(self.make_sound)
         self.audio_panel.play_requested.connect(self._open)
         self._audio_run = ""  # the run the audio tools saved into, until a Production run is current
-        self.inspector_tabs.currentChanged.connect(
-            lambda i: self.refresh_runs() if self.inspector_tabs.widget(i) is self.runs_panel
-            else self.inspector_tabs.widget(i) is self.audio_panel and self.refresh_audio())
+        self.assets_panel = AssetsPanel()
+        self.inspector_tabs.addTab(self.assets_panel, tr("gen_tab_assets"))
+        self.assets_panel.refresh_requested.connect(self.refresh_assets)
+        self.inspector_tabs.currentChanged.connect(self._tab_shown)
         self.inspector = QFrame()
         self.inspector.setObjectName("Inspector")
         self.inspector.setFixedWidth(INSPECTOR_WIDTH)
@@ -344,6 +346,7 @@ class GeneratorPage(QWidget):
         self._actions = None
         self._action_back.connect(self._run_back)
         self.table.open_output_requested.connect(self.open_output)
+        self.table.redownload_requested.connect(self.redownload)
         self.table.animate_enabled = page_key == "flow_image"
         self.table.chain_enabled = page_key == "flow_video"
         self.table.animate_requested.connect(self.animate_rows)
@@ -1139,6 +1142,37 @@ class GeneratorPage(QWidget):
     def refresh_runs(self) -> None:
         self._act(lambda: self.actions.list_runs(), self.runs_panel.show_runs,
                   failed=lambda e: self.runs_panel.show_error(tr("gen_engine_error", message=e.message)))
+
+    def _tab_shown(self, i: int) -> None:
+        refresh = {self.runs_panel: self.refresh_runs, self.audio_panel: self.refresh_audio,
+                   self.assets_panel: self.refresh_assets}.get(self.inspector_tabs.widget(i))
+        if refresh:
+            refresh()
+
+    # ---- Flow assets (S5-5) ------------------------------------------
+    def refresh_assets(self) -> None:
+        from src import projects
+
+        project = projects.current()
+        url = project.flow_url if project is not None else ""
+        if not url:
+            self.assets_panel.show_error(tr("gen_assets_unbound"))
+            return
+        self._act(lambda: self.actions.project_assets(url), self.assets_panel.show_assets,
+                  failed=lambda e: self.assets_panel.show_error(tr("gen_engine_error", message=e.message)))
+
+    def redownload(self, row: int) -> None:
+        """An agent row whose file is gone gets it from Flow again; the row takes the engine's files."""
+        job = self.model.job_at(row)
+        if not job.engine_job:
+            return
+
+        def restored(files: list[str]) -> None:
+            if files:
+                job.outputs = [Path(f) for f in files]
+                self.model.refresh_job(job.id)
+                self.save_rows()
+        self._act(lambda: self.actions.redownload(job.engine_job), restored)
 
     # ---- audio (S5-4) ------------------------------------------------
     def _audio_target(self) -> dict:

@@ -82,6 +82,7 @@ class PromptTable(QTableView):
     remove_requested = Signal(list)       # rows
     open_output_requested = Signal(int)   # row
     open_folder_requested = Signal(int)   # row
+    redownload_requested = Signal(int)    # row: an agent row's file is missing
     character_requested = Signal(list, str)  # rows, character id ("" = detach)
     character_added = Signal(list, str)      # rows, character id joining the shot (Phase 14b)
     scene_requested = Signal(list, str)      # rows, scene id ("" = clear) (Phase 14b)
@@ -207,6 +208,9 @@ class PromptTable(QTableView):
         folder = menu.addAction(tr("gen_open_folder"), lambda: self.open_folder_requested.emit(row))
         out.setEnabled(bool(job.outputs))
         folder.setEnabled(bool(job.outputs))
+        if job.engine_job:
+            missing = bool(job.outputs) and not Path(job.outputs[0]).exists()
+            menu.addAction(tr("gen_redownload"), lambda: self.redownload_requested.emit(row)).setEnabled(missing)
         return menu
 
     def _frames_menu(self, menu: QMenu, row: int, rows: list[int]) -> None:

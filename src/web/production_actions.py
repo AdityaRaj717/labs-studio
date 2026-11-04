@@ -89,6 +89,17 @@ class ProductionActions:
     def run_audio(self, run_id: str) -> list[dict[str, Any]]:
         return self._call("flow_list_assets", {"run_id": run_id}).get("audio") or []
 
+    def project_assets(self, project_url: str) -> dict[str, Any]:
+        """``{assets, note}``: only the newest tiles of Flow's grid, which the note says."""
+        return self._call("flow_list_assets", {"project_url": project_url}, AUDIO_TIMEOUT)
+
+    def redownload(self, job_id: str) -> list[str]:
+        """Fetch a job's result from Flow again; no generation is repeated."""
+        return [str(f) for f in self._call("flow_download", {"job_id": job_id}, AUDIO_TIMEOUT).get("files") or []]
+
+    def list_projects(self) -> list[dict[str, Any]]:
+        return self._call("flow_list_projects", {}).get("projects") or []
+
     def list_runs(self, limit: int = 20) -> list[dict[str, Any]]:
         return self._call("flow_list_runs", {"limit": limit}).get("runs") or []
 
