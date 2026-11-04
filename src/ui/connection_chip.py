@@ -56,6 +56,7 @@ class ConnectionChip(SidebarButton):
         self.call, self.open_web_sessions = call, open_web_sessions
         self.connected = False
         self._busy = False
+        self._read = False  # True once a flow_status reply is shown
         self._read_at = -READ_EVERY
         self._back.connect(lambda fn: fn())
         menu = QMenu(self)
@@ -68,6 +69,7 @@ class ConnectionChip(SidebarButton):
 
     def show_status(self, status: dict[str, Any] | None) -> None:
         self.label, self.connected = chip_label(status)
+        self._read = status is not None
         self.glyph = "plugs-connected" if self.connected else "warning"
         self.setToolTip(self.label)
         self.update()
@@ -76,7 +78,12 @@ class ConnectionChip(SidebarButton):
         """Read the account again: only with an engine up (``running``) and the tab free (``idle``)."""
         if not running:
             self.show_status(None)
+            self._read = False
             return
+        if not self._read and not idle:
+            self.label, self.connected, self.glyph = tr("chip_engine_busy"), True, "plugs-connected"
+            self.setToolTip(self.label)
+            self.update()
         # Every 2 min at most: a stale balance makes flow_status open Flow's account panel.
         if idle and not self._busy and time.monotonic() - self._read_at > READ_EVERY:
             self._busy, self._read_at = True, time.monotonic()

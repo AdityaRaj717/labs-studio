@@ -27,6 +27,19 @@ def test_chip_reflects_login_state(qapp):
     assert chip.connected and chip.toolTip() == "owner@example.com · Fox film"
 
 
+def test_running_engine_with_a_busy_tab_is_not_called_off(qapp):
+    """Seen live 2026-11-04: a job held the tab from launch, and the chip said 'engine off' while it ran."""
+    calls = []
+    chip = ConnectionChip(lambda *a: calls.append(a) or SIGNED_IN, lambda: None)
+    chip.refresh(idle=False, running=True)
+    assert calls == [] and chip.label == tr("chip_engine_busy")
+    chip.show_status(SIGNED_IN)
+    chip.refresh(idle=False, running=True)
+    assert chip.label == "owner@example.com · Fox film"  # a real read is kept while the tab is busy
+    chip.refresh(idle=False, running=False)
+    assert chip.label == tr("chip_engine_off")
+
+
 def test_doctor_results_inline(qapp, monkeypatch):
     failed = {"ok": False, "checked": 12, "missing": [{"key": "prompt.box", "where": "project page"}]}
     text = doctor_text(failed)

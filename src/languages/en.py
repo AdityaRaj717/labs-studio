@@ -272,6 +272,7 @@ STRINGS: dict[str, str] = {
     "chip_title": "Flow connection",
     "chip_engine_off": "Flow engine off",
     "chip_no_chrome": "Chrome not connected",
+    "chip_engine_busy": "Flow engine on · tab busy",
     "chip_sign_in": "Flow: sign in needed",
     "chip_account_unknown": "Flow: account not read",
     "chip_open_flow": "Open in Flow",
