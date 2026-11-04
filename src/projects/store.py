@@ -69,6 +69,9 @@ def job_to_row(job: Job) -> dict[str, Any]:
         "takes": [asdict(t) for t in job.takes],
         "production_stage": job.production_stage,
         "overrides": dict(job.overrides),
+        "flow_url": job.flow_url,
+        "video_mode": job.video_mode,
+        "source_url": job.source_url,
         "start_frame": str(job.start_frame) if job.start_frame else "",
         "end_frame": str(job.end_frame) if job.end_frame else "",
     }
@@ -107,6 +110,9 @@ def row_to_job(row: dict[str, Any], index: int) -> Job:
         takes=[Take.from_engine(t) for t in row.get("takes", [])],
         production_stage=str(row.get("production_stage", "")),
         overrides=dict(row.get("overrides") or {}),
+        flow_url=str(row.get("flow_url", "")),
+        video_mode=str(row.get("video_mode", "")),
+        source_url=str(row.get("source_url", "")),
         start_frame=Path(row["start_frame"]) if row.get("start_frame") else None,
         end_frame=Path(row["end_frame"]) if row.get("end_frame") else None,
     )

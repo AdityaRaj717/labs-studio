@@ -13,8 +13,13 @@ from src.i18n import tr
 from src.gen.web_flow_image import SITE, WebFlowImageProvider, capabilities, run_engine_job
 
 
-def quote(caps: dict[str, Any], model: str, duration: int, resolution: str) -> int:
+def quote(caps: dict[str, Any], model: str, duration: int, resolution: str, mode: str = "") -> int:
     """Credits for one clip; a mix Flow does not offer is an error before any call."""
+    entry = caps["video"]["models"].get(model, {})
+    if mode and mode not in entry.get("modes", []):
+        raise ProviderError(f"{model} can't {mode} a clip", stop_queue=True)
+    if mode == "edit":
+        return int(entry["editCredits"])
     credits = caps["video"]["models"].get(model, {}).get("credits", {})
     cost = credits.get(resolution, {}).get(str(duration))
     if cost is None:
@@ -57,7 +62,8 @@ class WebFlowVideoProvider(Provider):
         caps, total = capabilities(), 0
         for job in jobs:
             o = shot_options(job, options)
-            cost = quote(caps, o.get("model") or "omni", int(o.get("duration", 8)), o.get("resolution") or "720p")
+            cost = quote(caps, o.get("model") or "omni", int(o.get("duration", 8)), o.get("resolution") or "720p",
+                         job.video_mode)
             total += cost * max(1, int(o.get("count", 1)))
         return Estimate(len(jobs), total)
 
@@ -80,7 +86,9 @@ class WebFlowVideoProvider(Provider):
         model = options.get("model") or "omni"
         duration, resolution = int(options.get("duration", 8)), options.get("resolution") or "720p"
         count = max(1, int(options.get("count", 1)))
-        cost = quote(capabilities(), model, duration, resolution)
+        cost = quote(capabilities(), model, duration, resolution, job.video_mode)
+        if job.video_mode:
+            count = 1  # Extend and Edit make one clip
         library = set(job.character_refs) | set(job.scene_refs)
         refs = [str(Path(r).resolve()) for r in job.refs if r not in library]
         # The owner chose this mix, so the engine's default cap of 30 is not the limit; a run cap is.
@@ -93,6 +101,10 @@ class WebFlowVideoProvider(Provider):
         if frames and refs:  # the engine refuses the mix too; say so before any call
             raise ProviderError(tr("gen_frames_and_refs"))
         args.update(frames)
+        if job.video_mode:  # one mode per shot: the source clip, no frames or ingredients
+            if frames or refs:
+                raise ProviderError(tr("gen_mode_alone", mode=job.video_mode))
+            args[f"{job.video_mode}_from"] = job.source_url
         if refs:
             args["ingredients"] = refs
         return run_engine_job(self, job, "flow_generate_video", args, float(options.get("timeout", 600)), ctx, "video")

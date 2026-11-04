@@ -19,7 +19,7 @@ from src.characters import attach as char_attach
 from src.gen.importer import load_prompts, parse_text
 from src.gen.models import Job, JobStatus
 from src.gen.output import default_save_dir, output_dir, save_outputs
-from src.gen.provider import Provider, ProviderError
+from src.gen.provider import Provider, ProviderError, shot_options
 from src.gen.queue import JobQueue, QueueSettings, count_statuses
 from src.gen.refmatch import match_refs
 from src.i18n import tr
@@ -323,6 +323,8 @@ class GeneratorPage(QWidget):
         self.table.chain_enabled = page_key == "flow_video"
         self.table.animate_requested.connect(self.animate_rows)
         self.table.chain_requested.connect(self.chain_last_frame)
+        self.table.clip_mode_requested.connect(self.clip_mode)
+        self.table.clip_modes = self._clip_modes if page_key == "flow_video" else (lambda job: [])
         self.take_panel.frames_enabled = page_key == "flow_video"
         self.take_panel.frame_changed.connect(self.set_frame)
         self.take_panel.set_shot_fields(fields_for(self.provider), lambda: self.config_panel.values())
@@ -1056,6 +1058,42 @@ class GeneratorPage(QWidget):
         jobs = self.model.add_jobs([Job(prompt, start_frame=Path(path)) for prompt, path in stills])
         self._refresh_stats()
         return jobs
+
+    def _video_caps(self) -> dict:
+        from src.gen.web_flow_image import capabilities
+        return capabilities()["video"]
+
+    def _clip_modes(self, job: Job) -> list[str]:
+        """Extend and Edit, each only where the model that would run it offers it."""
+        models = self._video_caps()["models"]
+        model = shot_options(job, self.config_panel.values()).get("model")
+        own = models.get(model, {}).get("modes", [])
+        return [m for m in ("extend", "edit") if m in own]
+
+    def clip_mode(self, row: int, mode: str) -> Job | None:
+        """A new shot that extends or edits this clip; its cost is stated before anything is added."""
+        from src.gen.web_flow_video import quote
+        job = self.model.job_at(row)
+        if not job.flow_url:
+            return None
+        o = shot_options(job, self.config_panel.values())
+        model, duration, resolution = o.get("model") or "omni", int(o.get("duration", 8)), o.get("resolution") or "720p"
+        try:
+            credits = quote({"video": self._video_caps()}, model, duration, resolution, mode)
+        except ProviderError as exc:
+            QMessageBox.warning(self, self.page_key, str(exc))
+            return None
+        label = tr(f"gen_{mode}_cost", model=tr(f"flow_model_{model}"), resolution=resolution, duration=duration,
+                   credits=credits)
+        title = tr("gen_extend_title" if mode == "extend" else "gen_edit_title_clip")
+        text, ok = QInputDialog.getMultiLineText(self, title, label, "")
+        if not ok or not text.strip():
+            return None
+        shot = Job(text.strip(), video_mode=mode, source_url=job.flow_url,
+                   overrides={"model": model, "duration": str(duration), "resolution": resolution, "count": 1})
+        self.model.add_jobs([shot])
+        self._refresh_stats()
+        return shot
 
     def set_shot_override(self, rows: list[int], key: str, value) -> None:
         """A shot's own setting; None goes back to the page's."""

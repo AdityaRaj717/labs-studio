@@ -433,3 +433,56 @@ def test_shared_tally_survives_an_override():
     merged = shot_options(Job("x", overrides={"count": 2}), options)
     assert merged["count"] == 2 and merged["_shared"] is options
     assert shot_options(Job("y"), options) is options
+
+
+CLIP_CAPS = {"video": {"models": {
+    "omni": {"modes": ["text", "frames", "ingredients", "edit"], "editCredits": 20, "credits": {"720p": {"8": 10}}},
+    "veoLite": {"modes": ["text", "frames", "ingredients", "extend"], "credits": {"720p": {"8": 6}}}},
+    "defaultModel": "omni", "ratios": ["16:9"]}}
+
+
+def _clip_row(tmp_path, url="https://labs.google/fx/tools/flow/project/p/edit/c1"):
+    clip = tmp_path / "c.mp4"
+    clip.write_bytes(b"x")
+    return Job("a fox runs", status=JobStatus.DONE, outputs=[clip], flow_url=url)
+
+
+def test_extend_only_offered_for_supported_model(video, tmp_path, monkeypatch):
+    import src.gen.web_flow_image as wfi
+    monkeypatch.setattr(wfi, "capabilities", lambda: CLIP_CAPS)
+    video.model.add_jobs([_clip_row(tmp_path)])
+    video.config_panel.set_value("model", "omni")
+    menu = labels(video.table._build_menu(0, [0]))
+    assert "Edit this clip…" in menu and "Extend this clip…" not in menu
+    video.model.job_at(0).overrides = {"model": "veoLite"}
+    menu = labels(video.table._build_menu(0, [0]))
+    assert "Extend this clip…" in menu and "Edit this clip…" not in menu
+    video.model.job_at(0).flow_url = ""
+    assert not labels(video.table._build_menu(0, [0]))["Extend this clip…"].isEnabled()
+
+
+def test_edit_states_cost(video, tmp_path, monkeypatch):
+    import src.gen.web_flow_image as wfi
+    import src.gen.web_flow_video as wfv
+    monkeypatch.setattr(wfi, "capabilities", lambda: CLIP_CAPS)
+    monkeypatch.setattr(wfv, "capabilities", lambda: CLIP_CAPS)
+    video.model.add_jobs([_clip_row(tmp_path)])
+    video.config_panel.set_value("model", "omni")
+    asked = []
+    monkeypatch.setattr(QInputDialog, "getMultiLineText", lambda _p, _t, label, _v: (asked.append(label), ("make it night", True))[1])
+    shot = video.clip_mode(0, "edit")
+    assert "20 credits" in asked[0]
+    assert shot.video_mode == "edit" and shot.source_url.endswith("/c1") and shot.prompt == "make it night"
+    assert wfv.WebFlowVideoProvider().estimate([shot], video.config_panel.values()).credits == 20
+
+
+def test_extend_sends_its_source_and_nothing_else(tmp_path, monkeypatch):
+    import src.gen.web_flow_video as wfv
+    monkeypatch.setattr(wfv, "capabilities", lambda: CLIP_CAPS)
+    sent = {}
+    monkeypatch.setattr(wfv, "run_engine_job", lambda _p, _j, tool, args, *_a: sent.update(args) or [])
+    shot = Job("then it jumps", video_mode="extend", source_url="u1")
+    wfv.WebFlowVideoProvider().generate(shot, {"model": "veoLite", "duration": "8", "count": 3}, None)
+    assert sent["extend_from"] == "u1" and sent["count"] == 1 and "ingredients" not in sent and sent["max_credits"] == 6
+    with pytest.raises(wfv.ProviderError, match="can't extend"):
+        wfv.WebFlowVideoProvider().generate(shot, {"model": "omni", "duration": "8"}, None)

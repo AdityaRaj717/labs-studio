@@ -89,6 +89,9 @@ class Job:
     takes: list[Take] = field(default_factory=list)  # a Production Item's every Take, oldest first
     start_frame: Path | None = None  # video: Flow's Frames mode, the first frame
     end_frame: Path | None = None  # video: Frames mode, the last frame
+    flow_url: str = ""  # the finished clip's page on Flow (``flowClipUrl``): what Extend and Edit start from
+    video_mode: str = ""  # "", extend or edit: this shot continues or changes ``source_url``
+    source_url: str = ""
     overrides: dict[str, Any] = field(default_factory=dict)  # this shot's own settings (``SHOT_KEYS``)
     production_stage: str = ""  # reference, still or animation: the Production stage this Item belongs to
 

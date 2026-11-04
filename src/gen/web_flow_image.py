@@ -111,6 +111,7 @@ def run_engine_job(provider, job: Job, tool: str, args: dict[str, Any], timeout:
         view = provider.backend.run_job(tool, {**args, "idempotency_key": job.engine_key}, timeout,
                                         on_event=lambda e: report_event(e, ctx), should_stop=ctx.should_stop, **extra)
         files = read_outputs(view, what)
+        job.flow_url = str(((view.get("outputs") or [{}])[0] or {}).get("flowClipUrl") or "")
     except TimeoutError:  # still running in the engine: the key picks it up again
         raise ProviderError(f"{SITE_TITLE} did not finish in time", retryable=True) from None
     except EngineToolError as exc:

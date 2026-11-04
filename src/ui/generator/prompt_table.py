@@ -90,6 +90,7 @@ class PromptTable(QTableView):
     regenerate_requested = Signal(list)      # rows
     animate_requested = Signal(list)         # rows: stills to animate on the video page
     chain_requested = Signal(int)            # row: its video's last frame starts the next shot
+    clip_mode_requested = Signal(int, str)   # row, extend or edit
 
     def __init__(self, model, parent=None):
         super().__init__(parent)
@@ -125,6 +126,7 @@ class PromptTable(QTableView):
         self.scenes_source = None  # callable -> list[(id, name)], set by GeneratorPage (Phase 14b)
         self.animate_enabled = False  # the image page: a still can go on to the video page
         self.chain_enabled = False  # the video page: a clip's last frame starts the next shot
+        self.clip_modes = lambda job: []  # the video page: the modes this row's model offers (extend, edit)
 
     def resizeEvent(self, event) -> None:  # noqa: N802 - Qt override
         super().resizeEvent(event)
@@ -219,6 +221,11 @@ class PromptTable(QTableView):
             clip = bool(job.outputs) and is_video(job.outputs[0]) and len(rows) == 1
             menu.addSeparator()
             menu.addAction(tr("gen_chain_last_frame"), lambda: self.chain_requested.emit(row)).setEnabled(clip)
+            for mode in self.clip_modes(job):
+                act = menu.addAction(tr(f"gen_{mode}_clip"), lambda m=mode: self.clip_mode_requested.emit(row, m))
+                act.setEnabled(clip and bool(job.flow_url))
+                if not job.flow_url:
+                    act.setToolTip(tr("gen_clip_needs_url"))
 
     def _pending(self, rows: list[int]) -> bool:
         return any(self.model().job_at(r).review == "pending_review" for r in rows)
