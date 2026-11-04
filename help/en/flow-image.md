@@ -4,7 +4,7 @@ This is where you run a batch of image prompts through Google Flow. Sign in firs
 
 ![The Flow Image page with a few prompts](img/flow-image.png)
 
-1. **Take and Shot settings.** The side panel. **Take** shows the selected frame, its prompt and its actions. **Shot settings** holds the options for the next run. The panel button in the tool row shows or hides it.
+1. **Side panel.** The side panel. **Take** shows the selected frame, its prompt and its actions. **Settings** holds the options for the next run; **Runs**, **Audio** and **Assets** list the engine's runs, this run's audio and the Flow project's newest 28 tiles. The panel button in the tool row shows or hides it.
 2. **Add prompts.** **Import file** loads a `.txt` or `.xlsx`, **Paste** takes text, and you can also drop a file on the sheet.
 3. **Match refs / Match characters.** Attach reference images, or saved characters and scenes, to the rows that mention them.
 4. **Run controls.** **Start**, **Pause**, **Stop**, **Retry failed** and **Open folder**.

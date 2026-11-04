@@ -152,7 +152,7 @@ STRINGS: dict[str, str] = {
     "gen_empty_title": "Nothing on the sheet yet",
     "gen_frame_size": "Frame size",
     "gen_tab_take": "Take",
-    "gen_tab_settings": "Shot settings",
+    "gen_tab_settings": "Settings",
     "gen_inspector_toggle": "Show or hide the side panel",
     "gen_take_none": "Select a frame to see its prompt, cast and actions.",
     "gen_take_multi": "{count} frames selected",
