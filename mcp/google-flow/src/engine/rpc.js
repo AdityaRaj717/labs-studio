@@ -1,7 +1,7 @@
 import { pacer } from './pacer.js';
 import { createFish } from '../audio/fish.js';
 import { createStable } from '../audio/stable.js';
-import { lastFrame, stitchVideo } from './stitch.js';
+import { cancelStitch, findStitch, lastFrame, stitchVideo, stitchView } from './stitch.js';
 import { closeBrowser } from '../browser/connect.js';
 import config from '../utils/config.js';
 import { readAccountStatus } from '../browser/account-check.js';
@@ -120,7 +120,8 @@ export function createRpc({ worker, session, hub, getSecret = (name) => process.
     return { queue_paused: { reason, next_action: `${ERROR_CLASSES[reason].next_action} Then flow_job_control with action resume runs the queue.` } };
   }
 
-  function view({ job_id, run_id, detail, offset = 0 }) {
+  function view({ job_id, run_id, stitch_id, detail, offset = 0 }) {
+    if (stitch_id) return stitchView(findStitch(stitch_id));
     if (job_id) return jobView(findJob(job_id));
     if (!run_id) throw invalid('Pass job_id or run_id');
     const run = findRun(run_id);
@@ -133,6 +134,7 @@ export function createRpc({ worker, session, hub, getSecret = (name) => process.
   async function wait(args) {
     const { wait_ms = DEFAULT_WAIT_MS } = args;
     if (!Number.isInteger(wait_ms) || wait_ms < 0 || wait_ms > MAX_WAIT_MS) throw invalid(`wait_ms must be 0 to ${MAX_WAIT_MS}`);
+    if (args.stitch_id) return waitStitch(args.stitch_id, wait_ms);
     const jobs = targetOf(args);
     const owned = args.run_id && orchestrator.forRun(args.run_id);
     // A Production goes on after each job, so it is finished only when nothing more will run by itself.
@@ -154,6 +156,23 @@ export function createRpc({ worker, session, hub, getSecret = (name) => process.
     }
     const { paused } = worker.status();
     return { ...view(args), finished: finished(), ...(paused ? { paused } : {}), ...queuePaused(), ...(owned ? { production: orchestrator.summaryOf(args.run_id) } : {}) };
+  }
+
+  // A stitch is local: no queue pause holds it.
+  async function waitStitch(stitch_id, wait_ms) {
+    const task = findStitch(stitch_id);
+    if (task.state === 'running') {
+      await new Promise((resolve) => {
+        const timer = setTimeout(done, wait_ms);
+        const unsubscribe = hub.subscribe(() => { if (task.state !== 'running') done(); });
+        function done() {
+          clearTimeout(timer);
+          unsubscribe();
+          resolve();
+        }
+      });
+    }
+    return { ...stitchView(task), finished: task.state !== 'running' };
   }
 
   const queueGeneration = (validateJob) => (args) => {
@@ -193,7 +212,11 @@ export function createRpc({ worker, session, hub, getSecret = (name) => process.
     return controlNow(args);
   }
 
-  function controlNow({ action, job_id, run_id, max_credits, accept_quote }) {
+  function controlNow({ action, job_id, run_id, stitch_id, max_credits, accept_quote }) {
+    if (stitch_id) {
+      if (action !== 'cancel') throw invalid('A stitch can only be cancelled');
+      return { action, stitch: cancelStitch(stitch_id) };
+    }
     if (action === 'resume' || action === 'retry_failed') worker.assertSettled(); // before any job moves
     if (run_id && orchestrator.forRun(run_id) && action === 'set_budget') {
       const production = orchestrator.setBudget({ run_id, max_credits });
@@ -301,7 +324,9 @@ export function createRpc({ worker, session, hub, getSecret = (name) => process.
     flow_list_assets(args) {
       if (args.project_url) return tab(async (page) => ({ assets: await listProjectAssets(page, args.project_url), note: 'Only the grid window shows here: the newest 28 tiles.' }));
       const assets = targetOf(args).flatMap((job) => (job.data.outputs ?? []).map(({ file, mediaId, model }) => ({ job_id: job.id, prompt: cut(job.spec.prompt, 80), file, mediaId, model })));
-      return { assets };
+      // A run's voice, music and effects: read-only, made by the audio tools.
+      const audio = args.run_id ? (findRun(args.run_id).audio ?? []).map(({ kind, file, provider, model, duration }) => ({ kind, file, provider, model, ...(duration ? { duration } : {}) })) : [];
+      return { assets, ...(audio.length ? { audio } : {}) };
     },
     flow_download({ job_id, latest, project_url }) {
       if (latest === true) return tab((page) => downloadLatest(page, project_url));

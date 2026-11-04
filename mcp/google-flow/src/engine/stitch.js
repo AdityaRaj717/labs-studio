@@ -6,12 +6,13 @@ import { promisify } from 'util';
 import { tool } from '../flow/silent.js';
 import { get } from '../utils/config.js';
 import { createError, ErrorCodes } from '../utils/errors.js';
+import { randomUUID } from 'crypto';
 import { allRuns, jobEvents } from './job-store.js';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
-// shortcut: runs inside the call, stopped under the shim's 300 s RPC limit; upgrade to a queued job if longer edits are needed.
-const LIMIT_MS = 280000;
 const FRAME_MS = 60000;
+// shortcut: stitches live in memory; one cut short by an engine restart is free to start again.
+const stitches = new Map();
 
 const invalid = (message) => createError(ErrorCodes.INVALID_PARAMS, message);
 
@@ -40,13 +41,18 @@ export function autoSpec(run) {
   };
 }
 
-function runCli(specFile, onLine) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(pythonPath(), ['-m', 'src.stitch_cli', specFile], { cwd: REPO_ROOT, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, ...(get('ffmpegPath') ? { FFMPEG_PATH: get('ffmpegPath') } : {}) } });
+const python = (specFile) => spawn(pythonPath(), ['-m', 'src.stitch_cli', specFile], { cwd: REPO_ROOT, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, ...(get('ffmpegPath') ? { FFMPEG_PATH: get('ffmpegPath') } : {}) } });
+
+let launch = python;
+
+// Tests swap the Python CLI for a stand-in; no argument puts it back.
+export const useLauncher = (fn = python) => { launch = fn; };
+
+function runCli(child, onLine) {
+  return new Promise((resolve) => {
     let last = null;
     let rest = '';
     let stderr = '';
-    const timer = setTimeout(() => child.stdin.end(), LIMIT_MS); // closing stdin is the CLI's cancel: it removes the partial file
     child.stdout.on('data', (chunk) => {
       const lines = (rest + chunk).split(/\r?\n/);
       rest = lines.pop();
@@ -58,12 +64,35 @@ function runCli(specFile, onLine) {
       }
     });
     child.stderr.on('data', (chunk) => { stderr = (stderr + chunk).slice(-500); });
-    child.on('error', (err) => { clearTimeout(timer); reject(createError(ErrorCodes.INTERNAL_ERROR, `Could not start Python: ${err.code}`, { next_action: 'Set the pythonPath setting.' })); });
-    child.on('close', () => { clearTimeout(timer); resolve({ last, stderr }); });
+    child.on('error', (err) => resolve({ last: { type: 'error', error_code: 'NO_PYTHON', message: `Could not start Python: ${err.code}` }, stderr }));
+    child.on('close', () => resolve({ last, stderr }));
   });
 }
 
-export async function stitchVideo({ run_id, spec, auto, name = 'final' }) {
+const STITCH_ERRORS = { FFMPEG_NOT_FOUND: ErrorCodes.FFMPEG_NOT_FOUND, NO_PYTHON: ErrorCodes.INTERNAL_ERROR };
+
+function settle(task, { last, stderr }) {
+  if (last?.type === 'done') Object.assign(task, { state: 'done', file: last.file, progress: 1 });
+  else if (task.cancelling || last?.error_code === 'CANCELLED') task.state = 'cancelled';
+  else {
+    task.state = 'failed';
+    task.error = { error_code: STITCH_ERRORS[last?.error_code] ?? ErrorCodes.GENERATION_REFUSED, message: last?.message ?? `The stitcher stopped: ${stderr}`, next_action: 'Fix the spec and call again. Nothing was spent.' };
+  }
+  // The CLI removes its partial on cancel; a killed one may not have.
+  if (task.state === 'cancelled') fs.rmSync(task.output, { force: true });
+  jobEvents.emit('event', { type: 'stitch.settled', runId: task.run_id, stitchId: task.stitch_id, state: task.state });
+}
+
+export const stitchView = ({ child, cancelling, ...task }) => task;
+
+export function findStitch(stitch_id) {
+  const task = stitches.get(stitch_id);
+  if (!task) throw createError(ErrorCodes.JOB_NOT_FOUND, `No stitch ${stitch_id}`);
+  return task;
+}
+
+// Returns at once: the edit runs as long as it needs, polled with flow_wait and stopped with flow_job_control cancel.
+export function stitchVideo({ run_id, spec, auto, name = 'final' }) {
   const run = runOf(run_id);
   if (!spec && auto !== true) throw invalid('Pass spec, or auto: true');
   const slug = String(name).replace(/[^\p{L}\p{N}_-]+/gu, '-').slice(0, 60) || 'final';
@@ -73,12 +102,24 @@ export async function stitchVideo({ run_id, spec, auto, name = 'final' }) {
   full.output ??= path.join(final, `${slug}.mp4`);
   const specFile = path.join(final, `${slug}.spec.json`);
   fs.writeFileSync(specFile, JSON.stringify(full, null, 2));
-  const { last, stderr } = await runCli(specFile, (line) => {
-    if (line.type === 'progress') jobEvents.emit('event', { type: 'job.progress', runId: run.id, stage: 'stitch', progress: Math.round(line.progress * 100), source: 'phase' });
-  });
-  if (last?.type === 'done') return { run_id: run.id, file: last.file, spec_file: specFile };
-  if (last?.error_code === 'FFMPEG_NOT_FOUND') throw createError(ErrorCodes.FFMPEG_NOT_FOUND, last.message);
-  throw createError(ErrorCodes.GENERATION_REFUSED, last?.message ?? `The stitcher stopped: ${stderr}`, { next_action: 'Fix the spec and call again. Nothing was spent.' });
+  const task = { stitch_id: randomUUID(), run_id: run.id, state: 'running', progress: 0, progress_source: 'phase', output: full.output, spec_file: specFile };
+  stitches.set(task.stitch_id, task);
+  Object.defineProperty(task, 'child', { value: launch(specFile), enumerable: false });
+  runCli(task.child, (line) => {
+    if (line.type !== 'progress') return;
+    task.progress = line.progress;
+    jobEvents.emit('event', { type: 'job.progress', runId: run.id, stitchId: task.stitch_id, stage: 'stitch', progress: Math.round(line.progress * 100), source: 'phase' });
+  }).then((result) => settle(task, result));
+  return stitchView(task);
+}
+
+export function cancelStitch(stitch_id) {
+  const task = findStitch(stitch_id);
+  if (task.state === 'running') {
+    Object.defineProperty(task, 'cancelling', { value: true, enumerable: false });
+    task.child.stdin.end(); // closing stdin is the CLI's cancel: it removes the partial file
+  }
+  return stitchView(task);
 }
 
 export async function lastFrame({ run_id, asset_id }) {

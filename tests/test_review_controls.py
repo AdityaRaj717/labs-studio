@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 import time
+from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QEvent, Qt
@@ -509,3 +510,36 @@ def test_runs_tab_asks_the_engine(page, qapp):
     page.refresh_runs()
     settle(qapp)
     assert page.client.sent("flow_list_runs") == [{"limit": 20}]
+
+
+def test_assemble_uses_approved_in_order(video, qapp, tmp_path, monkeypatch):
+    from src.editor import stitch
+    clips = [tmp_path / f"{n}.mp4" for n in "abc"]
+    still = tmp_path / "s.png"
+    video.model.add_jobs([
+        Job("one", status=JobStatus.DONE, outputs=[clips[0]], review="approved"),
+        Job("two", status=JobStatus.DONE, outputs=[clips[1]]),
+        Job("still", status=JobStatus.DONE, outputs=[still], review="approved"),
+        Job("three", status=JobStatus.DONE, outputs=[clips[2]], review="approved"),
+    ])
+    video._update_controls()
+    assert video.btn_assemble.isEnabled()
+    seen, opened = [], []
+
+    def fake(spec, on_progress, should_stop):
+        seen.append(spec)
+        on_progress(0.5)
+        return Path(spec.output)
+    monkeypatch.setattr(stitch, "stitch", fake)
+    monkeypatch.setattr(video, "_open", opened.append)
+    video.assemble()
+    settle(qapp)
+    assert [c["path"] for c in seen[0].clips] == [str(clips[0]), str(clips[2])]
+    assert opened == [Path(seen[0].output)] and Path(seen[0].output).parent.name == "final"
+    assert video.btn_assemble.isEnabled()
+
+
+def test_assemble_waits_for_an_approved_clip(video):
+    video.model.add_jobs([Job("one", status=JobStatus.DONE, outputs=[Path("a.mp4")])])
+    video._update_controls()
+    assert not video.btn_assemble.isEnabled()

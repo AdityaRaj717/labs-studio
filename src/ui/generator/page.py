@@ -10,7 +10,8 @@ from pathlib import Path
 from PySide6.QtCore import QItemSelectionModel, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
-    QComboBox, QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLabel, QMessageBox, QPushButton, QScrollArea, QSlider,
+    QComboBox, QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLabel, QMessageBox, QProgressDialog, QPushButton, QScrollArea,
+    QSlider,
     QStackedWidget, QTabWidget, QVBoxLayout, QWidget,
 )
 
@@ -39,6 +40,7 @@ from src.web.run_mirror import apply_item, banner_text
 
 log = logging.getLogger(__name__)
 
+VIDEO_SUFFIXES = (".mp4", ".mov", ".webm")
 INSPECTOR_WIDTH = 300
 INSPECTOR_MIN_PAGE = 900  # below this the sheet keeps the room until the panel is asked for
 FRAME_WIDTHS = (140, 480, 240)  # minimum, maximum, default
@@ -137,6 +139,8 @@ class GeneratorPage(QWidget):
         self.btn_match_chars = IconButton("user-focus", tr("gen_match_characters"), self.match_characters)
         self.btn_match_chars.setToolTip(tr("gen_match_characters_tip"))
         self.btn_clear = IconButton("eraser", tr("gen_clear"), self._confirm_clear)
+        self.btn_assemble = IconButton("film-slate", tr("gen_assemble"), self.assemble)
+        self._assembling: threading.Event | None = None
         self.btn_start = self._button("gen_start", self._confirm_start, "play", "accent_text")
         self.btn_pause = self._button("gen_pause", self.toggle_pause, "pause")
         self.btn_stop = self._button("gen_stop", self.stop, "stop")
@@ -176,7 +180,7 @@ class GeneratorPage(QWidget):
         self.size_slider.setValue(int(self._prefs.get(f"pages.{page_key}.frame_width", FRAME_WIDTHS[2])))
         self.btn_inspector = IconButton("sidebar-simple", tr("gen_inspector_toggle"), self.toggle_inspector, checkable=True)
         self.tools = flow_row(self.btn_import, self.btn_paste, self.btn_match, self.btn_match_chars, self.btn_clear,
-                              self.view_switch, self.filter_bar, self.size_slider, self.btn_inspector)
+                              self.btn_assemble, self.view_switch, self.filter_bar, self.size_slider, self.btn_inspector)
         tool_box = QVBoxLayout()
         tool_box.setContentsMargins(14, 8, 14, 8)
         tool_box.addWidget(self.tools)
@@ -1062,6 +1066,7 @@ class GeneratorPage(QWidget):
                 b.setEnabled(False)
         if self.provider_combo is not None:
             self.provider_combo.setEnabled(not running)
+        self.btn_assemble.setEnabled(self._assembling is None and bool(self.approved_clips()))
 
     # ---- output ------------------------------------------------------
     @staticmethod
@@ -1179,6 +1184,55 @@ class GeneratorPage(QWidget):
                 self.add_frame_shots([(job.prompt, frame)])
 
         self._act(work, done, failed=lambda e: QMessageBox.warning(self, self.page_key, e.message))
+
+    def approved_clips(self) -> list[Path]:
+        """Each approved finished clip's file, in sheet order: what Assemble joins."""
+        return [job.outputs[0] for job in self.jobs
+                if job.review == "approved" and job.outputs and job.outputs[0].suffix.lower() in VIDEO_SUFFIXES]
+
+    def assemble(self) -> None:
+        """Joins the approved clips into one file (free, local FFmpeg); progress is FFmpeg's own, then the file opens."""
+        clips = self.approved_clips()
+        if not clips or self._assembling is not None:
+            return
+        from src.editor.stitch import StitchSpec, stitch
+
+        output = self._base_dir() / "final" / f"assembled-{datetime.now():%Y%m%d-%H%M%S}.mp4"
+        spec = StitchSpec(clips=[{"path": str(c)} for c in clips], output=str(output))
+        stop = self._assembling = threading.Event()
+        dialog = QProgressDialog(tr("gen_assemble_progress", count=len(clips)), tr("gen_stop"), 0, 100, self)
+        dialog.setWindowTitle(tr("gen_assemble"))
+        dialog.setMinimumDuration(0)
+        dialog.canceled.connect(stop.set)
+        self._assemble_dialog = dialog
+        self._update_controls()
+
+        def progress(fraction: float) -> None:
+            self._action_back.emit(lambda: dialog.setValue(round(fraction * 100)))
+
+        def work() -> Path:
+            try:
+                return stitch(spec, progress, stop.is_set)
+            except Exception as exc:  # noqa: BLE001 - shown to the owner as is
+                raise ActionError("STITCH_FAILED", str(exc)) from None
+
+        def finish() -> None:
+            self._assembling = None
+            dialog.canceled.disconnect(stop.set)
+            dialog.close()
+            self._update_controls()
+
+        def done(file: Path) -> None:
+            finish()
+            self._open(file)
+
+        def failed(error: ActionError) -> None:
+            cancelled = stop.is_set()
+            finish()
+            if not cancelled:
+                QMessageBox.warning(self, tr("gen_assemble"), tr("gen_assemble_failed", error=error.message))
+
+        self._act(work, done, failed=failed)
 
     def open_row_folder(self, row: int) -> None:
         job = self.model.job_at(row)

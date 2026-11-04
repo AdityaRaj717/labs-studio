@@ -743,3 +743,15 @@ test('getBalance reads the account panel and closes it', { timeout: 30000 }, asy
     await browser.close();
   }
 });
+
+test('lists voice and music of a run', async () => {
+  const engine = await engineWith();
+  const run = createRun({ name: 'audio', outputRoot: path.join(tmp, 'out') });
+  run.audio = [{ kind: 'voice', file: 'v.mp3', provider: 'fish', model: 's2.1-pro-free', bytes: 3 }, { kind: 'bgm', file: 'm.wav', provider: 'stability', model: 'stable-audio', duration: 20 }];
+  const { registerRun } = await import('../src/engine/job-store.js');
+  registerRun(run);
+  const res = await rpc(engine, 'flow_list_assets', { run_id: run.id });
+  assert.deepEqual(res.result.audio.map(({ kind, file }) => [kind, file]), [['voice', 'v.mp3'], ['bgm', 'm.wav']]);
+  assert.equal(res.result.audio[1].duration, 20);
+  assert.deepEqual(res.result.assets, []);
+});

@@ -23,6 +23,7 @@ const INGREDIENTS = {
   items: { oneOf: [{ type: 'string' }, { type: 'object' }] },
 };
 const TARGET = { job_id: { type: 'string' }, run_id: { type: 'string' } };
+const STITCH_ID = { type: 'string', description: 'From stitch_video.' };
 const CHARACTER = OBJECT({
   project_url: { type: 'string' },
   name: { type: 'string' },
@@ -129,24 +130,27 @@ export const TOOLS = [
     dry_run: { type: 'boolean', default: false },
   }, ['production_id', 'item'])),
 
-  tool('flow_job_status', 'State of a job or a run. Concise by default.', LOCAL_READ, OBJECT({
+  tool('flow_job_status', 'State of a job, a run or a stitch. Concise by default.', LOCAL_READ, OBJECT({
     ...TARGET,
+    stitch_id: STITCH_ID,
     detail: { type: 'string', enum: ['concise', 'full'], default: 'concise' },
     offset: { type: 'integer', default: 0, description: 'With detail full: first job of the page of 50.' },
   })),
-  tool('flow_wait', 'Wait for a job or run to finish, or until wait_ms, then return its current state. Call again while finished is false.', LOCAL_READ, OBJECT({
+  tool('flow_wait', 'Wait for a job, run or stitch to finish, or until wait_ms, then return its current state. Call again while finished is false.', LOCAL_READ, OBJECT({
     ...TARGET,
+    stitch_id: STITCH_ID,
     wait_ms: { type: 'integer', default: 30000, minimum: 0, maximum: 55000 },
   })),
   tool('flow_job_control', 'pause, resume, cancel, retry_failed or set_budget. retry_failed may spend again. resume with no target restarts a stopped queue. set_budget raises a Production\'s cap, by run_id.', WRITE, OBJECT({
     action: { type: 'string', enum: ['pause', 'resume', 'cancel', 'retry_failed', 'set_budget'] },
     ...TARGET,
+    stitch_id: { type: 'string', description: 'cancel only: stops a stitch and removes its partial file.' },
     max_credits: { type: 'number', default: 30, description: 'retry_failed: refuse if the regenerations estimate above this. set_budget: the new cap.' },
     accept_quote: { type: 'boolean', description: 'resume of a Production stopped on quote_drift: proceed at the price Flow quoted.' },
   }, ['action'])),
   tool('flow_list_runs', 'The most recent runs with job counts.', LOCAL_READ, OBJECT({ limit: { type: 'integer', default: 20, maximum: 50 } })),
 
-  tool('flow_list_assets', 'List the assets of a run or Flow project.', READ, OBJECT({ ...TARGET, project_url: { type: 'string' } })),
+  tool('flow_list_assets', 'List the assets of a run or Flow project. A run also lists its voice, music and effects under audio.', READ, OBJECT({ ...TARGET, project_url: { type: 'string' } })),
   tool('flow_download', 'Download an asset again, or the latest with latest: true. Repeats no generation.', SAME, OBJECT({ job_id: { type: 'string' }, latest: { type: 'boolean', default: false }, project_url: { type: 'string', description: 'With latest: the project. Default the open one.' } })),
 
   tool('flow_open_project', 'Open a Flow project, creating it when missing. Free.', SAME, OBJECT({
@@ -200,7 +204,7 @@ export const TOOLS = [
     output_root: SPEND.output_root,
   }, ['kind', 'prompt', 'duration'])),
 
-  tool('stitch_video', 'Join a run\'s clips, voice, music and effects into one video in its final folder. Waits for the file. Free. Originals are untouched.', SAME, OBJECT({
+  tool('stitch_video', 'Join a run\'s clips, voice, music and effects into one video in its final folder. Free. Returns stitch_id at once; follow with flow_wait on stitch_id, which ends with file. Originals are untouched.', SAME, OBJECT({
     run_id: { type: 'string' },
     auto: { type: 'boolean', description: 'Order the run\'s videos by sequence and add its voice and music.' },
     spec: { type: 'object', description: 'clips [{path, trim_start, trim_end, hold}], voice [{path, start}], bgm {path, volume, fade_out, duck}, sfx [{path, start, volume}], transition {type: fade, duration}, size, fps, loudness (default -14), output.' },
