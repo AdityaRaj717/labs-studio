@@ -37,6 +37,8 @@ def register_pages(window) -> None:
     window.register_page("flow_video", lambda: GeneratorPage(
         "flow_video", WebFlowVideoProvider(), title=tr("nav_video"), banner=tr("web_flow_video_banner")))
     window.register_page("settings", SettingsPage)
+    from src.ui.production.page import ProductionsPage  # S5-1
+    window.register_page("productions", lambda: ProductionsPage(window.switch_page))
 
     from src.ui.characters.page import CharactersPage  # Phase 6
     window.register_page("characters", CharactersPage)

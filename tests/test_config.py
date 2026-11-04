@@ -86,7 +86,7 @@ def test_theme_tokens_present_for_every_mode():
 
 def test_every_nav_key_resolves_in_en():
     strings = load_language("en")
-    assert len(NAV_ITEMS) == 9
+    assert len(NAV_ITEMS) == 10
     for _, label_key, _ in NAV_ITEMS:
         assert label_key in strings, label_key
         assert tr(label_key) == en.STRINGS[label_key]
@@ -95,7 +95,7 @@ def test_every_nav_key_resolves_in_en():
 
 def test_nav_order_matches_spec():
     expected = [
-        "Flow Image", "Flow Video", "Projects", "Characters", "Scenes", "Webhook API", "Detailed Log", "Settings", "Help",
+        "Flow Image", "Flow Video", "Productions", "Projects", "Characters", "Scenes", "Webhook API", "Detailed Log", "Settings", "Help",
     ]
     assert [tr(lk) for _, lk, _ in NAV_ITEMS] == expected
 
@@ -111,4 +111,4 @@ def test_nav_visible_default(monkeypatch):
 
     monkeypatch.setenv(features.ENV, "flow")
     assert features.visible_pages(NAV_KEYS) == (
-        "flow_image", "flow_video", "projects", "characters", "scenes", "webhook", "log", "settings", "help")
+        "flow_image", "flow_video", "productions", "projects", "characters", "scenes", "webhook", "log", "settings", "help")

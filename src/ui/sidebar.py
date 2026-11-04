@@ -22,6 +22,7 @@ from src.ui.kit import IconButton
 NAV_ITEMS: list[tuple[str, str, str]] = [
     ("flow_image", "nav_img", "image"),
     ("flow_video", "nav_video", "film-strip"),
+    ("productions", "nav_productions", "film-slate"),  # S5-1
     ("projects", "nav_projects", "folders"),
     ("characters", "nav_characters", "users-three"),
     ("scenes", "nav_scenes", "mountains"),

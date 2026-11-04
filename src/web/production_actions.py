@@ -32,6 +32,24 @@ class ProductionActions:
         except (EngineError, TimeoutError) as exc:
             raise ActionError("ENGINE_UNAVAILABLE", str(exc)) from None
 
+    # ---- a new Production (S5-1) ------------------------------------------
+    def plan(self, moodboard: str, prompts: str) -> dict[str, Any]:
+        """The engine's dry run of two files: free, no browser."""
+        return self._call("flow_production_plan", {"moodboard_path": moodboard, "prompts_path": prompts})
+
+    def start(self, plan_id: str, cap: int | None, gates: dict[str, bool], reference_mode: str | None,
+              project_url: str | None, cast_confirmed: bool) -> dict[str, Any]:
+        """Spends credits; the owner's confirm is the ``auto_confirm``."""
+        args: dict[str, Any] = {"plan_id": plan_id, "cast_confirmed": cast_confirmed, "auto_confirm": True,
+                                "gates": gates}
+        if cap is not None:
+            args["max_credits"] = cap
+        if reference_mode:
+            args["reference_mode"] = reference_mode
+        if project_url:
+            args["project_url"] = project_url
+        return self._call("flow_production_start", args, AUDIO_TIMEOUT)  # preflight opens Flow first
+
     def _verdict(self, jobs, action: str) -> None:
         by_production: dict[str, list[dict[str, Any]]] = {}
         for job in jobs:

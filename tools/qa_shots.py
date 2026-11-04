@@ -118,6 +118,25 @@ for key in NAV_KEYS:
     elif want(key):
         shot(key)
 
+if want("productions"):  # S5-1: a checked plan, as flow_production_plan returns it
+    pp = win.page("productions"); win.switch_page("productions"); pump()
+    files = [scratch / "ep01" / n for n in ("moodboard.md", "animation.md")]
+    for f in files:
+        f.parent.mkdir(parents=True, exist_ok=True); f.write_text("x", encoding="utf-8")
+    pp.moodboard_edit.setText(str(files[0])); pp.prompts_edit.setText(str(files[1]))
+    from src.ui.production.page import _mtimes
+    pp.show_plan({"ok": True, "plan_id": "7f3a91c2e04b5d18", "mode": "mixed",
+                  "counts": {"references": 3, "stills": 6, "animations": 6},
+                  "cast": [{"id": "REF_MARA", "name": "Mara", "kind": "character"},
+                           {"id": "REF_VAN", "name": "The van", "kind": "character"},
+                           {"id": "REF_FLATS", "name": "Salt flats", "kind": "place"}],
+                  "errors": [], "analysis_needed": [],
+                  "warnings": [{"file": str(files[1]), "line": 41, "message": "ANI_06 has no refs"}],
+                  "estimate": {"credits": 120, "eta_minutes": 46}},
+                 tuple(map(str, files)), _mtimes(files))
+    pp.cast_confirmed.setChecked(True)
+    shot("productions_plan")
+
 pg = win.page("flow_image")
 win.switch_page("flow_image"); pump()
 if want("running"):

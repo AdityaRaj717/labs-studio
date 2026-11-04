@@ -351,7 +351,7 @@ def test_app_in_flow_only_mode_shows_only_working_features(qapp, monkeypatch, tm
     try:
         register_pages(window)
         shown = [k for k, b in window.sidebar.buttons.items() if not b.isHidden()]
-        assert shown == ["flow_image", "flow_video", "projects", "characters", "scenes", "webhook", "log", "settings", "help"]
+        assert shown == ["flow_image", "flow_video", "productions", "projects", "characters", "scenes", "webhook", "log", "settings", "help"]
         img_page = window.page("flow_image")
         assert isinstance(img_page.provider, WebFlowImageProvider) and img_page.provider_combo is None
         tabs = window.page("settings").tabs
