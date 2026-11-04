@@ -250,9 +250,14 @@ def test_partial_sets_preview_then_outputs_replace_it(qapp, tmp_path):
     queue = JobQueue(Partial(), lambda j, files: [final])
     queue.start([job], {}, QueueSettings(threads=1))
     assert queue.wait(10)
-    assert seen["preview"] == shot and seen["icon"] is not None and not seen["icon"].isNull()
+    from src.ui.generator.thumbs import service
+
+    service().wait()  # the preview's thumb was queued from data() mid-run; decoded off the UI thread
+    assert seen["preview"] == shot and model._thumb(shot) is not None and not model._thumb(shot).isNull()
     assert seen["progress"] == 0.4 and "40" in seen["tip"]
     assert job.preview is None and job.outputs == [final]
+    model.data(model.index(0, COL_OUTPUT), Qt.ItemDataRole.DecorationRole)
+    service().wait()
     assert not model.data(model.index(0, COL_OUTPUT), Qt.ItemDataRole.DecorationRole).isNull()
 
 

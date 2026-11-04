@@ -12,6 +12,7 @@ from src import theme
 from src.gen.models import Job, JobStatus
 from src.gen.progress import clock, progress_view, stage_word
 from src.i18n import tr
+from src.ui.generator.thumbs import service as thumbs
 
 COL_INDEX, COL_PROMPT, COL_CHARACTER, COL_SCENE, COL_REFS, COL_STATUS, COL_PROGRESS, COL_OUTPUT = range(8)
 COLUMN_KEYS = ("gen_col_index", "gen_col_prompt", "gen_col_character", "gen_col_scene", "gen_col_refs",
@@ -84,7 +85,6 @@ class PromptTableModel(QAbstractTableModel):
         super().__init__(parent)
         self.jobs: list[Job] = []
         self._rows: dict[int, int] = {}
-        self._thumbs: dict[Path, QPixmap] = {}
         self.editable = True
         self.character_name = None  # callable(job) -> str, set by GeneratorPage (Phase 6)
         self.scene_name = None  # callable(job) -> str, set by GeneratorPage (Phase 14b)
@@ -187,18 +187,13 @@ class PromptTableModel(QAbstractTableModel):
         return True
 
     def _thumb(self, path: Path) -> QPixmap | None:
-        pix = self._thumbs.get(path)
-        if pix is None and path.suffix.lower() in VIDEO_EXTS:
-            pix = self._thumbs[path] = video_placeholder()
-        if pix is None:
-            pix = QPixmap(str(path))
-            if pix.isNull():
-                return None
-            ratio = device_ratio()
-            pix = pix.scaledToHeight(round(THUMB_HEIGHT * ratio), Qt.TransformationMode.SmoothTransformation)
-            pix.setDevicePixelRatio(ratio)
-            self._thumbs[path] = pix
-        return pix
+        if path.suffix.lower() in VIDEO_EXTS:
+            return video_placeholder()
+        return thumbs().get(path, THUMB_HEIGHT * 2, THUMB_HEIGHT, device_ratio())
+
+    def rows_showing(self, path: str) -> list[int]:
+        """Rows whose thumb is ``path``: a decoded thumb repaints just these."""
+        return [r for r, job in enumerate(self.jobs) if str(job.outputs[0] if job.outputs else job.preview) == path]
 
     # ---- mutation ----------------------------------------------------
     def add_prompts(self, prompts: list[str]) -> list[Job]:
@@ -234,13 +229,15 @@ class PromptTableModel(QAbstractTableModel):
     def clear(self) -> None:
         self.beginResetModel()
         self.jobs.clear()
-        self._thumbs.clear()
         self.endResetModel()
         self._reindex()
 
     def refresh_job(self, job_id: int) -> None:
         row = self._rows.get(job_id)
         if row is not None:
+            job = self.jobs[row]
+            if job.outputs or job.preview:
+                thumbs().refresh(job.outputs[0] if job.outputs else job.preview)
             self.dataChanged.emit(self.index(row, 0), self.index(row, len(COLUMN_KEYS) - 1))
 
     def refresh_all(self) -> None:

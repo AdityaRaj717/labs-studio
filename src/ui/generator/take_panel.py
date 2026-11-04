@@ -15,7 +15,8 @@ from src.gen.models import Job, JobStatus, Take
 from src.gen.provider import SHOT_KEYS, ConfigField
 from src.gen.progress import clock, progress_view, stage_word
 from src.i18n import tr
-from src.ui.generator.sheet import edge_state, frame_pixmap, is_video, picture_path
+from src.ui.generator.sheet import edge_state, is_video, picture_path
+from src.ui.generator.thumbs import service as thumbs
 from src.ui.kit import FlowLayout, set_icon
 
 PREVIEW_HEIGHT = 180
@@ -98,6 +99,8 @@ class TakePanel(QScrollArea):
         self.preview.setObjectName("TakePreview")
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview.setFixedHeight(PREVIEW_HEIGHT)
+        self._preview_path: str | None = None
+        thumbs().ready.connect(self._load_preview)
         self.edge = QLabel()
         self.edge.setObjectName("StatsHeader")
         self.edge.setWordWrap(True)
@@ -407,15 +410,23 @@ class TakePanel(QScrollArea):
         self.btn_open.setEnabled(path is not None)
         self.btn_edit.setEnabled(job.status is not JobStatus.RUNNING)
         self.preview.clear()
+        self._preview_path = None
         if path is None:
             self.preview.setText(tr("gen_viewer_nothing"))
         elif is_video(path):
             self.preview.setText(path.name)
         else:
-            width = max(1, self.viewport().width() - 24)
-            pix = frame_pixmap(path, width, PREVIEW_HEIGHT, self.devicePixelRatioF())
-            if pix is not None:
-                self.preview.setPixmap(pix)
-            else:
-                self.preview.setText(tr("gen_viewer_nothing"))
+            self._preview_path = str(path)
+            self._load_preview(self._preview_path)
+
+    def _load_preview(self, path: str) -> None:
+        """Blank while the thumb decodes; ``thumbs().ready`` calls this again when it lands."""
+        if path != self._preview_path:
+            return
+        width = max(1, self.viewport().width() - 24)
+        pix = thumbs().get(path, width, PREVIEW_HEIGHT, self.devicePixelRatioF())
+        if pix is not None:
+            self.preview.setPixmap(pix)
+        elif path in thumbs().missing:
+            self.preview.setText(tr("gen_viewer_nothing"))
 

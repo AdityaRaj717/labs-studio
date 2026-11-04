@@ -296,8 +296,13 @@ def test_output_thumb_uses_device_ratio(page, tmp_path, monkeypatch):
     pix.fill(QColor("#808080"))
     pix.save(str(path))
     monkeypatch.setattr(prompt_model, "device_ratio", lambda: 2.0)
+    from src.ui.generator.thumbs import service
+
+    assert page.model._thumb(path) is None  # decoding is queued, never done in data()
+    service().wait()
     thumb = page.model._thumb(path)
-    assert thumb.devicePixelRatio() == 2.0 and thumb.height() == THUMB_HEIGHT * 2
+    # drawn at the row height, with at least 2x pixels (the 80 px width bucket may hold more)
+    assert round(thumb.deviceIndependentSize().height()) == THUMB_HEIGHT and thumb.height() >= THUMB_HEIGHT * 2
 
 
 def test_failure_text_is_not_drawn_in_the_output_cell(page):

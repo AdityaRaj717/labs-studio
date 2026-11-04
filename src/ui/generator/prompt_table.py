@@ -17,6 +17,7 @@ from src.ui.generator.prompt_model import (
     COL_CHARACTER, COL_INDEX, COL_OUTPUT, COL_PROGRESS, COL_PROMPT, COL_REFS, COL_SCENE, COL_STATUS,
     THUMB_HEIGHT, status_color,
 )
+from src.ui.generator.thumbs import service as thumbs
 from src.ui.kit import data_font
 
 IMPORT_SUFFIXES = {".txt", ".text", ".csv", ".xlsx", ".xlsm"}
@@ -93,6 +94,11 @@ class PromptTable(QTableView):
     chain_requested = Signal(int)            # row: its video's last frame starts the next shot
     clip_mode_requested = Signal(int, str)   # row, extend or edit
 
+    def _thumb_ready(self, path: str) -> None:
+        """Repaint only the output cells showing ``path``."""
+        for row in self.model().rows_showing(path):
+            self.viewport().update(self.visualRect(self.model().index(row, COL_OUTPUT)))
+
     def __init__(self, model, parent=None):
         super().__init__(parent)
         self.setModel(model)
@@ -123,6 +129,7 @@ class PromptTable(QTableView):
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._context_menu)
         self.doubleClicked.connect(self._double_clicked)
+        thumbs().ready.connect(self._thumb_ready)
         self.characters_source = None  # callable -> list[(id, name)], set by GeneratorPage
         self.scenes_source = None  # callable -> list[(id, name)], set by GeneratorPage (Phase 14b)
         self.animate_enabled = False  # the image page: a still can go on to the video page

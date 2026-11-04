@@ -44,6 +44,8 @@ def pump():
 
 
 def shot(name):
+    from src.ui.generator.thumbs import service
+    pump(); win.grab(); service().wait()  # thumbs decode on a pool: ask, let them land, then shoot
     pump()
     win.grab().save(str(out / f"{name}.png"))
     print("ok", name)

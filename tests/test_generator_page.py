@@ -49,6 +49,10 @@ def test_fake_batch_updates_rows(qapp, tmp_path):
     assert [j.status for j in page.jobs] == [JobStatus.DONE, JobStatus.FAILED, JobStatus.DONE]
     assert {"Running", "Done", "Failed"} <= seen
     assert page.jobs[0].outputs[0].parent.parent == tmp_path / "out"
+    from src.ui.generator.thumbs import service
+
+    page.model.data(page.model.index(0, COL_OUTPUT), Qt.ItemDataRole.DecorationRole)  # queues the decode
+    service().wait()
     assert page.model.data(page.model.index(0, COL_OUTPUT), Qt.ItemDataRole.DecorationRole) is not None
     assert "Done 2" in page.stats_header.text() and "Failed 1" in page.stats_header.text()
     assert page.btn_retry.isEnabled() and page.btn_clear.isEnabled()

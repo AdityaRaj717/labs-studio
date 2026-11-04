@@ -217,14 +217,19 @@ sl = page.size_slider
 lo, hi = sl.minimum(), sl.maximum()
 seq = list(range(width, hi, 8)) + list(range(hi, lo, -8)) + list(range(lo, width + 1, 8))
 durs = []
+import threading
+from src.ui.generator import thumbs
+_real_read, ui_decodes = thumbs._read, []
+thumbs._read = lambda *a: (ui_decodes.append(threading.current_thread() is threading.main_thread()), _real_read(*a))[1]
 t0 = time.perf_counter()
 for v in seq:
     t = time.perf_counter(); sl.setValue(v); sheet.viewport().repaint(); app.processEvents(); durs.append(ms_since(t))
 total = time.perf_counter() - t0
 metric("slider_drag_fps", ">= 30 fps", len(seq) / total, "fps",
        f"{len(seq)} steps, each setValue plus synchronous repaint; step p95 {pct(durs, .95):.1f} ms, worst {max(durs):.1f} ms")
-metric("slider_drag_no_ui_decode", "no decode on the UI thread", None, "bool",
-       "not measured: no decode counter without app changes; frame_pixmap decodes inside paint today (S6 code facts), so expect false")
+thumbs.service().wait(); thumbs._read = _real_read
+metric("slider_drag_no_ui_decode", "no decode on the UI thread", not any(ui_decodes), "bool",
+       f"{len(ui_decodes)} decodes during the drag, {sum(ui_decodes)} on the UI thread (spy on thumbs._read)")
 sl.setValue(width); pump()
 
 # ---- job update burst: 100/s for 4 s ------------------------------------------------------------
@@ -261,8 +266,8 @@ r1 = rss_mb()
 metric("viewer_cycles_rss_growth_pct", "< 5 %", 100 * (r1 - r0) / r0, "%",
        f"RSS {r0:.0f} MB to {r1:.0f} MB over 20 open/close; open plus pump mean {statistics.mean(vt):.0f} ms, worst {max(vt):.0f} ms")
 
-metric("thumbnail_memory_mb", "256 MB cap by bytes", None, "MB",
-       "not measurable: the thumb cache has no byte accounting or cap yet (prompt_model._thumb is unbounded); S6-2 adds it")
+metric("thumbnail_memory_mb", "256 MB cap by bytes", thumbs.service().bytes / 1048576, "MB",
+       f"ThumbService byte count after the whole run, cap {thumbs.service().cap_bytes / 1048576:.0f} MB")
 
 for p in win.pages.values():
     if callable(getattr(p, "shutdown", None)):

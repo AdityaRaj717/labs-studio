@@ -10,11 +10,10 @@ import functools
 import math
 import random
 import time
-from collections import OrderedDict
 from pathlib import Path
 
 from PySide6.QtCore import QItemSelectionModel, QPointF, QRect, QRectF, QSize, Qt, QVariantAnimation, Signal
-from PySide6.QtGui import QColor, QImageReader, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
 from PySide6.QtWidgets import QAbstractItemView, QListView, QStyle, QStyledItemDelegate, QWidget
 
 from src import theme
@@ -24,43 +23,12 @@ from src.i18n import tr
 from src.ui import icons
 from src.ui.generator.prompt_model import COL_OUTPUT, VIDEO_EXTS
 from src.ui.generator.prompt_table import PromptTable
+from src.ui.generator.thumbs import service as thumbs
 from src.ui.kit import data_font
 
 REBATE = 22
-CACHE_SIZE = 400
 FRAME_RATIO = 2 / 3  # the picture area, 3:2 like a 35 mm frame
 RING_MS = 260
-
-_images: OrderedDict[tuple[str, float, int], QPixmap] = OrderedDict()
-
-
-def frame_pixmap(path: Path, width: int, height: int, ratio: float = 1.0) -> QPixmap | None:
-    """The picture scaled to fit, cached by file, size and modification time."""
-    try:
-        stamp = path.stat().st_mtime
-    except OSError:
-        return None
-    key = (str(path), stamp, width * 10000 + height)
-    pix = _images.get(key)
-    if pix is not None:
-        _images.move_to_end(key)
-        return pix
-    reader = QImageReader(str(path))
-    reader.setAutoTransform(True)
-    size = reader.size()
-    if size.isValid() and size.width() > 0:
-        scale = min(width * ratio / size.width(), height * ratio / size.height(), 1.0)
-        reader.setScaledSize(QSize(max(1, round(size.width() * scale)), max(1, round(size.height() * scale))))
-    image = reader.read()
-    if image.isNull():
-        return None
-    pix = QPixmap.fromImage(image)
-    pix.setDevicePixelRatio(ratio)
-    _images[key] = pix
-    while len(_images) > CACHE_SIZE:
-        _images.popitem(last=False)
-    return pix
-
 
 def picture_path(job: Job) -> Path | None:
     return job.outputs[0] if job.outputs else job.preview
@@ -200,9 +168,10 @@ class SheetDelegate(QStyledItemDelegate):
         ratio = self.view.devicePixelRatioF()
         drawn = False
         if path is not None and not is_video(path):
-            pix = frame_pixmap(path, int(pic.width()), int(pic.height()), ratio)
+            pix = thumbs().get(path, int(pic.width()), int(pic.height()), ratio)
             if pix is not None:
-                w, h = pix.width() / ratio, pix.height() / ratio
+                size = pix.deviceIndependentSize()
+                w, h = size.width(), size.height()
                 p.drawPixmap(QPointF(pic.center().x() - w / 2, pic.center().y() - h / 2), pix)
                 drawn = True
         elif path is not None:
@@ -384,6 +353,7 @@ class SheetView(QListView):
         self.doubleClicked.connect(lambda index: self.open_requested.emit(index.row()))
         for sig in (model.rowsInserted, model.rowsRemoved, model.modelReset, model.dataChanged):
             sig.connect(lambda *_: self.apply_filter())
+        thumbs().ready.connect(self._thumb_ready)
 
     # ---- layout ------------------------------------------------------
     def _cell_width(self) -> int:
@@ -447,6 +417,12 @@ class SheetView(QListView):
             if not self.isRowHidden(r) and model.job_at(r).production_stage == stage:
                 return ""
         return stage
+
+    def _thumb_ready(self, path: str) -> None:
+        """Repaint only the frames showing ``path``."""
+        for row in self.model().rows_showing(path):
+            if not self.isRowHidden(row):
+                self.viewport().update(self.visualRect(self.model().index(row, COL_OUTPUT)))
 
     # ---- the ring being drawn ----------------------------------------
     def ring_progress(self, job_id: int) -> float:
