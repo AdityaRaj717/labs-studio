@@ -99,3 +99,18 @@ def test_own_queued_frame_can_be_cancelled(page):
     page.queue._pending.append(job)
     assert page.queue.cancel([job]) == [job] and job.status is JobStatus.STOPPED
     assert job not in page.queue._pending
+
+
+def test_held_run_shows_play_icon(page):
+    """L5: a held run read 'Resume' only in the tooltip; the glyph stayed the pause bars."""
+    page.set_production_summary(summary(), "Fox")
+    assert page.btn_pause.property("icon_name") == "pause"
+    page.set_production_summary(summary("paused", reason="user"), "Fox")
+    assert page.btn_pause.property("icon_name") == "play"
+
+
+def test_dialogs_title_with_page_name_not_key(qapp, monkeypatch):
+    """L5: the Start confirm was titled 'flow_video'."""
+    page = GeneratorPage("flow_video", _Provider(), title="Flow Video", store=_Store(), characters=_Empty(),
+                         scenes=_Empty())
+    assert page.dialog_title == "Flow Video"

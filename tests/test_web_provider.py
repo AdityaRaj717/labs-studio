@@ -44,6 +44,9 @@ class FakeBackend:
             raise EngineToolError(f"fake {code}", {"error_code": code, "retryable": code == "JOB_IN_PROGRESS"})
         if "[engine-down]" in prompt:
             raise EngineError("engine exited")
+        if "[stopped]" in prompt:
+            from src.gen.provider import StopRequested
+            raise StopRequested()
         if "[slow]" in prompt:
             raise TimeoutError("still running")
         outputs = []
@@ -105,6 +108,26 @@ def test_timeout_keeps_the_key_so_a_retry_spends_nothing(store, tmp_path):
     with pytest.raises(ProviderError):
         provider.generate(job, {}, ctx())
     assert backend.calls[1]["idempotency_key"] == backend.calls[0]["idempotency_key"]
+
+
+def test_stop_drops_the_key_so_a_retry_queues_anew(store, tmp_path):
+    """L5: a stopped row kept the cancelled job's key; every Retry got that cancelled job back."""
+    from src.gen.provider import StopRequested
+
+    provider, backend, _ = make_provider(store, tmp_path)
+    job = Job("x [stopped]")
+    with pytest.raises(StopRequested):
+        provider.generate(job, {}, ctx())
+    assert job.engine_key == ""
+
+
+def test_clip_source_falls_back_to_media_id():
+    """L5: text-to-video outputs carry no flowClipUrl, so Extend and Edit were never offered."""
+    from src.gen.web_flow_image import clip_source
+
+    assert clip_source({"outputs": [{"flowClipUrl": "https://f/edit/1", "mediaId": "m"}]}) == "https://f/edit/1"
+    assert clip_source({"outputs": [{"mediaId": "https://flow.google.com/asb/X"}]}) == "https://flow.google.com/asb/X"
+    assert clip_source({"outputs": []}) == ""
 
 
 def test_progress_events_drive_the_row(store, tmp_path):

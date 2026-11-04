@@ -383,6 +383,14 @@ def test_last_frame_chains_next_row(video, qapp, tmp_path, monkeypatch):
     assert second.start_frame is None
 
 
+def test_long_frame_name_does_not_widen_the_panel(video, tmp_path):
+    """L5 at 1280: a chained frame's long file name pushed Clear and the prompt past the panel edge."""
+    long = tmp_path / ("001_a-paper-boat-drifts-slowly-across-a-rain-puddle-camera-static" + "_1_last.png")
+    video.model.add_jobs([Job("two", start_frame=long)])
+    video.take_panel.show_rows(video.model, [0])
+    assert video.take_panel.widget().minimumSizeHint().width() < 300
+
+
 def test_frames_and_references_stop_before_any_call(tmp_path, monkeypatch):
     from src.gen.provider import ProviderError
     import src.gen.web_flow_video as wfv

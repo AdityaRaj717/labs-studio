@@ -17,7 +17,7 @@ from typing import Any
 from src.characters.flow_sync import SyncError
 from src.gen.models import Job, OutputFile
 from src.gen.progress import parse_ts
-from src.gen.provider import ConfigField, Estimate, Provider, ProviderError, RunContext
+from src.gen.provider import ConfigField, Estimate, Provider, ProviderError, RunContext, StopRequested
 from src.web.engine_client import EngineError, EngineToolError
 
 log = logging.getLogger(__name__)
@@ -98,6 +98,12 @@ def read_outputs(view: dict[str, Any], what: str) -> list[OutputFile]:
     return files
 
 
+def clip_source(view: dict[str, Any]) -> str:
+    """What Extend and Edit open later: the clip's page URL, else its mediaId (the engine finds that tile)."""
+    first = (view.get("outputs") or [{}])[0] or {}
+    return str(first.get("flowClipUrl") or first.get("mediaId") or "")
+
+
 def run_engine_job(provider, job: Job, tool: str, args: dict[str, Any], timeout: float, ctx: RunContext,
                    what: str) -> list[OutputFile]:
     """One job through the engine, keyed so a repeat after a crash or timeout spends nothing."""
@@ -111,7 +117,10 @@ def run_engine_job(provider, job: Job, tool: str, args: dict[str, Any], timeout:
         view = provider.backend.run_job(tool, {**args, "idempotency_key": job.engine_key}, timeout,
                                         on_event=lambda e: report_event(e, ctx), should_stop=ctx.should_stop, **extra)
         files = read_outputs(view, what)
-        job.flow_url = str(((view.get("outputs") or [{}])[0] or {}).get("flowClipUrl") or "")
+        job.flow_url = clip_source(view)
+    except StopRequested:  # the engine job was cancelled: a Retry must queue a new one
+        job.engine_key = ""
+        raise
     except TimeoutError:  # still running in the engine: the key picks it up again
         raise ProviderError(f"{SITE_TITLE} did not finish in time", retryable=True) from None
     except EngineToolError as exc:

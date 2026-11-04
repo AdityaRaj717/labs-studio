@@ -570,6 +570,11 @@ class GeneratorPage(QWidget):
             for b in (self.btn_pause, self.btn_stop, self.btn_retry, self.btn_folder):
                 self._label_run_button(b, b.property("label") or b.text())
 
+    @property
+    def dialog_title(self) -> str:
+        """Message boxes carry the page's name, never its internal key."""
+        return self.title or tr(self.page_key)
+
     def _label_run_button(self, b: QPushButton, text: str) -> None:
         """Below ``RUN_BAR_COMPACT`` the run bar's secondary buttons show their icon only; the name stays
         in the tooltip and the accessible name, so nothing is clipped at 900 px."""
@@ -614,14 +619,14 @@ class GeneratorPage(QWidget):
 
     def _confirm_clear(self) -> None:
         if self.jobs and QMessageBox.question(
-                self, self.page_key, tr("gen_clear_confirm", count=len(self.jobs))) == QMessageBox.StandardButton.Yes:
+                self, self.dialog_title, tr("gen_clear_confirm", count=len(self.jobs))) == QMessageBox.StandardButton.Yes:
             self.clear()
 
     def _confirm_retry(self, rows: list[int]) -> None:
         """One key must not spend again on a frame that already has a picture."""
         done = sum(1 for r in rows if self.model.job_at(r).status is JobStatus.DONE)
         if done and QMessageBox.question(
-                self, self.page_key, tr("gen_retry_confirm", count=done)) != QMessageBox.StandardButton.Yes:
+                self, self.dialog_title, tr("gen_retry_confirm", count=done)) != QMessageBox.StandardButton.Yes:
             return
         self.retry_rows(rows)
 
@@ -783,7 +788,7 @@ class GeneratorPage(QWidget):
         if error.code == "REVIEW_CONFLICT":
             for job in jobs:
                 self._act(lambda j=job: self.actions.current(j), lambda item, j=job: self._show_item(j, item))
-        QMessageBox.warning(self, self.page_key, tr("gen_engine_error", message=error.message))
+        QMessageBox.warning(self, self.dialog_title, tr("gen_engine_error", message=error.message))
 
     def _show_item(self, job: Job, item: dict | None) -> None:
         if item is not None:
@@ -827,7 +832,7 @@ class GeneratorPage(QWidget):
 
         def confirm(reply: dict) -> None:
             text = tr("gen_regen_cost", item=job.item_id, credits=reply.get("estimated_credits"))
-            if QMessageBox.question(self, self.page_key, text) == QMessageBox.StandardButton.Yes:
+            if QMessageBox.question(self, self.dialog_title, text) == QMessageBox.StandardButton.Yes:
                 go()
 
         def over_budget(error: ActionError) -> None:
@@ -837,7 +842,7 @@ class GeneratorPage(QWidget):
             d = error.details
             cap = d["max_credits"] + d["credits"] - d["remaining"]
             text = tr("gen_regen_raise", item=job.item_id, credits=d["credits"], remaining=d["remaining"], cap=cap)
-            if QMessageBox.question(self, self.page_key, text) != QMessageBox.StandardButton.Yes:
+            if QMessageBox.question(self, self.dialog_title, text) != QMessageBox.StandardButton.Yes:
                 return
 
             def raise_and_go():
@@ -887,7 +892,7 @@ class GeneratorPage(QWidget):
 
     def _busy_guard(self) -> bool:
         if self.queue.is_running():
-            QMessageBox.information(self, self.page_key, tr("gen_busy"))
+            QMessageBox.information(self, self.dialog_title, tr("gen_busy"))
             return True
         return False
 
@@ -919,13 +924,13 @@ class GeneratorPage(QWidget):
         try:
             est = self.provider.estimate(todo, options)
         except ProviderError as exc:
-            QMessageBox.warning(self, self.page_key, str(exc))
+            QMessageBox.warning(self, self.dialog_title, str(exc))
             return 0
         cost = tr(est.note) if est.note else tr("gen_start_confirm_credits", credits=est.credits)
         text = " ".join((tr("gen_start_confirm_shots", shots=est.shots), cost,
                          tr("gen_start_confirm_retries", retries=int(options.get("max_retries", 0))),
                          tr("gen_start_confirm_quote")))
-        if QMessageBox.question(self, self.page_key, text) != QMessageBox.StandardButton.Yes:
+        if QMessageBox.question(self, self.dialog_title, text) != QMessageBox.StandardButton.Yes:
             return 0
         return self.start()
 
@@ -981,7 +986,7 @@ class GeneratorPage(QWidget):
     def accept_quote(self) -> None:
         paused = self._production_run.get("paused") or {}
         text = tr("run_accept_quote_confirm", item=paused.get("item"), old=paused.get("estimate"), new=paused.get("quoted"))
-        if QMessageBox.question(self, self.page_key, text) == QMessageBox.StandardButton.Yes:
+        if QMessageBox.question(self, self.dialog_title, text) == QMessageBox.StandardButton.Yes:
             run_id = self._engine_run()
             self._act(lambda: self.actions.resume(run_id, accept_quote=True))
 
@@ -989,7 +994,7 @@ class GeneratorPage(QWidget):
         credits = self._production_run.get("credits") or {}
         paused = self._production_run.get("paused") or {}
         floor = int(credits.get("spent") or 0) + int(paused.get("quoted") or 0)
-        cap, ok = QInputDialog.getInt(self, self.page_key, tr("run_raise_cap_ask", max=credits.get("max"), quoted=paused.get("quoted")),
+        cap, ok = QInputDialog.getInt(self, self.dialog_title, tr("run_raise_cap_ask", max=credits.get("max"), quoted=paused.get("quoted")),
                                       max(floor, int(credits.get("max") or 0)), 0, 1_000_000)
         if ok:
             run_id = self._engine_run()
@@ -997,7 +1002,7 @@ class GeneratorPage(QWidget):
 
     def resume_run(self) -> None:
         reason = str((self._production_run.get("paused") or {}).get("reason") or "")
-        if QMessageBox.question(self, self.page_key, tr("run_resume_confirm", reason=reason.replace("_", " ")))                 == QMessageBox.StandardButton.Yes:
+        if QMessageBox.question(self, self.dialog_title, tr("run_resume_confirm", reason=reason.replace("_", " ")))                 == QMessageBox.StandardButton.Yes:
             run_id = self._engine_run()
             self._act(lambda: self.actions.resume(run_id))
 
@@ -1023,7 +1028,7 @@ class GeneratorPage(QWidget):
     def stop(self) -> None:
         run_id = self._engine_run()
         if run_id:
-            if QMessageBox.question(self, self.page_key, tr("run_cancel_confirm")) == QMessageBox.StandardButton.Yes:
+            if QMessageBox.question(self, self.dialog_title, tr("run_cancel_confirm")) == QMessageBox.StandardButton.Yes:
                 self._act(lambda: self.actions.cancel(run_id))
             return
         self.queue.stop()
@@ -1090,6 +1095,7 @@ class GeneratorPage(QWidget):
         held = self.queue.paused or (engine_run and self._production_run.get("status") == "paused")
         self.btn_pause.setEnabled(running or engine_run)
         self._label_run_button(self.btn_pause, tr("gen_resume") if held else tr("gen_pause"))
+        set_icon(self.btn_pause, "play" if held else "pause")
         self.btn_stop.setEnabled(running or engine_run)
         self.btn_retry.setEnabled(stats.get("failed", 0) + stats.get("stopped", 0) > 0)
         if not running and not self.jobs:
@@ -1143,7 +1149,7 @@ class GeneratorPage(QWidget):
         try:
             credits = quote({"video": self._video_caps()}, model, duration, resolution, mode)
         except ProviderError as exc:
-            QMessageBox.warning(self, self.page_key, str(exc))
+            QMessageBox.warning(self, self.dialog_title, str(exc))
             return None
         label = tr(f"gen_{mode}_cost", model=tr(f"flow_model_{model}"), resolution=resolution, duration=duration,
                    credits=credits)
@@ -1293,7 +1299,7 @@ class GeneratorPage(QWidget):
             else:
                 self.add_frame_shots([(job.prompt, frame)])
 
-        self._act(work, done, failed=lambda e: QMessageBox.warning(self, self.page_key, e.message))
+        self._act(work, done, failed=lambda e: QMessageBox.warning(self, self.dialog_title, e.message))
 
     def approved_clips(self) -> list[Path]:
         """Each approved finished clip's file, in sheet order: what Assemble joins."""

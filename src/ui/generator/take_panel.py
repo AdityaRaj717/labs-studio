@@ -7,7 +7,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QComboBox, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea, QVBoxLayout,
+    QComboBox, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea, QSizePolicy, QVBoxLayout,
     QWidget,
 )
 
@@ -17,7 +17,7 @@ from src.gen.progress import clock, progress_view, stage_word
 from src.i18n import tr
 from src.ui.generator.sheet import edge_state, is_video, picture_path
 from src.ui.generator.thumbs import service as thumbs
-from src.ui.kit import FlowLayout, set_icon
+from src.ui.kit import FlowLayout, IconButton, set_icon
 
 PREVIEW_HEIGHT = 180
 
@@ -149,12 +149,14 @@ class TakePanel(QScrollArea):
             line.setSpacing(6)
             name = QLabel()
             name.setObjectName("Hint")
-            choose = QPushButton(tr("gen_take_frame_choose"))
+            # A long file name is cut at the edge (the tooltip has it whole), never widens the panel.
+            name.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+            # Icon-only, so the row fits the Inspector at 1280; the tooltip and accessible name say the action.
+            choose = IconButton("folder-open", tr("gen_take_frame_choose"), lambda w=which: self._choose_frame(w))
             choose.setAccessibleName(f"{tr(key)} {tr('gen_take_frame_choose')}")
-            choose.clicked.connect(lambda _c=False, w=which: self._choose_frame(w))
-            clear = QPushButton(tr("gen_take_frame_clear"))
+            clear = IconButton("x", tr("gen_take_frame_clear"),
+                               lambda w=which: self.frame_changed.emit(self.row, w, None))
             clear.setAccessibleName(f"{tr(key)} {tr('gen_take_frame_clear')}")
-            clear.clicked.connect(lambda _c=False, w=which: self.frame_changed.emit(self.row, w, None))
             title = QLabel(tr(key))
             title.setMinimumWidth(36)
             line.addWidget(title)
@@ -169,6 +171,7 @@ class TakePanel(QScrollArea):
         self.shot = QWidget()
         self.shot_form = QFormLayout(self.shot)
         self.shot_form.setContentsMargins(0, 0, 0, 0)
+        self.shot_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)  # narrow Inspector at 1280
         self.shot_fields: list[ConfigField] = []
         self.shot_boxes: dict[str, QComboBox] = {}
         self.page_values = lambda: {}  # the page's own settings, set by GeneratorPage
