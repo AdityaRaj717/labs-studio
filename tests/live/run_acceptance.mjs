@@ -1,6 +1,6 @@
 // Live acceptance run of docs/agent_control_testing_guide.md against the real shim over MCP stdio.
 // node run_acceptance.mjs <results.jsonl> [--only 1,2,7]
-// Env: FLOW_DATA_DIR (passed through), FLOW_TEST_PROJECT (default below), FISH_API_KEY for section 12.
+// Env: FLOW_DATA_DIR (passed through), FLOW_TEST_PROJECT (default below), FISH_API_KEY for section 12; FLOW_ACC_VIDEO_RUN and FLOW_ACC_VIDEO_JOB reuse a clip for section 19 alone.
 // Budget: images use free banana21 (bananaPro and banana2Lite once each); at most 3 video clips (this run uses 1,
 // Omni 360p 4s silent, about 4 credits); audio_stable_generate is only ever an estimate. The run stops when the balance
 // has dropped 60 from its start. A project is deleted only when this script created it.
@@ -60,7 +60,7 @@ const expectCode = (r, code) => { if (!r.isError || r.code !== code) throw new E
 const must = (cond, msg) => { if (!cond) throw new Error(msg); };
 
 // ---- state shared between tests
-const st = { image: null, runIds: [], char: null, scene: null, clips: 0, videoJob: null, videoRun: null, tmp: new Set(), startBalance: null };
+const st = { image: null, runIds: [], char: null, scene: null, clips: 0, videoJob: process.env.FLOW_ACC_VIDEO_JOB ?? null, videoRun: process.env.FLOW_ACC_VIDEO_RUN ?? null, tmp: new Set(), startBalance: null };
 
 async function balance() {
   try { const b = (await call('flow_status')).data?.balance; return typeof b === 'number' ? b : null; } catch { return null; }
@@ -251,7 +251,16 @@ T('18.2', 18, 0, async () => {
 
 // 19 Last frame and stitch (uses the section 11 clip)
 T('19.1', 19, 0, async () => { must(st.videoJob, 'no clip'); const d = await ok('last_frame', { run_id: st.videoRun, asset_id: st.videoJob }); return { evidence: checkFile(d.file, ['png', 'jpeg']) }; });
-T('19.2', 19, 0, async () => { must(st.videoRun, 'no clip'); const d = await ok('stitch_video', { run_id: st.videoRun, auto: true, name: `acc-${stamp}` }); return { evidence: checkFile(d.file, ['mp4']) }; });
+// S5-3: stitch_video returns a stitch_id at once; flow_wait on it until finished, then read file or error.
+T('19.2', 19, 0, async () => {
+  must(st.videoRun, 'no clip');
+  const d = await ok('stitch_video', { run_id: st.videoRun, auto: true, name: `acc-${stamp}` });
+  must(d.stitch_id, `no stitch_id: ${JSON.stringify(d).slice(0, 200)}`);
+  let s = d; const end = Date.now() + 600000;
+  while (!s.finished && Date.now() < end) s = await ok('flow_wait', { stitch_id: d.stitch_id, wait_ms: 50000 });
+  must(s.finished && s.state === 'done', `stitch ${s.state}: ${s.error ?? ''}`);
+  return { evidence: checkFile(s.file, ['mp4']) };
+});
 
 // ---- runner
 const append = (o) => fs.appendFileSync(outFile, `${JSON.stringify(o)}\n`);
