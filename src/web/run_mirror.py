@@ -89,6 +89,27 @@ def apply_item(job: Job, event: dict[str, Any]) -> None:
         setattr(job, name, value)
 
 
+class HealthWatch(QObject):
+    """Asks the engine's ``/health`` every few seconds off the GUI thread; emits an EngineHealth or None."""
+    changed = Signal(object)
+
+    def __init__(self, client, interval: float = 5.0, parent: QObject | None = None):
+        super().__init__(parent)
+        self.client, self.interval = client, interval
+        self._stop = threading.Event()
+
+    def start(self) -> None:
+        threading.Thread(target=self._loop, name="engine-health", daemon=True).start()
+
+    def stop(self) -> None:
+        self._stop.set()
+
+    def _loop(self) -> None:
+        while not self._stop.is_set():
+            self.changed.emit(self.client.health())
+            self._stop.wait(self.interval)
+
+
 class RunMirror(QObject):
     _changed = Signal()
     _production = Signal(object)

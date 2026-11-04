@@ -224,6 +224,8 @@ QPushButton#NavButton:focus, QPushButton#SidebarFooterButton:focus, QPushButton#
 #PageBody, #DemoBanner, #StatsNote {{ color: {c['text_muted']}; }}
 #RunNotice {{ color: {c['text_muted']}; font-weight: 600; }}
 #RunNotice[live="true"] {{ color: {c['live']}; }}
+#CreditMeter {{ color: {c['text']}; font-family: {DATA_FONT}; font-size: 11px; }}
+#CreditMeter[stale="true"] {{ color: {c['text_muted']}; }}
 #FieldHeading {{ font-weight: 600; }}
 #Hint {{ color: {c['text_muted']}; }}
 #EmptyTitle {{ font-family: {TITLE_FONT}; font-size: 20px; }}

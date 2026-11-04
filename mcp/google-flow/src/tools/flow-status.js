@@ -53,6 +53,7 @@ export async function handleFlowStatus(args = {}) {
     queue: queueStatus(),
     ledger: ledgerStatus(),
     balance: lastBalance()?.credits ?? null,
+    balanceAt: lastBalance()?.at ?? null,
   };
 
   if (args.busy) {
@@ -76,6 +77,7 @@ export async function handleFlowStatus(args = {}) {
         if (balance !== null) {
           recordBalance(balance);
           status.balance = balance;
+          status.balanceAt = new Date().toISOString();
         }
       }
       if (args.full) status.screenshot = await takeScreenshot(page, 'flow-status');

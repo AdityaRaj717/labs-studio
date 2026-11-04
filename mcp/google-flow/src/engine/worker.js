@@ -291,7 +291,7 @@ export function createWorker({ adapter, session, pacer, settleMs = SETTLE_MS, re
       paused = null;
       kick();
     },
-    status: () => ({ paused, active: current?.id ?? null }),
+    status: () => ({ paused, active: current?.id ?? null, kind: current?.spec?.kind ?? null }),
     isActive: (job) => current === job,
     busy: () => current !== null || unsettled,
     cancelActive() { controller?.abort('cancel'); },

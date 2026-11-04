@@ -12,6 +12,7 @@ import logging
 import subprocess
 import threading
 import time
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Any, Iterator
@@ -41,6 +42,17 @@ class EngineToolError(Exception):
     @property
     def code(self) -> str:
         return str(self.payload.get("error_code") or "")
+
+
+@dataclass(frozen=True)
+class EngineHealth:
+    """What the desk shows of the engine. ``down``: its lock is there but it does not answer."""
+    ready: bool = False
+    paused_reason: str | None = None
+    active: str | None = None
+    active_kind: str | None = None
+    uptime_ms: int = 0
+    down: bool = False
 
 
 class EngineClient:
@@ -77,6 +89,22 @@ class EngineClient:
             raise EngineError(f"The Flow engine (pid {lock.get('pid')}) is alive but not answering. "
                               "Try again shortly.") from None
         return reply.json() if reply.status_code == 200 else None
+
+    def health(self) -> EngineHealth | None:
+        """``/health`` only, so it never touches the tab. None when no engine was ever started."""
+        lock = self._read_lock()
+        if not lock:
+            return None
+        try:
+            reply = self._health(lock)
+        except EngineError:
+            reply = None
+        if not reply:
+            return EngineHealth(down=True)
+        worker = reply.get("worker") or {}
+        return EngineHealth(ready=bool(reply.get("ready")), paused_reason=worker.get("paused"),
+                            active=worker.get("active"), active_kind=worker.get("kind"),
+                            uptime_ms=int(reply.get("uptimeMs") or 0))
 
     def ensure(self) -> dict[str, Any]:
         """The running engine's lock record, starting the engine if there is none."""

@@ -72,6 +72,7 @@ class MainWindow(QMainWindow):
         shown = [k for k in NAV_KEYS if features.page_shown(k)]
         for number, key in enumerate(shown[:9], start=1):
             QShortcut(QKeySequence(f"Ctrl+{number}"), self, lambda k=key: self.switch_page(k))
+        self.engine_health = None
         self._live_timer = QTimer(self)
         self._live_timer.setInterval(1000)
         self._live_timer.timeout.connect(self._update_live)
@@ -123,10 +124,23 @@ class MainWindow(QMainWindow):
         self.current_key = key
 
     def _update_live(self) -> None:
-        """The rail's amber mark: which page has a batch running, seen from anywhere."""
+        """The rail's amber mark: which page has a batch running, seen from anywhere, agent runs included."""
+        health = self.engine_health
+        engine_key = None
+        if health is not None and health.active:
+            engine_key = "flow_video" if health.active_kind == "video" else "flow_image"
         for key in PROJECT_PAGES:
             queue = getattr(self.pages.get(key), "queue", None)
-            self.sidebar.set_live(key, queue is not None and queue.is_running())
+            self.sidebar.set_live(key, key == engine_key or (queue is not None and queue.is_running()))
+
+    def set_engine_health(self, health) -> None:
+        """The engine's ``/health`` (an EngineHealth, or None when none was started), from HealthWatch."""
+        self.engine_health = health
+        for key in PROJECT_PAGES:
+            show = getattr(self.pages.get(key), "set_engine_health", None)
+            if callable(show):
+                show(health)
+        self._update_live()
 
     def palette_commands(self) -> list[tuple[str, Callable[[], None]]]:
         """The current page's own actions first, then every page, then the window."""
@@ -229,5 +243,7 @@ class MainWindow(QMainWindow):
                 shutdown()
         if getattr(self, "run_mirror", None) is not None:
             self.run_mirror.stop()
+        if getattr(self, "health_watch", None) is not None:
+            self.health_watch.stop()
         log.info("Window closed; settings saved")
         super().closeEvent(event)

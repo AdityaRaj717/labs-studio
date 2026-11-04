@@ -27,6 +27,7 @@ from src.ui.generator.config_panel import ConfigPanel, fields_for
 from src.ui.generator.prompt_model import COL_PROMPT, PromptTableModel
 from src.ui.generator.prompt_table import PromptTable
 from src.ui.generator.queue_bridge import QueueBridge
+from src.ui.generator.credit_meter import CreditMeter
 from src.ui.generator.sheet import FILTERS, RunStrip, SheetView
 from src.ui.generator.stats_header import StatsHeader
 from src.ui.generator.take_panel import TakePanel
@@ -82,6 +83,16 @@ class _EmptyState(QWidget):
             self.files_dropped.emit(paths)
 
 
+def _flow_status() -> dict:
+    """Flow's status from a running engine only: the meter never starts one."""
+    from src.web.flow_mcp import flow_mcp
+
+    health = flow_mcp().client.health()
+    if health is None or health.down:
+        raise ConnectionError("the Flow engine is not running")
+    return flow_mcp().status()
+
+
 class GeneratorPage(QWidget):
     _action_back = Signal(object)  # a callable to run on the GUI thread
 
@@ -135,6 +146,8 @@ class GeneratorPage(QWidget):
         if title:
             run_row.addWidget(page_title(title))
             run_row.addSpacing(10)
+        self.credit_meter = CreditMeter(_flow_status, self._tab_idle)
+        run_row.addWidget(self.credit_meter)
         run_row.addStretch(1)
         for b in (self.btn_start, self.btn_pause, self.btn_stop, self.btn_retry, self.btn_folder):
             run_row.addWidget(b)
@@ -202,6 +215,7 @@ class GeneratorPage(QWidget):
             settings_box.addLayout(pick)
         self._provider_banner = banner
         self._production_banner = ""
+        self._engine_notice = ""
         self.banner_label = QLabel(banner)
         self.banner_label.setWordWrap(True)
         self.banner_label.setObjectName("DemoBanner")
@@ -355,8 +369,20 @@ class GeneratorPage(QWidget):
         text = "\n".join(filter(None, [self._provider_banner, self._production_banner]))
         self.banner_label.setText(text)
         self.banner_label.setVisible(bool(text))
-        self.run_notice.setText(self._production_banner)
-        self.run_notice.setVisible(bool(self._production_banner))
+        notice = "\n".join(filter(None, [self._engine_notice, self._production_banner]))
+        self.run_notice.setText(notice)
+        self.run_notice.setVisible(bool(notice))
+
+    def set_engine_health(self, health) -> None:
+        """Engine pause or outage in the run bar, for any run on it, agent runs included."""
+        notice = ""
+        if health is not None and health.down:
+            notice = tr("engine_down")
+        elif health is not None and health.paused_reason:
+            notice = tr("engine_paused", reason=health.paused_reason)
+        if notice != self._engine_notice:
+            self._engine_notice = notice
+            self._show_banner()
 
     def set_production_summary(self, summary: dict, name: str) -> None:
         self._production_banner = banner_text(summary, name)
@@ -882,6 +908,7 @@ class GeneratorPage(QWidget):
         self.stats_header.stop_clock()
         self._refresh_stats()
         self._update_controls()
+        self.credit_meter.refresh()
 
     def _refresh_stats(self) -> None:
         self.stats_header.update_stats(count_statuses(self.jobs))
@@ -890,8 +917,18 @@ class GeneratorPage(QWidget):
             self.filter_bar.set_label(key, f"{tr(f'gen_filter_{key}')} {count}")
         self._update_controls()
 
+    def _tab_idle(self) -> bool:
+        """No job of ours or of an agent holds the Flow tab."""
+        health = getattr(self.window(), "engine_health", None)
+        return not self.queue.is_running() and not (health is not None and health.active)
+
+    def showEvent(self, event) -> None:  # noqa: N802 - Qt name
+        super().showEvent(event)
+        self.credit_meter.refresh()
+
     def _update_controls(self) -> None:
         running = self.queue.is_running()
+        self.credit_meter.setVisible(self.provider.key.startswith("web_flow"))
         stats = self.stats_header.stats
         self.model.editable = not running
         for b in (self.btn_import, self.btn_paste, self.btn_match, self.btn_match_chars, self.btn_clear):
