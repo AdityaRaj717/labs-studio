@@ -183,8 +183,8 @@ const REDUCERS = {
   character_created(production, { item, take, name }) {
     Object.assign(itemOf(production, item), { character: { take, name } });
   },
-  paused(production, { reason, code = null, quoted = null, item = null }) {
-    production.paused = { reason, code, quoted, item };
+  paused(production, { reason, code = null, quoted = null, estimate = null, item = null }) {
+    production.paused = { reason, code, quoted, estimate, item };
   },
   resumed(production) {
     production.paused = null;

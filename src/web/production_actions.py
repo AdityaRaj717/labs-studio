@@ -53,7 +53,23 @@ class ProductionActions:
         return self._call("flow_production_regenerate", args)
 
     def raise_budget(self, run_id: str, max_credits: int) -> None:
-        self._call("flow_job_control", {"action": "set_budget", "run_id": run_id, "max_credits": max_credits})
+        self.set_budget(run_id, max_credits)
+
+    # ---- the run as a whole (flow_job_control) ----------------------------
+    def pause(self, run_id: str) -> dict[str, Any]:
+        return self._call("flow_job_control", {"action": "pause", "run_id": run_id})
+
+    def resume(self, run_id: str, accept_quote: bool = False) -> dict[str, Any]:
+        args = {"action": "resume", "run_id": run_id}
+        if accept_quote:
+            args["accept_quote"] = True
+        return self._call("flow_job_control", args)
+
+    def cancel(self, run_id: str) -> dict[str, Any]:
+        return self._call("flow_job_control", {"action": "cancel", "run_id": run_id})
+
+    def set_budget(self, run_id: str, max_credits: int) -> dict[str, Any]:
+        return self._call("flow_job_control", {"action": "set_budget", "run_id": run_id, "max_credits": max_credits})
 
     def current(self, job) -> dict[str, Any] | None:
         """The engine's view of a row's Item, to show after a conflict."""

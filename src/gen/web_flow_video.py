@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +20,23 @@ def quote(caps: dict[str, Any], model: str, duration: int, resolution: str) -> i
         offered = ", ".join(f"{res} {sec}s" for res, secs in credits.items() for sec in secs)
         raise ProviderError(f"{model} can't make {resolution} {duration}s. It offers: {offered}", stop_queue=True)
     return cost
+
+
+class RunTally:
+    """Credits a batch has committed, for a run-level cap shared by the queue's workers."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self.spent = 0
+
+    def take(self, cost: int, cap: int) -> int:
+        """The ``max_credits`` to send: what is left of ``cap``. Counted only when it fits,
+        so a shot past the cap goes to the engine with too little and is refused unspent."""
+        with self._lock:
+            left = max(0, cap - self.spent)
+            if cost <= left:
+                self.spent += cost
+            return left
 
 
 class WebFlowVideoProvider(Provider):
@@ -48,6 +67,7 @@ class WebFlowVideoProvider(Provider):
                         depends_on="model", options_by=durations),
             ConfigField("resolution", "gen_resolution", "choice", "720p", ["720p", "360p"]),
             ConfigField("silent", "gen_silent", "bool", False),
+            ConfigField("run_cap", "gen_run_cap", "int", 0, minimum=0, maximum=100000),
             ConfigField("timeout", "gen_timeout", "int", 600, minimum=60, maximum=1800),
         ]
 
@@ -58,9 +78,12 @@ class WebFlowVideoProvider(Provider):
         cost = quote(capabilities(), model, duration, resolution)
         library = set(job.character_refs) | set(job.scene_refs)
         refs = [str(Path(r).resolve()) for r in job.refs if r not in library]
+        # The owner chose this mix, so the engine's default cap of 30 is not the limit; a run cap is.
+        cap = int(options.get("run_cap") or 0)
+        limit = options.setdefault("_run_tally", RunTally()).take(cost * count, cap) if cap else cost * count
         args = {"prompt": job.prompt, "model": model, "ratio": options.get("aspect") or "16:9", "count": count,
                 "duration": duration, "resolution": resolution, "silent": bool(options.get("silent")),
-                "max_credits": cost * count}  # the owner chose this mix, so the engine's default cap of 30 is not the limit
+                "max_credits": limit, "max_generation_retries": 0}  # the app's retries are the only ones
         if refs:
             args["ingredients"] = refs
         return run_engine_job(self, job, "flow_generate_video", args, float(options.get("timeout", 600)), ctx, "video")

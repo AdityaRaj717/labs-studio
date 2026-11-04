@@ -46,3 +46,50 @@ def test_video_provider_rejects_invalid_mixes_before_a_call(tmp_path, model, dur
     with pytest.raises(ProviderError) as err:
         provider.generate(Job("x"), {"model": model, "duration": duration, "resolution": resolution}, ctx())
     assert err.value.stop_queue and backend.calls == []
+
+
+class Refusing(Backend):
+    """The engine's pre-spend check: a job whose quote is above max_credits is refused."""
+
+    def run_job(self, tool, args, timeout, on_event=None, should_stop=None, **extra):
+        from src.web.engine_client import EngineToolError
+
+        if args["max_credits"] < 4 * args["count"]:
+            self.calls.append((tool, args))
+            raise EngineToolError("above max_credits", {"error_code": "BUDGET_EXCEEDED"})
+        return super().run_job(tool, args, timeout, on_event, should_stop, **extra)
+
+
+def test_batch_cap_stops_at_engine_refusal(tmp_path):
+    backend = Refusing(tmp_path)
+    provider = WebFlowVideoProvider(backend=backend, session=object())
+    options = {"model": "omni", "duration": "4", "resolution": "360p", "run_cap": 10}
+    provider.generate(Job("one"), options, ctx())
+    provider.generate(Job("two"), options, ctx())
+    with pytest.raises(ProviderError) as err:
+        provider.generate(Job("three"), options, ctx())  # 8 of 10 committed: 2 left, the shot costs 4
+    assert err.value.stop_queue
+    assert [a["max_credits"] for _, a in backend.calls] == [10, 6, 2]
+
+
+def test_app_sends_no_hidden_engine_retries(tmp_path):
+    from src.gen.web_flow_image import WebFlowImageProvider
+
+    backend = Backend(tmp_path)
+    WebFlowVideoProvider(backend=backend, session=object()).generate(
+        Job("a"), {"model": "omni", "duration": "4", "resolution": "360p"}, ctx())
+    assert backend.calls[0][1]["max_generation_retries"] == 0
+
+    class Images(Backend):
+        def run_job(self, tool, args, timeout, on_event=None, should_stop=None, **extra):
+            self.calls.append((tool, args))
+            png = self.root / "i.png"
+            png.write_bytes(b"png")
+            return {"state": "done", "outputs": [{"file": str(png), "mediaId": "m"}]}
+
+    images = Images(tmp_path)
+    try:
+        WebFlowImageProvider(backend=images, session=object()).generate(Job("b"), {}, ctx())
+    except ProviderError:
+        pass  # only the arguments matter here
+    assert images.calls[0][1]["max_generation_retries"] == 0

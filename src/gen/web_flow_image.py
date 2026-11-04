@@ -178,6 +178,7 @@ class WebFlowImageProvider(Provider):
             "count": max(1, int(options.get("count", 1))),
             "size": options.get("download_size") or "1K",
             "ingredients": [str(Path(r).resolve()) for r in refs],
+            "max_generation_retries": 0,  # the app's retries are the only ones
         }
         args = {k: v for k, v in args.items() if v not in (None, [])}
         return run_engine_job(self, job, "flow_generate_image", args, float(options.get("timeout", 300)), ctx, "image")

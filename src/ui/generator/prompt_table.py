@@ -78,6 +78,7 @@ class PromptTable(QTableView):
     files_dropped = Signal(list)          # list[Path]
     edit_requested = Signal(int)          # row
     retry_requested = Signal(list)        # rows
+    cancel_requested = Signal(list)       # rows: queued frames leave the run
     remove_requested = Signal(list)       # rows
     open_output_requested = Signal(int)   # row
     open_folder_requested = Signal(int)   # row
@@ -187,6 +188,8 @@ class PromptTable(QTableView):
             menu.addSeparator()
             menu.addAction(tr("gen_edit"), lambda: self.edit_requested.emit(row))
             menu.addAction(tr("gen_retry"), lambda: self.retry_requested.emit(rows))
+            queued = any(self.model().job_at(r).status is JobStatus.QUEUED for r in rows)
+            menu.addAction(tr("gen_cancel_frame"), lambda: self.cancel_requested.emit(rows)).setEnabled(queued)
             menu.addAction(tr("gen_remove"), lambda: self.remove_requested.emit(rows))
             if self.characters_source is not None:
                 self._character_menu(menu, rows, job)

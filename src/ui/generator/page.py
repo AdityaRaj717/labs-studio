@@ -182,6 +182,18 @@ class GeneratorPage(QWidget):
         self.run_notice.setWordWrap(True)
         self.run_notice.setContentsMargins(14, 0, 14, 6)
         self.run_notice.hide()
+        # What the owner can do about a held Production, by the engine's reason.
+        self.btn_accept_quote = self._button("run_accept_quote", self.accept_quote)
+        self.btn_raise_cap = self._button("run_raise_cap", self.raise_cap)
+        self.btn_resume_run = self._button("run_resume", self.resume_run, "play")
+        self.run_actions = QWidget()
+        actions_row = QHBoxLayout(self.run_actions)
+        actions_row.setContentsMargins(14, 0, 14, 6)
+        for b in (self.btn_accept_quote, self.btn_raise_cap, self.btn_resume_run):
+            actions_row.addWidget(b)
+        actions_row.addStretch(1)
+        self.run_actions.hide()
+        self._production_run: dict = {}
         empty_import = self._button("gen_import", self.import_dialog, "upload-simple")
         empty_paste = self._button("gen_paste", self.paste_dialog, "clipboard-text")
         self.empty = _EmptyState(tr("gen_empty_title"), tr("gen_empty_hint"), empty_import, empty_paste)
@@ -240,6 +252,7 @@ class GeneratorPage(QWidget):
         centre.setContentsMargins(0, 0, 0, 0)
         centre.setSpacing(0)
         centre.addWidget(self.run_notice)
+        centre.addWidget(self.run_actions)
         centre.addWidget(self.views, 1)
         work = QHBoxLayout()
         work.setContentsMargins(0, 0, 0, 0)
@@ -295,6 +308,7 @@ class GeneratorPage(QWidget):
         self.table.files_dropped.connect(self.import_files)
         self.table.edit_requested.connect(self.edit_row)
         self.table.retry_requested.connect(self.retry_rows)
+        self.table.cancel_requested.connect(self.cancel_rows)
         self.table.remove_requested.connect(self.remove_rows)
         self.table.approve_requested.connect(self.approve_rows)
         self.table.reject_requested.connect(self.reject_rows)
@@ -386,6 +400,14 @@ class GeneratorPage(QWidget):
 
     def set_production_summary(self, summary: dict, name: str) -> None:
         self._production_banner = banner_text(summary, name)
+        self._production_run = summary
+        paused = summary.get("paused") or {}
+        held = summary.get("status") == "paused"
+        self.btn_accept_quote.setVisible(held and paused.get("reason") == "quote_drift")
+        self.btn_raise_cap.setVisible(held and paused.get("reason") == "budget")
+        self.btn_resume_run.setVisible(held and paused.get("reason") not in ("quote_drift", "budget"))
+        self.run_actions.setVisible(held and bool(summary.get("runId")))
+        self._update_controls()
         self.run_notice.setProperty("live", summary.get("status") == "running")
         self.run_notice.style().unpolish(self.run_notice)
         self.run_notice.style().polish(self.run_notice)
@@ -884,7 +906,49 @@ class GeneratorPage(QWidget):
         self._update_controls()
         return n
 
+    # ---- the engine's run (a Production shown on this page) -----------------
+    def _engine_run(self) -> str:
+        """The shown Production's run id, when the run bar acts on the engine, not the local queue."""
+        if self.queue.is_running():
+            return ""
+        return str(self._production_run.get("runId") or "") if self._production_run.get("status") in ("running", "paused") else ""
+
+    def accept_quote(self) -> None:
+        paused = self._production_run.get("paused") or {}
+        text = tr("run_accept_quote_confirm", item=paused.get("item"), old=paused.get("estimate"), new=paused.get("quoted"))
+        if QMessageBox.question(self, self.page_key, text) == QMessageBox.StandardButton.Yes:
+            run_id = self._engine_run()
+            self._act(lambda: self.actions.resume(run_id, accept_quote=True))
+
+    def raise_cap(self) -> None:
+        credits = self._production_run.get("credits") or {}
+        paused = self._production_run.get("paused") or {}
+        floor = int(credits.get("spent") or 0) + int(paused.get("quoted") or 0)
+        cap, ok = QInputDialog.getInt(self, self.page_key, tr("run_raise_cap_ask", max=credits.get("max"), quoted=paused.get("quoted")),
+                                      max(floor, int(credits.get("max") or 0)), 0, 1_000_000)
+        if ok:
+            run_id = self._engine_run()
+            self._act(lambda: self.actions.set_budget(run_id, cap))
+
+    def resume_run(self) -> None:
+        reason = str((self._production_run.get("paused") or {}).get("reason") or "")
+        if QMessageBox.question(self, self.page_key, tr("run_resume_confirm", reason=reason.replace("_", " ")))                 == QMessageBox.StandardButton.Yes:
+            run_id = self._engine_run()
+            self._act(lambda: self.actions.resume(run_id))
+
+    def cancel_rows(self, rows: list[int]) -> None:
+        """Own queued frames leave the run before they start."""
+        self.queue.cancel([self.model.job_at(r) for r in rows])
+        self._refresh_stats()
+
     def toggle_pause(self) -> None:
+        run_id = self._engine_run()
+        if run_id:
+            if self._production_run.get("status") == "paused":
+                self.resume_run()
+            else:
+                self._act(lambda: self.actions.pause(run_id))
+            return
         if self.queue.paused:
             self.queue.resume()
         else:
@@ -892,6 +956,11 @@ class GeneratorPage(QWidget):
         self._update_controls()
 
     def stop(self) -> None:
+        run_id = self._engine_run()
+        if run_id:
+            if QMessageBox.question(self, self.page_key, tr("run_cancel_confirm")) == QMessageBox.StandardButton.Yes:
+                self._act(lambda: self.actions.cancel(run_id))
+            return
         self.queue.stop()
         self._update_controls()
 
@@ -936,9 +1005,11 @@ class GeneratorPage(QWidget):
         for b in self.empty_buttons:
             b.setEnabled(not running)
         self.btn_start.setEnabled(not running and stats.get("pending", 0) > 0)
-        self.btn_pause.setEnabled(running)
-        self.btn_pause.setText(tr("gen_resume") if self.queue.paused else tr("gen_pause"))
-        self.btn_stop.setEnabled(running)
+        engine_run = bool(self._engine_run())
+        held = self.queue.paused or (engine_run and self._production_run.get("status") == "paused")
+        self.btn_pause.setEnabled(running or engine_run)
+        self.btn_pause.setText(tr("gen_resume") if held else tr("gen_pause"))
+        self.btn_stop.setEnabled(running or engine_run)
         self.btn_retry.setEnabled(stats.get("failed", 0) + stats.get("stopped", 0) > 0)
         if not running and not self.jobs:
             for b in (self.btn_match, self.btn_match_chars, self.btn_clear):

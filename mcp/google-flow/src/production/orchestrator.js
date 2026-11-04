@@ -96,7 +96,7 @@ export function createOrchestrator({ jobs, store = realStore, flow }) {
   function heldReason(item, error) {
     const quoted = error?.details?.quotedCredits;
     if (error?.error_code !== ErrorCodes.BUDGET_EXCEEDED || quoted === undefined) return { reason: error ? 'stopped' : 'owner', code: error?.error_code ?? null };
-    return { reason: quoted > item.estimate ? 'quote_drift' : 'budget', code: error.error_code, quoted, item: item.id };
+    return { reason: quoted > item.estimate ? 'quote_drift' : 'budget', code: error.error_code, quoted, estimate: item.estimate, item: item.id };
   }
 
   function outcomeOf(job, take, item) {

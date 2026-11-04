@@ -126,6 +126,19 @@ class JobQueue:
         with self._lock:
             return count_statuses(self._jobs.values())
 
+    def cancel(self, jobs: Iterable[Job]) -> list[Job]:
+        """Take queued ``jobs`` out of the run before they start; a running one finishes. Returns those taken."""
+        taken = []
+        with self._lock:
+            for job in jobs:
+                if job in self._pending:
+                    self._pending.remove(job)
+                    job.status = JobStatus.STOPPED
+                    taken.append(job)
+        for job in taken:
+            self.on_update(job)
+        return taken
+
     def forget(self, jobs: Iterable[Job]) -> None:
         with self._lock:
             for job in jobs:
