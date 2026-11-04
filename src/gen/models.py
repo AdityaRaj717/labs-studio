@@ -86,6 +86,7 @@ class Job:
     stale: str = ""  # the dependency IDs whose Approved Take changed since this row's
     ref_labels: list[str] = field(default_factory=list)  # Cast names
     takes: list[Take] = field(default_factory=list)  # a Production Item's every Take, oldest first
+    production_stage: str = ""  # reference, still or animation: the Production stage this Item belongs to
 
     def reset(self) -> None:
         self.status = JobStatus.PENDING

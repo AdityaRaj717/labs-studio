@@ -72,6 +72,7 @@ def item_fields(event: dict[str, Any]) -> dict[str, Any]:
         "take": int(approved) if state == "approved" and approved is not None else latest,
         "latest_take": latest,
         "stale": ", ".join(event.get("stale") or []),
+        "production_stage": str(event.get("stage") or ""),
         "ref_labels": [str(n) for n in event.get("ref_names") or []],
         "outputs": [Path(event["file"])] if event.get("file") else [],
         "error": str(event.get("error") or "") if not isinstance(event.get("error"), dict)

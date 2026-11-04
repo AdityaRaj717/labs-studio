@@ -223,6 +223,9 @@ class SheetDelegate(QStyledItemDelegate):
             draw_ring(p, pic, job.id, c["marker"], progress=self.view.ring_progress(job.id))
 
         self._paint_rebate(p, rect, job, c)
+        stage = self.view.group_start(index.row())
+        if stage:
+            self._paint_stage_mark(p, rect, stage, c)
         if job.status is JobStatus.RUNNING or job.review == "regenerating":
             p.setPen(QPen(QColor(c["live"]), 2))
             p.setBrush(Qt.BrushStyle.NoBrush)
@@ -239,6 +242,18 @@ class SheetDelegate(QStyledItemDelegate):
             p.setBrush(Qt.BrushStyle.NoBrush)
             p.drawRect(QRectF(rect).adjusted(-1.5, -1.5, 1.5, 1.5))
         p.restore()
+
+    def _paint_stage_mark(self, p: QPainter, rect: QRect, stage: str, c: dict) -> None:
+        """A thin section mark on the first frame of each Production stage: a rule and the stage's name."""
+        p.setPen(QPen(QColor(c["frame_text"]), 2))
+        p.drawLine(QPointF(rect.left() + 1, rect.top()), QPointF(rect.left() + 1, rect.bottom()))
+        p.setFont(data_font())
+        text = tr(f"gen_stage_{stage}")
+        fm = p.fontMetrics()
+        chip = QRectF(rect.left(), rect.top(), fm.horizontalAdvance(text) + 12, fm.height() + 4)
+        p.fillRect(chip, QColor(c["frame"]))
+        p.setPen(QColor(c["frame_text"]))
+        p.drawText(chip, Qt.AlignmentFlag.AlignCenter, text)
 
     def _paint_blank(self, p: QPainter, pic: QRectF, job: Job, c: dict) -> None:
         """A frame with no picture yet shows its prompt, or why it failed."""
@@ -270,6 +285,8 @@ class SheetDelegate(QStyledItemDelegate):
         if job.origin == "agent" and not ident:
             ident = tr("gen_edge_agent")
         state = edge_state(job)
+        if job.stale and not live:
+            state = f"{tr('gen_state_stale')} {state}"
         view = progress_view(job, time.time()) if live else None
         if view is not None and view.percent is not None:
             state = f"{view.percent}%" + (f" 1/{view.tiles}" if view.tiles > 1 else "")
@@ -320,6 +337,7 @@ FILTERS = {
     "approved": lambda job: job.review == "approved",
     "rejected": lambda job: job.review == "rejected",
     "failed": lambda job: job.status is JobStatus.FAILED,
+    "stale": lambda job: bool(job.stale),
 }
 
 
@@ -415,6 +433,20 @@ class SheetView(QListView):
             if self.isRowHidden(row) != hide:
                 self.setRowHidden(row, hide)
         self.filter_changed.emit(self.visible_count())
+
+    def group_start(self, row: int) -> str:
+        """The stage name when ``row`` is the first shown frame of its Production stage, else ""."""
+        model = self.model()
+        stage = model.job_at(row).production_stage
+        if not stage:
+            return ""
+        stages = {model.job_at(r).production_stage for r in range(model.rowCount()) if not self.isRowHidden(r)}
+        if len(stages - {""}) < 2:
+            return ""
+        for r in range(row):
+            if not self.isRowHidden(r) and model.job_at(r).production_stage == stage:
+                return ""
+        return stage
 
     # ---- the ring being drawn ----------------------------------------
     def ring_progress(self, job_id: int) -> float:

@@ -314,3 +314,31 @@ def test_rebate_badge_names_the_take():
     job = row(take=2)
     assert take_badge(job) == "T2/2"
     assert take_badge(row(take=1)) == ""
+
+
+def test_stale_filter(page):
+    fresh, old = row("IMG_01"), row("IMG_02")
+    old.stale = "REF_01"
+    page.model.add_jobs([fresh, old])
+    page.set_filter("stale")
+    assert page.sheet.isRowHidden(0) and not page.sheet.isRowHidden(1)
+
+
+def test_stages_are_grouped(page):
+    jobs = [row("REF_01"), row("REF_02"), row("IMG_01")]
+    jobs[0].production_stage = jobs[1].production_stage = "reference"
+    jobs[2].production_stage = "still"
+    page.model.add_jobs(jobs)
+    assert [page.sheet.group_start(r) for r in range(3)] == ["reference", "", "still"]
+    page.sheet.setRowHidden(0, True)
+    assert page.sheet.group_start(1) == "reference"
+    jobs[2].production_stage = "reference"
+    assert [page.sheet.group_start(r) for r in range(1, 3)] == ["", ""]  # one stage needs no marks
+
+
+def test_stage_survives_a_save():
+    from src.projects.store import job_to_row, row_to_job
+    from src.web.run_mirror import item_fields
+    fields = item_fields({"production_id": "p", "item": "REF_01", "state": "pending_review", "stage": "reference"})
+    job = Job("x", production_stage=fields["production_stage"])
+    assert row_to_job(job_to_row(job), 1).production_stage == "reference"

@@ -67,6 +67,7 @@ def job_to_row(job: Job) -> dict[str, Any]:
         "stale": job.stale,
         "ref_labels": list(job.ref_labels),
         "takes": [asdict(t) for t in job.takes],
+        "production_stage": job.production_stage,
     }
 
 
@@ -101,6 +102,7 @@ def row_to_job(row: dict[str, Any], index: int) -> Job:
         stale=str(row.get("stale", "")),
         ref_labels=[str(c) for c in row.get("ref_labels", [])],
         takes=[Take.from_engine(t) for t in row.get("takes", [])],
+        production_stage=str(row.get("production_stage", "")),
     )
 
 
