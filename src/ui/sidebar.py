@@ -176,6 +176,7 @@ class Sidebar(QWidget):
         layout.addWidget(scroll, 1)
         footer = QVBoxLayout()
         footer.setSpacing(1)
+        self.footer = footer
         footer.addWidget(self.theme_btn)
         footer.addWidget(self.version_btn)
         layout.addLayout(footer)
@@ -216,7 +217,7 @@ class Sidebar(QWidget):
             self.project_widget.setVisible(not self.collapsed)
         self.toggle_btn.setToolTip(tr("sidebar_expand") if self.collapsed else tr("sidebar_collapse"))
         self.toggle_btn.setAccessibleName(self.toggle_btn.toolTip())
-        for btn in (*self.buttons.values(), self.theme_btn, self.version_btn):
+        for btn in self.findChildren(SidebarButton):
             btn.set_collapsed(self.collapsed)
 
     def update_theme_button(self) -> None:

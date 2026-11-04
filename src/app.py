@@ -95,6 +95,16 @@ def main(argv: list[str] | None = None) -> int:
     window.health_watch = HealthWatch(window.run_mirror.client, parent=window)
     window.health_watch.changed.connect(window.set_engine_health)
     window.health_watch.start()
+    from src.ui.connection_chip import ConnectionChip
+
+    def open_web_sessions() -> None:
+        window.switch_page("settings")
+        settings_page = window.page("settings")
+        settings_page.tabs.setCurrentWidget(settings_page.web_tab)
+
+    window.chip = ConnectionChip(flow_mcp().call_tool, open_web_sessions, window.sidebar)
+    window.sidebar.footer.insertWidget(0, window.chip)
+    window.chip.set_collapsed(window.sidebar.collapsed)
     from src.ui.pages.settings_page import push_keys_if_running
     push_keys_if_running()
     if settings.get("webhook.autostart", False):  # Phase 10

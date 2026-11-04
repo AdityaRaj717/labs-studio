@@ -73,6 +73,7 @@ class MainWindow(QMainWindow):
         for number, key in enumerate(shown[:9], start=1):
             QShortcut(QKeySequence(f"Ctrl+{number}"), self, lambda k=key: self.switch_page(k))
         self.engine_health = None
+        self.chip = None
         self._live_timer = QTimer(self)
         self._live_timer.setInterval(1000)
         self._live_timer.timeout.connect(self._update_live)
@@ -136,6 +137,9 @@ class MainWindow(QMainWindow):
     def set_engine_health(self, health) -> None:
         """The engine's ``/health`` (an EngineHealth, or None when none was started), from HealthWatch."""
         self.engine_health = health
+        if self.chip is not None:
+            self.chip.refresh(idle=health is not None and not health.active and not self.is_busy(),
+                              running=health is not None and not health.down)
         for key in PROJECT_PAGES:
             show = getattr(self.pages.get(key), "set_engine_health", None)
             if callable(show):
