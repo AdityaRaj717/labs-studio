@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QComboBox, QHBoxLayout, QMenu, QToolButton, QWidget
 
-from src import theme
 from src.i18n import tr
 from src.ui import icons
+from src.ui.kit import set_icon
 from src.projects import ProjectStore
 from src.ui.projects import actions
 
@@ -19,7 +19,7 @@ class ProjectPicker(QWidget):
         self.combo.setToolTip(tr("proj_picker_tip"))
         self.combo.activated.connect(self._picked)
         self.menu_btn = QToolButton()
-        self.menu_btn.setIcon(icons.icon("dots-three", theme.COLORS["dark"]["rail_text"]))  # the rail is dark in both modes
+        set_icon(self.menu_btn, "dots-three", "rail_text")  # the rail follows the theme now
         self.menu_btn.setIconSize(icons.ICON_SIZE)
         self.menu_btn.setAccessibleName(tr("proj_actions"))
         self.menu_btn.setToolTip(tr("proj_actions"))

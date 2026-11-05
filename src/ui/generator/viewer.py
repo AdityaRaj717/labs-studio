@@ -12,7 +12,7 @@ from src import theme
 from src.gen.models import Job, JobStatus, Take
 from src.i18n import tr
 from src.ui import icons
-from src.ui.generator.sheet import draw_cross, draw_ring, edge_state, is_video
+from src.ui.generator.sheet import draw_flag, edge_state, is_video
 from src.ui.generator.take_panel import take_can_approve, take_can_reject
 from src.ui.kit import IconButton, data_font
 
@@ -64,10 +64,11 @@ class _Canvas(QWidget):
         else:
             p.setPen(QColor(c["frame_muted"]))
             p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self.message)
+        mark = QRectF(self.rect().right() - 28, 10, 16, 16)  # the decision, as on the sheet's cell
         if self.job is not None and self.verdict == "approved":
-            draw_ring(p, area, self.job.id, c["marker"], width=4.5)
+            draw_flag(p, mark, c["accent"])
         elif self.job is not None and self.verdict == "rejected":
-            draw_cross(p, area, self.job.id, c["marker"], width=4.5)
+            p.drawPixmap(mark.topLeft(), icons.pixmap("x", c["accent"], 16, self.devicePixelRatioF()))
         if self.label:
             p.setFont(data_font())
             p.setPen(QColor(c["frame_text"]))

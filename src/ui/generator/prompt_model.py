@@ -10,7 +10,7 @@ from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPixmap, QPolygonF
 
 from src import theme
 from src.gen.models import Job, JobStatus
-from src.gen.progress import clock, progress_view, stage_word
+from src.gen.progress import clock, progress_view, shown_percent, stage_word
 from src.i18n import tr
 from src.ui.generator.thumbs import service as thumbs
 
@@ -25,7 +25,7 @@ REVIEW_COLORS: dict[str, str] = {}
 
 
 def _sync_colors() -> None:
-    """Status colours follow the theme: amber alone means live, red alone means decided."""
+    """Status colours follow the theme: amber alone means live; decisions read in plain text."""
     c = theme.tokens()
     STATUS_COLORS.update({
         JobStatus.PENDING: c["text_muted"],
@@ -37,8 +37,8 @@ def _sync_colors() -> None:
     })
     REVIEW_COLORS.update({
         "pending_review": c["done"],
-        "approved": c["marker"],
-        "rejected": c["marker"],
+        "approved": c["done"],  # accent is for Start and flags only
+        "rejected": c["done"],
         "regenerating": c["live"],
     })
 
@@ -141,8 +141,9 @@ class PromptTableModel(QAbstractTableModel):
                 return text
             if col == COL_PROGRESS:
                 view = progress_view(job, time.time())
-                if view.percent is not None or not (view.stage or view.elapsed_s is not None):
-                    return view.percent if view.percent is not None else int(round(job.progress * 100))
+                percent = shown_percent(job, view)
+                if percent is not None:
+                    return percent
                 return tr("progress_elapsed", time=clock(view.elapsed_s)) if view.elapsed_s is not None                     else stage_word(view)
             if col == COL_OUTPUT and len(job.outputs) > 1:
                 return f"+{len(job.outputs) - 1}"

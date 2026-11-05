@@ -42,7 +42,7 @@ class ProgressDelegate(QStyledItemDelegate):
         colors = theme.COLORS[theme.current_mode()]
         job = index.model().job_at(index.row())
         done_or_failed = job.status in (JobStatus.DONE, JobStatus.FAILED, JobStatus.STOPPED)
-        fill = QColor(status_color(job) if done_or_failed else colors["live"])
+        fill = QColor((colors["failed"] if job.status is JobStatus.FAILED else colors["text_muted"]) if done_or_failed else colors["live"])
 
         rect = option.rect.adjusted(8, 0, -8, 0)
         text_w = 32

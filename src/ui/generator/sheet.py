@@ -1,34 +1,39 @@
-"""The contact sheet: every prompt row as one black frame, decided on with a china marker.
+"""The contact sheet: every prompt row as one grey cell, graded like a Lightroom grid.
 
 A view over the same PromptTableModel and selection as the queue table, so the two can never
-disagree. Approved frames get a hand-drawn red ring, rejected ones a red cross; amber means live.
+disagree. A flag in the accent marks the decision, stars and a colour label are the owner's own
+grade; amber means live.
 """
 
 from __future__ import annotations
 
-import functools
 import math
-import random
 import time
 from pathlib import Path
 
-from PySide6.QtCore import QItemSelectionModel, QPointF, QRect, QRectF, QSize, Qt, QVariantAnimation, Signal
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
+from PySide6.QtCore import QItemSelectionModel, QPointF, QRect, QRectF, QSize, Qt, Signal
+from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPen, QPixmap, QPolygonF
 from PySide6.QtWidgets import QAbstractItemView, QListView, QStyle, QStyledItemDelegate, QWidget
 
 from src import theme
 from src.gen.models import Job, JobStatus
-from src.gen.progress import clock, progress_view, stage_word
+from src.gen.progress import clock, progress_view, shown_percent, stage_word
 from src.i18n import tr
 from src.ui import icons
 from src.ui.generator.prompt_model import COL_OUTPUT, VIDEO_EXTS
 from src.ui.generator.prompt_table import PromptTable
 from src.ui.generator.thumbs import service as thumbs
-from src.ui.kit import data_font
+from src.ui.kit import data_font, ui_font
 
-REBATE = 22
 FRAME_RATIO = 2 / 3  # the picture area, 3:2 like a 35 mm frame
-RING_MS = 260
+PAD = 8
+INDEX_BAND = 14  # compact: room for the 11px index above the picture, so it never sits on it
+BOTTOM_ROW = 22
+TOP_ROW = 20
+DENSITIES = (1, 2, 0)  # J walks compact -> expanded -> picture -> compact
+LABELS = ("red", "yellow", "green", "blue", "purple")
+LABEL_KEYS = {Qt.Key.Key_6: "red", Qt.Key.Key_7: "yellow", Qt.Key.Key_8: "green", Qt.Key.Key_9: "blue"}
+
 
 def picture_path(job: Job) -> Path | None:
     return job.outputs[0] if job.outputs else job.preview
@@ -38,86 +43,10 @@ def is_video(path: Path) -> bool:
     return path.suffix.lower() in VIDEO_EXTS
 
 
-RING_STEPS = 180
-
-
-@functools.lru_cache(maxsize=512)
-def _ring_points(seed: int, w: float, h: float) -> list[QPointF]:
-    return ring_points(QRectF(5, 5, w - 10, h - 10), seed)
-
-
-def ring_points(rect: QRectF, seed: int) -> list[QPointF]:
-    """One hand-drawn lap and a bit, slightly off-round: no two rings on a sheet are the same."""
-    rng = random.Random(seed)
-    cx, cy = rect.center().x(), rect.center().y()
-    rx, ry = rect.width() / 2, rect.height() / 2
-    start = rng.uniform(-2.4, -1.2)
-    lap = 2 * math.pi * rng.uniform(1.05, 1.13)
-    wobble_a, wobble_b = rng.uniform(0.012, 0.03), rng.uniform(0.01, 0.022)
-    phase_a, phase_b = rng.uniform(0, 6), rng.uniform(0, 6)
-    # a slow lean, one bulge per lap, so the ring is not a perfect ellipse with ripples
-    lean, phase_c = rng.uniform(0.012, 0.026), rng.uniform(0, 6)
-    drift = rng.uniform(0.012, 0.03)
-    points = []
-    for i in range(RING_STEPS + 1):
-        t = i / RING_STEPS
-        a = start + lap * t
-        k = 1 + lean * math.sin(a + phase_c) + wobble_a * math.sin(2 * a + phase_a) + wobble_b * math.sin(3 * a + phase_b) - drift * t
-        points.append(QPointF(cx + rx * k * math.cos(a), cy + ry * k * math.sin(a)))
-    return points
-
-
-@functools.lru_cache(maxsize=512)
-def ring_path(seed: int, w: float, h: float, width: float, count: int) -> QPainterPath:
-    """The ring as a filled stroke that swells mid-lap and thins where the pen lands and lifts."""
-    points = _ring_points(seed, w, h)[:count]  # the lap is drawn once per frame size, then sliced
-    left, right = [], []
-    for i, pt in enumerate(points):
-        a, b = points[max(0, i - 1)], points[min(len(points) - 1, i + 1)]
-        dx, dy = b.x() - a.x(), b.y() - a.y()
-        n = math.hypot(dx, dy) or 1.0
-        t = i / RING_STEPS
-        half = width / 2 * (0.4 + 0.6 * math.sin(math.pi * min(1.0, t * 1.15)) ** 0.5)
-        ox, oy = -dy / n * half, dx / n * half
-        left.append(QPointF(pt.x() + ox, pt.y() + oy))
-        right.append(QPointF(pt.x() - ox, pt.y() - oy))
-    path = QPainterPath()
-    path.addPolygon(QPolygonF(left + right[::-1]))
-    path.closeSubpath()
-    return path
-
-
-def draw_ring(p: QPainter, rect: QRectF, seed: int, color: str, width: float = 3.4, progress: float = 1.0) -> None:
-    count = max(2, round((RING_STEPS + 1) * progress))
-    path = ring_path(seed, round(rect.width()), round(rect.height()), width, count)
-    p.save()
-    p.translate(rect.topLeft())
-    p.setPen(Qt.PenStyle.NoPen)
-    p.setBrush(QColor(color))
-    p.drawPath(path)
-    p.restore()
-
-
-def draw_cross(p: QPainter, rect: QRectF, seed: int, color: str, width: float = 3.4) -> None:
-    rng = random.Random(seed)
-    inset = 0.2
-    x0, x1 = rect.left() + rect.width() * inset, rect.right() - rect.width() * inset
-    y0, y1 = rect.top() + rect.height() * inset, rect.bottom() - rect.height() * inset
-    pen = QPen(QColor(color), width)
-    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-    p.setPen(pen)
-    p.setBrush(Qt.BrushStyle.NoBrush)
-    for a, b in ((QPointF(x0, y0), QPointF(x1, y1)), (QPointF(x1, y0), QPointF(x0, y1))):
-        mid = QPointF((a.x() + b.x()) / 2 + rng.uniform(-6, 6), (a.y() + b.y()) / 2 + rng.uniform(-6, 6))
-        path = QPainterPath(a)
-        path.quadTo(mid, b)
-        p.drawPath(path)
-
-
 def draw_hatch(p: QPainter, rect: QRectF, color: str) -> None:
     """A failed frame reads as spoiled even without colour vision."""
     tint = QColor(color)
-    tint.setAlpha(110)
+    tint.setAlpha(70)
     pen = QPen(tint, 1)
     p.save()
     p.setClipRect(rect)
@@ -131,8 +60,41 @@ def draw_hatch(p: QPainter, rect: QRectF, color: str) -> None:
     p.restore()
 
 
+def star_polygon(center: QPointF, radius: float) -> QPolygonF:
+    pts = []
+    for i in range(10):
+        r = radius if i % 2 == 0 else radius * 0.45
+        a = -math.pi / 2 + i * math.pi / 5
+        pts.append(QPointF(center.x() + r * math.cos(a), center.y() + r * math.sin(a)))
+    return QPolygonF(pts)
+
+
+def star_icon(color: str, size: int = 12, ratio: float = 2.0) -> QIcon:
+    """The sheet's drawn star as a button icon, so stars look the same everywhere."""
+    pix = QPixmap(round(size * ratio), round(size * ratio))
+    pix.setDevicePixelRatio(ratio)
+    pix.fill(Qt.GlobalColor.transparent)
+    p = QPainter(pix)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor(color))
+    p.drawPolygon(star_polygon(QPointF(size / 2, size / 2 + 0.5), size / 2))
+    p.end()
+    return QIcon(pix)
+
+
+def draw_flag(p: QPainter, rect: QRectF, color: str) -> None:
+    """A filled flag: the approved mark, in the accent."""
+    x, y, h = rect.left() + 1, rect.top(), rect.height()
+    p.fillRect(QRectF(x, y, 1.5, h), QColor(color))
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor(color))
+    p.drawPolygon(QPolygonF([QPointF(x + 1.5, y), QPointF(x + h * 0.9, y + h * 0.28),
+                             QPointF(x + 1.5, y + h * 0.56)]))
+
+
 def take_badge(job: Job) -> str:
-    """``T2/3`` on the rebate once an Item has more than one Take: the shown one of how many."""
+    """``T2/3`` once an Item has more than one Take: the shown one of how many."""
     total = max(job.latest_take, len(job.takes))
     return f"T{job.take}/{total}" if job.production_id and total > 1 and job.take else ""
 
@@ -150,6 +112,49 @@ def edge_state(job: Job) -> str:
     return tr(f"status_{job.status.value}").upper()
 
 
+def is_live(job: Job) -> bool:
+    return job.status is JobStatus.RUNNING or job.review == "regenerating"
+
+
+def cell_state(job: Job, now: float | None = None) -> tuple[str, str, int | None]:
+    """The cell's state text, its colour token, and the percent shown (None unless live and known).
+
+    No word where the flag or x already says the decision, and none for a plain finished frame."""
+    live = is_live(job)
+    if job.review in ("approved", "rejected") or (job.status is JobStatus.DONE and not job.review):
+        state = ""
+    elif job.review == "pending_review":
+        state = tr("gen_cell_review")
+    elif job.review == "regenerating":
+        state = tr("review_regenerating")
+    else:
+        state = tr(f"status_{job.status.value}")
+    if job.stale and not live:
+        state = f"{tr('gen_cell_stale')}, {state.lower()}" if state else tr("gen_cell_stale")
+    view = progress_view(job, now if now is not None else time.time()) if live else None
+    percent = shown_percent(job, view) if view is not None else None  # the queue's rule, so both agree
+    if percent is not None:
+        state = f"{percent}%" + (f" 1/{view.tiles}" if view.tiles > 1 else "")
+    elif view is not None and view.elapsed_s is not None:
+        state = f"{stage_word(view) or state} {clock(view.elapsed_s)}"
+    elif view is not None and view.stage:
+        state = stage_word(view)
+    token = "live" if live else "failed" if job.status is JobStatus.FAILED else "text_muted"
+    return state, token, percent
+
+
+def ident_text(job: Job) -> str:
+    ident = job.item_id if job.production_id else ""
+    if job.outputs and len(job.outputs) > 1:
+        ident = f"{ident} +{len(job.outputs) - 1}".strip()
+    badge = take_badge(job)
+    if badge:
+        ident = f"{ident} {badge}".strip()
+    if job.origin == "agent" and not ident:
+        ident = tr("gen_edge_agent")
+    return ident
+
+
 class SheetDelegate(QStyledItemDelegate):
     def __init__(self, view: "SheetView"):
         super().__init__(view)
@@ -160,14 +165,16 @@ class SheetDelegate(QStyledItemDelegate):
 
     def paint(self, p: QPainter, option, index) -> None:
         job = index.model().job_at(index.row())
-        c = theme.COLORS["dark"]  # a frame is black in both modes
-        marks = theme.tokens()
+        c = theme.tokens()
         rect = QRect(option.rect)
-        pic = QRectF(rect.left(), rect.top(), rect.width(), rect.height() - REBATE)
+        density = self.view.density
+        selected = bool(option.state & QStyle.StateFlag.State_Selected)
+        hovered = bool(option.state & QStyle.StateFlag.State_MouseOver)
+        pic = self.view.picture_rect(QRectF(rect))
         p.save()
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-        p.fillRect(rect, QColor(c["frame"]))
+        p.fillRect(rect, QColor(c["cell_selected" if selected else "cell_hover" if hovered else "cell"]))
 
         path = picture_path(job)
         ratio = self.view.devicePixelRatioF()
@@ -177,56 +184,117 @@ class SheetDelegate(QStyledItemDelegate):
             if pix is not None:
                 size = pix.deviceIndependentSize()
                 w, h = size.width(), size.height()
+                if job.review == "rejected":
+                    p.setOpacity(0.45)
                 p.drawPixmap(QPointF(pic.center().x() - w / 2, pic.center().y() - h / 2), pix)
-                drawn = True
+                p.setOpacity(1.0)
+            drawn = True  # still decoding: keep the cell plain rather than flash the prompt (no stat per paint)
         elif path is not None:
-            mark = icons.pixmap("play", c["frame_muted"], 28, ratio)
+            mark = icons.pixmap("play", c["text_muted"], 28, ratio)
             p.drawPixmap(QPointF(pic.center().x() - 14, pic.center().y() - 14), mark)
             p.setFont(data_font())
-            p.setPen(QColor(c["frame_muted"]))
+            p.setPen(QColor(c["text_muted"]))
             p.drawText(pic.adjusted(10, 0, -10, -8), Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom,
                        p.fontMetrics().elidedText(path.name, Qt.TextElideMode.ElideMiddle, int(pic.width()) - 20))
             drawn = True
         if not drawn:
             self._paint_blank(p, pic, job, c)
 
-        if job.review == "rejected":
-            p.fillRect(pic, QColor(0, 0, 0, 130))
-            draw_cross(p, pic, job.id, c["marker"])
-        elif job.review == "approved":
-            draw_ring(p, pic, job.id, c["marker"], progress=self.view.ring_progress(job.id))
+        state, token, percent = cell_state(job)
+        if percent is not None:  # only a percent earns a bar
+            p.fillRect(QRectF(pic.left(), pic.bottom(), pic.width() * min(1.0, percent / 100), 2),
+                       QColor(c["live"]))
+        if density == 1:
+            band = QRectF(rect.left() + PAD, rect.top() + 4, pic.width() - 14, INDEX_BAND)
+            p.setFont(data_font())
+            p.setPen(QColor(c["faint"]))
+            number = str(job.index)
+            p.drawText(band, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, number)
+            ident = ident_text(job)
+            if ident:
+                x = p.fontMetrics().horizontalAdvance(number) + 6
+                p.setFont(ui_font())
+                p.setPen(QColor(c["text_muted"]))
+                p.drawText(band.adjusted(x, 0, 0, 0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                           p.fontMetrics().elidedText(ident, Qt.TextElideMode.ElideRight, max(0, int(band.width() - x))))
+        if density == 2:
+            self._paint_top_row(p, QRectF(rect.left() + PAD, rect.top() + PAD, pic.width() - 14, TOP_ROW), job, c)
+        if density >= 1:
+            row = QRectF(pic.left(), pic.bottom() + 2, pic.width(), BOTTOM_ROW - 2)
+            self._paint_bottom_row(p, row, job, state, token, c, selected or hovered)
 
-        self._paint_rebate(p, rect, job, c)
+        dot = "live" if is_live(job) else "failed" if job.status is JobStatus.FAILED else ""
+        if dot:
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor(c[dot]))
+            p.drawEllipse(QRectF(rect.right() - PAD - 6, rect.top() + PAD - 4, 7, 7))
         stage = self.view.group_start(index.row())
         if stage:
-            self._paint_stage_mark(p, rect, stage, c)
-        if job.status is JobStatus.RUNNING or job.review == "regenerating":
-            p.setPen(QPen(QColor(c["live"]), 2))
+            self._paint_stage_mark(p, pic, stage, c)
+        if is_live(job):
+            p.setPen(QPen(QColor(c["live"]), 1))
             p.setBrush(Qt.BrushStyle.NoBrush)
-            p.drawRect(QRectF(rect).adjusted(1, 1, -1, -1))
-
-        if option.state & QStyle.StateFlag.State_Selected:
-            pen = QPen(QColor(marks["text"]), 2)
+            p.drawRect(QRectF(rect).adjusted(0.5, 0.5, -0.5, -0.5))
+        elif selected:
+            pen = QPen(QColor(c["text"]), 1)
             pen.setJoinStyle(Qt.PenJoinStyle.MiterJoin)
             p.setPen(pen)
             p.setBrush(Qt.BrushStyle.NoBrush)
-            p.drawRect(QRectF(rect).adjusted(-2, -2, 2, 2))
-        elif option.state & QStyle.StateFlag.State_MouseOver:
-            p.setPen(QPen(QColor(marks["border_strong"]), 1))
-            p.setBrush(Qt.BrushStyle.NoBrush)
-            p.drawRect(QRectF(rect).adjusted(-1.5, -1.5, 1.5, 1.5))
+            p.drawRect(QRectF(rect).adjusted(0.5, 0.5, -0.5, -0.5))
+        if self.view.dim_alpha and not selected:  # lights dim or out: only the chosen take stays lit
+            p.fillRect(rect, QColor(0, 0, 0, round(255 * self.view.dim_alpha)))
         p.restore()
 
-    def _paint_stage_mark(self, p: QPainter, rect: QRect, stage: str, c: dict) -> None:
-        """A thin section mark on the first frame of each Production stage: a rule and the stage's name."""
-        p.setPen(QPen(QColor(c["frame_text"]), 2))
-        p.drawLine(QPointF(rect.left() + 1, rect.top()), QPointF(rect.left() + 1, rect.bottom()))
+    def _paint_top_row(self, p: QPainter, row: QRectF, job: Job, c: dict) -> None:
+        font = QFont(p.font())
+        font.setPixelSize(15)
+        font.setWeight(QFont.Weight.Light)
+        p.setFont(font)
+        p.setPen(QColor(c["faint"]))
+        number = str(job.index)
+        p.drawText(row, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, number)
+        x = p.fontMetrics().horizontalAdvance(number) + 8
+        ident = ident_text(job)
+        if ident:
+            p.setFont(data_font())
+            p.setPen(QColor(c["text_muted"]))
+            p.drawText(row.adjusted(x, 0, 0, 0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                       p.fontMetrics().elidedText(ident, Qt.TextElideMode.ElideRight, max(0, int(row.width() - x))))
+
+    def _paint_bottom_row(self, p: QPainter, row: QRectF, job: Job, state: str, token: str, c: dict,
+                          active: bool) -> None:
+        x = row.left()
+        mid = row.center().y()
+        if job.review == "approved":
+            draw_flag(p, QRectF(x, mid - 5, 10, 10), c["accent"])
+            x += 14
+        elif job.review == "rejected":
+            p.drawPixmap(QPointF(x, mid - 5), icons.pixmap("x", c["accent"], 10, self.view.devicePixelRatioF()))
+            x += 14
+        if job.rating > 0 or active:
+            p.setPen(Qt.PenStyle.NoPen)
+            for i in range(5):
+                p.setBrush(QColor(c["star" if i < job.rating else "star_empty"]))
+                p.drawPolygon(star_polygon(QPointF(x + 4.5, mid), 4.5))
+                x += 11
+            x += 3
+        if job.label in LABELS:
+            p.fillRect(QRectF(x, mid - 4, 8, 8), QColor(c[f"label_{job.label}"]))
+            x += 12
+        p.setFont(ui_font())
+        p.setPen(QColor(c[token]))
+        room = max(0, int(row.right() - x - 4))
+        p.drawText(row, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight,
+                   p.fontMetrics().elidedText(state, Qt.TextElideMode.ElideRight, room))
+
+    def _paint_stage_mark(self, p: QPainter, pic: QRectF, stage: str, c: dict) -> None:
+        """The first frame of each Production stage carries the stage's name."""
         p.setFont(data_font())
         text = tr(f"gen_stage_{stage}")
         fm = p.fontMetrics()
-        chip = QRectF(rect.left(), rect.top(), fm.horizontalAdvance(text) + 12, fm.height() + 4)
-        p.fillRect(chip, QColor(c["frame"]))
-        p.setPen(QColor(c["frame_text"]))
+        chip = QRectF(pic.left(), pic.top(), fm.horizontalAdvance(text) + 12, fm.height() + 4)
+        p.fillRect(chip, QColor(c["header"]))
+        p.setPen(QColor(c["text"]))
         p.drawText(chip, Qt.AlignmentFlag.AlignCenter, text)
 
     def _paint_blank(self, p: QPainter, pic: QRectF, job: Job, c: dict) -> None:
@@ -234,57 +302,16 @@ class SheetDelegate(QStyledItemDelegate):
         failed = job.status is JobStatus.FAILED
         if failed:
             draw_hatch(p, pic, c["failed"])
-        font = p.font()
-        font.setPixelSize(12)
+        font = QFont(p.font())
+        font.setPixelSize(11 if failed else 12)
         p.setFont(font)
         running = job.status is JobStatus.RUNNING
-        p.setPen(QColor(c["failed"] if failed else c["frame_text"] if running else c["frame_muted"]))
+        p.setPen(QColor(c["failed"] if failed else c["text"] if running else c["text_muted"]))
         text = (job.error or job.prompt) if failed else job.prompt
         area = pic.adjusted(10, 9, -10, -6)
         lines = max(1, int(area.height() // p.fontMetrics().lineSpacing()))
         p.drawText(area, Qt.TextFlag.TextWordWrap | Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop,
                    _clip(p, text, int(area.width()), lines))
-
-    def _paint_rebate(self, p: QPainter, rect: QRect, job: Job, c: dict) -> None:
-        strip = QRectF(rect.left(), rect.bottom() - REBATE + 1, rect.width(), REBATE)
-        live = job.status is JobStatus.RUNNING or job.review == "regenerating"
-        p.setFont(data_font())
-        number = f"{job.index:03d}"
-        ident = job.item_id if job.production_id else ""
-        if job.outputs and len(job.outputs) > 1:
-            ident = f"{ident} +{len(job.outputs) - 1}".strip()
-        badge = take_badge(job)
-        if badge:
-            ident = f"{ident} {badge}".strip()
-        if job.origin == "agent" and not ident:
-            ident = tr("gen_edge_agent")
-        state = edge_state(job)
-        if job.stale and not live:
-            state = f"{tr('gen_state_stale')} {state}"
-        view = progress_view(job, time.time()) if live else None
-        if view is not None and view.percent is not None:
-            state = f"{view.percent}%" + (f" 1/{view.tiles}" if view.tiles > 1 else "")
-        elif view is not None and view.elapsed_s is not None:
-            state = f"{(stage_word(view) or state).upper()} {clock(view.elapsed_s)}"
-        elif view is not None and view.stage:
-            state = stage_word(view).upper()
-        fm = p.fontMetrics()
-        p.setPen(QColor(c["live"] if live else c["frame_text"]))
-        left = strip.adjusted(8, 0, -8, 0)
-        p.drawText(left, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, number)
-        state_w = fm.horizontalAdvance(state)
-        room = int(left.width()) - fm.horizontalAdvance(number) - state_w - 18
-        p.setPen(QColor(c["live"] if live else c["failed"] if job.status is JobStatus.FAILED
-                        else c["marker"] if job.review in ("approved", "rejected") else c["frame_muted"]))
-        p.drawText(left, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight, state)
-        if ident and room > 24:
-            p.setPen(QColor(c["frame_muted"]))
-            mid = left.adjusted(fm.horizontalAdvance(number) + 9, 0, 0, 0)
-            p.drawText(mid, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
-                       fm.elidedText(ident, Qt.TextElideMode.ElideRight, room))
-        if view is not None and view.percent is not None:  # only Flow's own number earns a bar
-            bar = QRectF(rect.left(), strip.top() - 1, rect.width() * min(1.0, view.percent / 100), 2)
-            p.fillRect(bar, QColor(c["live"]))
 
 
 def _clip(p: QPainter, text: str, width: int, lines: int) -> str:
@@ -312,6 +339,8 @@ FILTERS = {
     "rejected": lambda job: job.review == "rejected",
     "failed": lambda job: job.status is JobStatus.FAILED,
     "stale": lambda job: bool(job.stale),
+    "rated": lambda job: job.rating >= 1,
+    "labelled": lambda job: bool(job.label),
 }
 
 
@@ -324,6 +353,8 @@ class SheetView(QListView):
     edit_requested = Signal(int)      # row
     menu_requested = Signal(object)   # global position
     filter_changed = Signal(int)      # visible rows
+    marks_changed = Signal(list)      # rows whose rating or label changed
+    density_changed = Signal(int)
 
     def __init__(self, model, parent: QWidget | None = None):
         super().__init__(parent)
@@ -332,8 +363,9 @@ class SheetView(QListView):
         self._filter = "all"
         self.filtered_rows = range(0)
         self._hidden = 0  # rows the filter hides, kept as rows change so a count never loops them all
-        self._rings: dict[int, float] = {}
-        self._animations: dict[int, QVariantAnimation] = {}
+        self.density = 1  # 0 picture, 1 compact, 2 expanded
+        self.dim_alpha = 0.0  # the lights: black over every cell but the selected ones
+        self._stage_starts: dict[int, str] | None = None  # None: worked out again on the next paint
         self.setModel(model)
         self.setModelColumn(COL_OUTPUT)
         self.setItemDelegate(SheetDelegate(self))
@@ -372,9 +404,29 @@ class SheetView(QListView):
         cols = max(1, room // (self._width + gap))
         return max(self._width, room // cols - gap)
 
+    def _bands(self) -> tuple[int, int]:
+        """Heights above and below the picture, inside the padding, for the current density."""
+        top = {0: 0, 1: INDEX_BAND, 2: TOP_ROW}[self.density]
+        return top, BOTTOM_ROW if self.density else 0
+
     def frame_size(self) -> QSize:
         w = self._cell_width()
-        return QSize(w, round(w * FRAME_RATIO) + REBATE)
+        top, bottom = self._bands()
+        return QSize(w, round((w - 2 * PAD) * FRAME_RATIO) + 2 * PAD + top + bottom)
+
+    def picture_rect(self, cell: QRectF) -> QRectF:
+        top, bottom = self._bands()
+        return cell.adjusted(PAD, PAD + top, -PAD, -PAD - bottom)
+
+    def cycle_density(self) -> int:
+        self.density = DENSITIES[(DENSITIES.index(self.density) + 1) % len(DENSITIES)]
+        self._relayout()
+        self.density_changed.emit(self.density)
+        return self.density
+
+    def set_dim(self, alpha: float) -> None:
+        self.dim_alpha = alpha
+        self.viewport().update()
 
     def set_frame_width(self, width: int) -> None:
         self._width = width
@@ -422,54 +474,36 @@ class SheetView(QListView):
             elif was != hide:
                 self._hidden += 1 if hide else -1
         self.filtered_rows = range(first, last + 1)  # what this pass looked at, for the queue to mirror
+        self._stage_starts = None
         self.filter_changed.emit(self.visible_count())
+
+    def setRowHidden(self, row: int, hide: bool) -> None:  # noqa: N802 - Qt override
+        super().setRowHidden(row, hide)
+        self._stage_starts = None
+
+    def _index_stages(self) -> None:
+        """Which shown row starts each Production stage, worked out once per change, not per painted cell."""
+        model = self.model()
+        starts: dict[int, str] = {}
+        seen: set[str] = set()
+        for r in range(model.rowCount()):
+            stage = model.job_at(r).production_stage
+            if stage and stage not in seen and not self.isRowHidden(r):
+                seen.add(stage)
+                starts[r] = stage
+        self._stage_starts = starts if len(seen) >= 2 else {}
 
     def group_start(self, row: int) -> str:
         """The stage name when ``row`` is the first shown frame of its Production stage, else ""."""
-        model = self.model()
-        stage = model.job_at(row).production_stage
-        if not stage:
-            return ""
-        stages = {model.job_at(r).production_stage for r in range(model.rowCount()) if not self.isRowHidden(r)}
-        if len(stages - {""}) < 2:
-            return ""
-        for r in range(row):
-            if not self.isRowHidden(r) and model.job_at(r).production_stage == stage:
-                return ""
-        return stage
+        if self._stage_starts is None:
+            self._index_stages()
+        return self._stage_starts.get(row, "")
 
     def _thumb_ready(self, path: str) -> None:
         """Repaint only the frames showing ``path``."""
         for row in self.model().rows_showing(path):
             if not self.isRowHidden(row):
                 self.viewport().update(self.visualRect(self.model().index(row, COL_OUTPUT)))
-
-    # ---- the ring being drawn ----------------------------------------
-    def ring_progress(self, job_id: int) -> float:
-        return self._rings.get(job_id, 1.0)
-
-    def draw_ring_on(self, job: Job) -> None:
-        """The one authored motion on the sheet: the marker goes round once."""
-        if not theme.motion_enabled() or job.id in self._animations:
-            return
-        anim = QVariantAnimation(self)
-        anim.setDuration(RING_MS)
-        anim.setStartValue(0.0)
-        anim.setEndValue(1.0)
-
-        def step(value: float) -> None:
-            self._rings[job.id] = value
-            self.viewport().update()
-
-        def done() -> None:
-            self._rings.pop(job.id, None)
-            self._animations.pop(job.id, None)
-            self.viewport().update()
-
-        anim.valueChanged.connect(step)
-        anim.finished.connect(done)
-        self._animations[job.id] = anim
-        anim.start(QVariantAnimation.DeletionPolicy.DeleteWhenStopped)
 
     # ---- input -------------------------------------------------------
     def _context_menu(self, pos) -> None:
@@ -484,6 +518,12 @@ class SheetView(QListView):
         rows = self.selected_rows()
         key = event.key()
         ctrl = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
+        if key == Qt.Key.Key_J and not ctrl:
+            self.cycle_density()
+            return
+        if rows and not ctrl and (Qt.Key.Key_0 <= key <= Qt.Key.Key_9):
+            self.mark_rows(rows, key)
+            return
         if rows:
             if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and ctrl or key == Qt.Key.Key_P:
                 self.approve_requested.emit(rows)
@@ -501,6 +541,23 @@ class SheetView(QListView):
                 self.open_requested.emit(self.currentIndex().row() if self.currentIndex().isValid() else rows[0])
                 return
         super().keyPressEvent(event)
+
+    def mark_rows(self, rows: list[int], key: int) -> None:
+        """0-5 set the rating (0 clears); 6-9 toggle a colour label. Local only, never a credit."""
+        label = LABEL_KEYS.get(Qt.Key(key))
+        if label is not None:
+            self.label_rows(rows, label)
+            return
+        for row in rows:
+            self.model().job_at(row).rating = key - Qt.Key.Key_0
+        self.marks_changed.emit(rows)
+
+    def label_rows(self, rows: list[int], label: str) -> None:
+        """Toggle a colour label: the same label again clears it."""
+        for row in rows:
+            job = self.model().job_at(row)
+            job.label = "" if job.label == label else label
+        self.marks_changed.emit(rows)
 
     def dragEnterEvent(self, event) -> None:  # noqa: N802 - Qt override
         event.acceptProposedAction() if PromptTable._import_paths(event) else event.ignore()

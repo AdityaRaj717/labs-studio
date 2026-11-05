@@ -16,6 +16,7 @@ from src.gen.importer import MODES as IMPORT_MODES
 from src.gen.output import SUBDIR_MODES
 from src.gen.provider import ConfigField
 from src.i18n import tr
+from src.ui import kit
 
 COMMON_FIELDS: list[ConfigField] = [
     ConfigField("count", "gen_count", "int", 1, minimum=1, maximum=8),
@@ -77,8 +78,7 @@ class ConfigPanel(QWidget):
         self._values: dict[str, Any] = {}
         self.editors: dict[str, QWidget] = {}
 
-        form = QFormLayout(self)
-        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)  # the Inspector is narrow
+        form = kit.label_column(QFormLayout(self))
         form.setContentsMargins(0, 0, 8, 8)
         form.setVerticalSpacing(5)
         for f in fields:
@@ -90,7 +90,7 @@ class ConfigPanel(QWidget):
             self._values[f.key] = value
             editor = self._make_editor(f, value)
             self.editors[f.key] = editor
-            form.addRow(tr(f.label_key), editor)
+            form.addRow(kit.column_label(tr(f.label_key)), editor)
 
     def _options(self, f: ConfigField) -> list[str]:
         return f.options_by.get(self._values.get(f.depends_on), f.options)
@@ -118,7 +118,7 @@ class ConfigPanel(QWidget):
             self.set_value(key, v, update_editor=False)
 
         if f.kind == "choice":
-            w = QComboBox()
+            w = kit.fit_combo(QComboBox())
             for opt in f.options:
                 w.addItem(tr(f.option_prefix + opt) if f.option_prefix else opt, opt)
             w.setCurrentIndex(max(0, w.findData(value)))

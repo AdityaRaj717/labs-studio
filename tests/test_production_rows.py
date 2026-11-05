@@ -109,13 +109,13 @@ def test_colours_come_only_from_status_colors(page):
         assert status_color(page.jobs[0]) in allowed
 
 
-def test_a_rejected_row_uses_the_marker(page):
-    # A rejection is a decision, not a failure: red marker, rose stays for failed (R1 amended).
+def test_a_rejected_row_reads_in_plain_text(page):
+    # Contract (grading suite): the accent is for Start and flags only, so a decision reads in the normal
+    # text colour; rose stays for failed.
     page.mirror.apply_production_event(item("rejected"))
-    assert status_color(page.jobs[0]) == REVIEW_COLORS["rejected"] == theme.tokens()["marker"]
+    assert status_color(page.jobs[0]) == REVIEW_COLORS["rejected"] == theme.tokens()["done"]
     assert page.jobs[0].status is JobStatus.DONE
-    assert cell(page, COL_STATUS, Qt.ItemDataRole.ForegroundRole).name() == theme.tokens()["marker"]
-
+    assert cell(page, COL_STATUS, Qt.ItemDataRole.ForegroundRole).name() == theme.tokens()["done"]
 
 def test_prompt_cell_shows_id_and_edit_role_the_prompt_alone(page):
     page.mirror.apply_production_event(item())

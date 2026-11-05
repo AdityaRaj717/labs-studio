@@ -32,7 +32,7 @@ from src.ui.generator.prompt_model import COL_PROMPT, PromptTableModel
 from src.ui.generator.prompt_table import PromptTable
 from src.ui.generator.queue_bridge import QueueBridge
 from src.ui.generator.credit_meter import CreditMeter
-from src.ui.generator.sheet import FILTERS, RunStrip, SheetView
+from src.ui.generator.sheet import FILTERS, LABELS, RunStrip, SheetView
 from src.ui.generator.stats_header import StatsHeader
 from src.ui.generator.runs_panel import RunsPanel, rows_in_run
 from src.ui.generator.take_panel import TakePanel
@@ -164,7 +164,10 @@ class GeneratorPage(QWidget):
         for b in (self.btn_start, self.btn_pause, self.btn_stop, self.btn_retry, self.btn_folder):
             run_row.addWidget(b)
         self.stats_header.setWordWrap(True)
-        run_bar = QVBoxLayout()
+        self.run_bar = QWidget()
+        self.run_bar.setObjectName("RunBar")
+        self.run_bar.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        run_bar = QVBoxLayout(self.run_bar)
         run_bar.setContentsMargins(14, 8, 14, 0)
         run_bar.setSpacing(6)
         run_bar.addLayout(run_row)
@@ -181,10 +184,15 @@ class GeneratorPage(QWidget):
         self.size_slider.setToolTip(tr("gen_frame_size"))
         self.size_slider.setAccessibleName(tr("gen_frame_size"))
         self.size_slider.setValue(int(self._prefs.get(f"pages.{page_key}.frame_width", FRAME_WIDTHS[2])))
+        self.btn_density = IconButton("squares-four", tr("gen_density_tip"), self.sheet.cycle_density)
         self.btn_inspector = IconButton("sidebar-simple", tr("gen_inspector_toggle"), self.toggle_inspector, checkable=True)
         self.tools = flow_row(self.btn_import, self.btn_paste, self.btn_match, self.btn_match_chars, self.btn_clear,
-                              self.btn_assemble, self.view_switch, self.filter_bar, self.size_slider, self.btn_inspector)
-        tool_box = QVBoxLayout()
+                              self.btn_assemble, self.view_switch, self.filter_bar, self.size_slider, self.btn_density,
+                              self.btn_inspector)
+        self.tool_row = QWidget()
+        self.tool_row.setObjectName("ToolRow")
+        self.tool_row.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        tool_box = QVBoxLayout(self.tool_row)
         tool_box.setContentsMargins(14, 8, 14, 8)
         tool_box.addWidget(self.tools)
 
@@ -292,8 +300,8 @@ class GeneratorPage(QWidget):
         desk_box = QVBoxLayout()
         desk_box.setContentsMargins(0, 0, 0, 0)
         desk_box.setSpacing(0)
-        desk_box.addLayout(run_bar)
-        desk_box.addLayout(tool_box)
+        desk_box.addWidget(self.run_bar)
+        desk_box.addWidget(self.tool_row)
         desk_box.addLayout(work, 1)
         self.desk = QWidget()
         self.desk.setLayout(desk_box)
@@ -316,6 +324,8 @@ class GeneratorPage(QWidget):
         self.sheet.retry_requested.connect(self._confirm_retry)
         self.sheet.edit_requested.connect(self.edit_row)
         self.sheet.menu_requested.connect(self._sheet_menu)
+        self.sheet.marks_changed.connect(self.marks_changed)
+        self.take_panel.mark_requested.connect(self.mark_row)
         self.run_strip.row_clicked.connect(self.select_row)
         self.viewer.closed.connect(self.close_viewer)
         self.viewer.row_changed.connect(self._on_viewer_row)
@@ -608,13 +618,36 @@ class GeneratorPage(QWidget):
             current = self.sheet.currentIndex().row()
             self.table._build_menu(current if current in rows else rows[0], rows).exec(pos)
 
-    def palette_commands(self) -> list[tuple[str, object]]:
-        out = [(b.text() or b.accessibleName(), b.click) for b in (
+    def palette_commands(self) -> list[tuple]:
+        take = self._take_commands()
+        out = take + [(b.text() or b.accessibleName(), b.click) for b in (
             self.btn_start, self.btn_pause, self.btn_stop, self.btn_retry, self.btn_folder, self.btn_import,
             self.btn_paste, self.btn_match, self.btn_match_chars, self.btn_clear) if b.isEnabled()]
         out += [(tr("palette_view", name=tr(f"gen_view_{k}")), lambda k=k: self.set_view(k)) for k in ("sheet", "queue")]
         out += [(tr("palette_filter", name=tr(f"gen_filter_{k}")), lambda k=k: self.set_filter(k)) for k in FILTERS]
         out.append((tr("gen_inspector_toggle"), self.toggle_inspector))
+        if not take:  # with a selection, density is already listed among the take keys
+            out.append((tr("palette_density"), self.sheet.cycle_density, "J"))
+        return out
+
+    def _take_commands(self) -> list[tuple]:
+        """With frames selected, the take keys first, each with its key; they run what the key runs."""
+        rows = self.sheet.selected_rows()
+        if not rows:
+            return []
+        mark = self.sheet.mark_rows
+        out = [(tr("gen_approve"), lambda: self.approve_rows(rows), "P"),
+               (tr("gen_reject"), lambda: self.reject_rows(rows), "X"),
+               (tr("gen_retry"), lambda: self._confirm_retry(rows), "R"),
+               (tr("gen_edit"), lambda: self.edit_row(rows[0]), "E")]
+        out += [(tr("palette_rate", n=n), lambda n=n: mark(rows, Qt.Key.Key_0 + n), str(n)) for n in range(1, 6)]
+        out.append((tr("palette_clear_rating"), lambda: mark(rows, Qt.Key.Key_0), "0"))
+        out += [(tr("palette_label", name=tr(f"gen_label_{name}")), lambda name=name: self.sheet.label_rows(rows, name),
+                 str(6 + i) if i < 4 else "") for i, name in enumerate(LABELS)]
+        lights = getattr(self.window(), "cycle_lights", None)
+        if callable(lights):
+            out.append((tr("palette_lights_cycle"), lights, "L"))
+        out.append((tr("palette_density"), self.sheet.cycle_density, "J"))
         return out
 
     def _confirm_clear(self) -> None:
@@ -802,8 +835,21 @@ class GeneratorPage(QWidget):
                 continue
             job.review = "" if job.review == mark else mark
             self.model.refresh_job(job.id); self.model.flush()
-            if job.review == "approved":
-                self.sheet.draw_ring_on(job)
+
+    def marks_changed(self, rows: list[int]) -> None:
+        """Ratings and labels are the owner's own: saved with the project like a review, no credit spent."""
+        for row in rows:
+            self.model.refresh_job(self.model.job_at(row).id)
+        self.model.flush()
+        self._save_timer.start()
+
+    def mark_row(self, row: int, rating, label) -> None:
+        job = self.model.job_at(row)
+        if rating is not None:
+            job.rating = rating
+        if label is not None:
+            job.label = label
+        self.marks_changed([row])
 
     def approve_rows(self, rows: list[int]) -> None:
         self._mark_local(rows, "approved")
@@ -1069,7 +1115,10 @@ class GeneratorPage(QWidget):
         stats["total"] = len(self.jobs)
         self.stats_header.update_stats(stats)
         for key in FILTERS:
-            self.filter_bar.set_label(key, f"{tr(f'gen_filter_{key}')} {self._counts[('filter', key)]}")
+            n = self._counts[('filter', key)]
+            self.filter_bar.set_label(key, f"{tr(f'gen_filter_{key}')} {n}")
+            # empty secondary filters stay out of the way so the tool row fits one line
+            self.filter_bar.buttons[key].setVisible(bool(n) or key in ("all", "review") or key == self.sheet._filter)
         self._update_controls()
 
     def _tab_idle(self) -> bool:

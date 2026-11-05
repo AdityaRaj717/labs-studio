@@ -5,13 +5,31 @@ from __future__ import annotations
 from typing import Callable
 
 from PySide6.QtCore import QEvent, Qt
-from PySide6.QtWidgets import QFrame, QLabel, QLineEdit, QListWidget, QListWidgetItem, QVBoxLayout, QWidget
+from PySide6.QtGui import QColor
+from PySide6.QtWidgets import (
+    QFrame, QLabel, QLineEdit, QListWidget, QListWidgetItem, QStyledItemDelegate, QVBoxLayout, QWidget,
+)
 
+from src import theme
 from src.i18n import tr
 
-Command = tuple[str, Callable[[], None]]
+Command = tuple[str, Callable[[], None]] | tuple[str, Callable[[], None], str]  # optional third: its key
 WIDTH, HEIGHT = 480, 340
 ROLE_RUN = Qt.ItemDataRole.UserRole
+ROLE_KEY = Qt.ItemDataRole.UserRole + 1
+
+
+class _KeyDelegate(QStyledItemDelegate):
+    """Paints a command's shortcut right-aligned in the muted colour."""
+
+    def paint(self, p, option, index) -> None:
+        super().paint(p, option, index)
+        key = index.data(ROLE_KEY)
+        if key:
+            p.save()
+            p.setPen(QColor(theme.tokens()["text_muted"]))
+            p.drawText(option.rect.adjusted(0, 0, -10, 0), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, key)
+            p.restore()
 
 
 class CommandPalette(QFrame):
@@ -26,6 +44,7 @@ class CommandPalette(QFrame):
         self.edit.installEventFilter(self)
         self.list = QListWidget()
         self.list.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.list.setItemDelegate(_KeyDelegate(self.list))
         self.list.itemClicked.connect(self._run)
         self.none = QLabel(tr("palette_none"))
         self.none.setObjectName("Hint")
@@ -52,10 +71,11 @@ class CommandPalette(QFrame):
     def refilter(self, text: str) -> None:
         words = text.lower().split()
         self.list.clear()
-        for label, run in self.commands:
+        for label, run, *key in self.commands:
             if all(w in label.lower() for w in words):
                 item = QListWidgetItem(label)
                 item.setData(ROLE_RUN, run)
+                item.setData(ROLE_KEY, key[0] if key else "")
                 self.list.addItem(item)
         self.none.setVisible(self.list.count() == 0)
         # Nothing armed until something is typed: Enter straight after Ctrl+K must not start a run.

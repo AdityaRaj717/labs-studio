@@ -7,7 +7,7 @@ from typing import Callable
 from PySide6.QtCore import QPoint, QRect, QSize, Qt, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
-    QAbstractButton, QApplication, QButtonGroup, QHBoxLayout, QLabel, QLayout, QSizePolicy, QToolButton, QVBoxLayout, QWidget,
+    QAbstractButton, QApplication, QButtonGroup, QComboBox, QFormLayout, QHBoxLayout, QLabel, QLayout, QSizePolicy, QToolButton, QVBoxLayout, QWidget,
 )
 
 from src import theme
@@ -196,6 +196,37 @@ class Segmented(QWidget):
 def data_font(size: int = 11) -> QFont:
     f = QFont("Cascadia Mono")
     f.setStyleHint(QFont.StyleHint.Monospace)
+    f.setPixelSize(size)
+    return f
+
+
+def label_column(form: QFormLayout) -> QFormLayout:
+    """Labels right-aligned in a column beside their field, never wrapped above it."""
+    form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.DontWrapRows)
+    form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+    return form
+
+
+def column_label(text: str, width: int = 112) -> QLabel:
+    label = QLabel(text)
+    label.setFixedWidth(width)
+    label.setWordWrap(True)
+    label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+    return label
+
+
+def fit_combo(box: QComboBox) -> QComboBox:
+    """Grows with its row, elides only below its minimum, and carries the full text as a tooltip."""
+    box.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    box.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+    box.setMinimumContentsLength(8)
+    box.currentTextChanged.connect(box.setToolTip)
+    return box
+
+
+def ui_font(size: int = 11) -> QFont:
+    f = QFont()
+    f.setFamilies(["Segoe UI Variable Text", "Segoe UI"])
     f.setPixelSize(size)
     return f
 

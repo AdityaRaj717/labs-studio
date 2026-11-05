@@ -337,6 +337,7 @@ def test_stages_are_grouped(page):
     page.sheet.setRowHidden(0, True)
     assert page.sheet.group_start(1) == "reference"
     jobs[2].production_stage = "reference"
+    page.model.refresh_job(jobs[2].id); page.model.flush()  # the cache follows the model's signal
     assert [page.sheet.group_start(r) for r in range(1, 3)] == ["", ""]  # one stage needs no marks
 
 
@@ -638,3 +639,4 @@ def test_bind_flow_project_stores_its_url(qapp, page, monkeypatch):
     store = projects.store()
     project = proj_actions.bind_flow(page, store, store.active.id, client)
     assert project.flow_url == "https://flow/p/2" and project.flow_title == "Owl"
+

@@ -5,8 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Callable
 
-from PySide6.QtCore import QByteArray, QTimer
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtCore import QByteArray, QEasingCurve, QEvent, QPoint, QRect, Qt, QTimer, QVariantAnimation
+from PySide6.QtGui import QColor, QKeySequence, QPainter, QRegion, QShortcut
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QMainWindow, QMessageBox, QStackedWidget, QWidget
 
 from src import APP_NAME, __version__
@@ -41,6 +41,48 @@ PAGE_TOPICS: dict[str, str] = {
 }
 
 
+LIGHTS = (("full", 0.0), ("dim", 0.70), ("out", 0.92))  # L walks them; Esc is full again
+LIGHTS_MS = 160
+
+
+class LightsOverlay(QWidget):
+    """Black over the whole window but the sheet, like Lightroom's lights out. Never takes a click."""
+
+    def __init__(self, window: "MainWindow", parent: QWidget):
+        super().__init__(parent)
+        self.window_ = window
+        self.alpha = 0.0
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        parent.installEventFilter(self)
+        self.setGeometry(parent.rect())
+        self.hide()
+
+    def eventFilter(self, obj, event) -> bool:  # noqa: N802 - Qt override
+        if event.type() == QEvent.Type.Resize:
+            self.setGeometry(obj.rect())
+        return False
+
+    def hole(self) -> QRect:
+        """The sheet's viewport in this widget's coordinates, or an empty rect."""
+        sheet = getattr(self.window_.pages.get(self.window_.current_key), "sheet", None)
+        if sheet is None or not sheet.isVisible():
+            return QRect()
+        vp = sheet.viewport()
+        return QRect(self.mapFromGlobal(vp.mapToGlobal(QPoint(0, 0))), vp.size())
+
+    def set_alpha(self, alpha: float) -> None:
+        self.alpha = alpha
+        self.setVisible(alpha > 0)
+        self.raise_()
+        self.update()
+
+    def paintEvent(self, event) -> None:  # noqa: N802 - Qt override
+        p = QPainter(self)
+        p.setClipRegion(QRegion(self.rect()).subtracted(QRegion(self.hole())))
+        p.fillRect(self.rect(), QColor(0, 0, 0, round(255 * self.alpha)))
+        p.end()
+
+
 class MainWindow(QMainWindow):
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -66,6 +108,13 @@ class MainWindow(QMainWindow):
         self.sidebar.theme_toggled.connect(self.toggle_theme)
         self.sidebar.collapsed_changed.connect(lambda c: config.set("sidebar_collapsed", c))
         self.sidebar.version_clicked.connect(self.show_about)
+
+        self.lights = 0  # index into LIGHTS
+        self._lights_anim: QVariantAnimation | None = None
+        self.lights_overlay = LightsOverlay(self, central)
+        QShortcut(QKeySequence("L"), self, self.cycle_lights)
+        self._lights_esc = QShortcut(QKeySequence(Qt.Key.Key_Escape), self, lambda: self.set_lights(0))
+        self._lights_esc.setEnabled(False)  # only while the lights are down, so Esc keeps its other jobs
 
         self.palette_ = CommandPalette(self.palette_commands, central)
         QShortcut(QKeySequence("Ctrl+K"), self, self.palette_.open)
@@ -123,6 +172,40 @@ class MainWindow(QMainWindow):
         if key != self.current_key:
             log.info("Page: %s", key)
         self.current_key = key
+        self._apply_lights(LIGHTS[self.lights][1])
+
+    # ---- lights ------------------------------------------------------
+    def cycle_lights(self) -> None:
+        self.set_lights((self.lights + 1) % len(LIGHTS))
+
+    def set_lights(self, level: int) -> None:
+        """Fade to ``level`` in 160 ms, or at once when Windows asks for no animation."""
+        start = self.lights_overlay.alpha
+        self.lights = level
+        self._lights_esc.setEnabled(level != 0)
+        target = LIGHTS[level][1]
+        if self._lights_anim is not None:
+            self._lights_anim.stop()
+            self._lights_anim = None
+        if not theme.motion_enabled() or start == target:
+            self._apply_lights(target)
+            return
+        anim = QVariantAnimation(self)
+        anim.setDuration(LIGHTS_MS)
+        anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        anim.setStartValue(float(start))
+        anim.setEndValue(float(target))
+        anim.valueChanged.connect(self._apply_lights)
+        anim.finished.connect(lambda: setattr(self, "_lights_anim", None))  # deleted when stopped: never touch it after
+        self._lights_anim = anim
+        anim.start(QVariantAnimation.DeletionPolicy.DeleteWhenStopped)
+
+    def _apply_lights(self, alpha: float) -> None:
+        self.lights_overlay.set_alpha(alpha)
+        for page in self.pages.values():
+            sheet = getattr(page, "sheet", None)
+            if sheet is not None:
+                sheet.set_dim(alpha)
 
     def _update_live(self) -> None:
         """The rail's amber mark: which page has a batch running, seen from anywhere, agent runs included."""
@@ -157,6 +240,8 @@ class MainWindow(QMainWindow):
                 commands.append((tr("palette_go", page=tr(label_key)), lambda k=key: self.switch_page(k)))
         commands.append((tr("palette_toggle_theme"), self.toggle_theme))
         commands.append((tr("palette_toggle_sidebar"), self.sidebar.toggle_collapsed))
+        for level, (name, _alpha) in enumerate(LIGHTS):
+            commands.append((tr("palette_lights", level=tr(f"lights_{name}")), lambda n=level: self.set_lights(n)))
         if self.projects is not None:
             from src.ui.projects import actions
 

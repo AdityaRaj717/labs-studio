@@ -94,6 +94,8 @@ class Job:
     source_url: str = ""
     overrides: dict[str, Any] = field(default_factory=dict)  # this shot's own settings (``SHOT_KEYS``)
     production_stage: str = ""  # reference, still or animation: the Production stage this Item belongs to
+    rating: int = 0  # 0-5 stars, the owner's own grade; never sent to Flow
+    label: str = ""  # "", red, yellow, green, blue or purple
 
     def reset(self) -> None:
         self.status = JobStatus.PENDING

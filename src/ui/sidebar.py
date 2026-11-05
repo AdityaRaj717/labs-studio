@@ -1,7 +1,7 @@
 """Collapsible sidebar: nav buttons, theme toggle and version button.
 
-The rail stays dark in both modes, like the black rebate around a contact sheet. The current
-page gets the china-marker tick; a page with a batch running gets the live dot.
+The rail follows the mode. The current page gets a fill, never the accent; a page with a batch
+running gets the live dot.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from src import APP_NAME, __version__
 from src import features, theme
 from src.i18n import tr
 from src.ui import icons
-from src.ui.kit import IconButton
+from src.ui.kit import IconButton, set_icon
 
 # (page key, i18n label key, Phosphor icon) in sidebar order.
 NAV_ITEMS: list[tuple[str, str, str]] = [
@@ -34,9 +34,9 @@ NAV_ITEMS: list[tuple[str, str, str]] = [
 NAV_KEYS = [key for key, _, _ in NAV_ITEMS]
 GROUP_STARTS = {"projects", "webhook"}  # a gap before each: the desk, the library, the back room
 
-EXPANDED_WIDTH = 196
+EXPANDED_WIDTH = 200
 COLLAPSED_WIDTH = 52
-ROW_HEIGHT = 32
+ROW_HEIGHT = 30
 ICON_COLUMN = COLLAPSED_WIDTH - 16
 
 
@@ -84,13 +84,13 @@ class SidebarButton(QPushButton):
         colors = theme.tokens()
         on = self.isChecked()
         muted = self.objectName() == "SidebarFooterButton"
-        ink = colors["rail_muted"] if muted else colors["rail_text"]
+        ink = colors["rail_muted"] if muted else colors["rail_text"]  # the icon is always muted; no accent on the rail
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.setRenderHint(QPainter.RenderHint.TextAntialiasing)
         ratio = self.devicePixelRatioF()
         x = (ICON_COLUMN - 16) // 2
-        p.drawPixmap(x, (self.height() - 16) // 2, icons.pixmap(self.glyph, ink, 16, ratio))
+        p.drawPixmap(x, (self.height() - 16) // 2, icons.pixmap(self.glyph, colors["rail_muted"], 16, ratio))
 
         if not self.collapsed:
             text_font = QFont(self.font())
@@ -102,7 +102,7 @@ class SidebarButton(QPushButton):
             p.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, elided)
         if self.live:
             p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QColor(theme.COLORS["dark"]["live"]))
+            p.setBrush(QColor(colors["live"]))
             cx = ICON_COLUMN - 7 if self.collapsed else self.width() - 12
             cy = 9 if self.collapsed else self.height() / 2
             p.drawEllipse(QRectF(cx - 3.5, cy - 3.5, 7, 7))
@@ -126,7 +126,7 @@ class Sidebar(QWidget):
         self.toggle_btn = QPushButton()
         self.toggle_btn.setObjectName("SidebarToggle")
         self.toggle_btn.setFixedSize(ICON_COLUMN, ROW_HEIGHT)
-        self.toggle_btn.setIcon(icons.icon("sidebar-simple", theme.COLORS["dark"]["rail_muted"]))
+        set_icon(self.toggle_btn, "sidebar-simple", "rail_muted")
         self.toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.toggle_btn.clicked.connect(self.toggle_collapsed)
         self.title = QLabel(APP_NAME)

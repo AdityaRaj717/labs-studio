@@ -41,6 +41,13 @@ def progress_view(job: Job, now: float) -> ProgressView:
     return ProgressView(stage, percent, elapsed, max(1, job.tiles))
 
 
+def shown_percent(job: Job, view: ProgressView) -> int | None:
+    """The percent a row shows: Flow's own, else the job's last progress when no stage or clock is known."""
+    if view.percent is not None:
+        return view.percent
+    return round(job.progress * 100) if not (view.stage or view.elapsed_s is not None) else None
+
+
 def clock(seconds: int) -> str:
     m, s = divmod(int(seconds), 60)
     h, m = divmod(m, 60)

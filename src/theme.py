@@ -1,7 +1,7 @@
 """Dark/light colour tokens and the app-wide Qt stylesheet built from them.
 
-The world is a contact sheet. Pictures sit in black frames on neutral grey, so their colours
-can be judged; red is the china marker that decides, amber means something is live now.
+A grading suite: pictures sit in mid-grey cells on a neutral bench, so their colours can be
+judged; the accent is kept for decisions, amber means something is live now.
 """
 
 from __future__ import annotations
@@ -19,64 +19,41 @@ TOKEN_NAMES = (
     "border", "hover", "selected", "input_bg", "scrollbar",
     "raised", "border_strong", "marker", "live", "failed", "done", "frame", "frame_text", "frame_muted",
     "rail_text", "rail_muted", "rail_hover", "rail_selected", "rail_border",
+    "header", "cell", "cell_hover", "cell_selected", "faint", "star", "star_empty",
+    "label_red", "label_yellow", "label_green", "label_blue", "label_purple",
 )
 
+_LABELS = {"label_red": "#d64a3e", "label_yellow": "#d6b23c", "label_green": "#52a35c",
+           "label_blue": "#4180d0", "label_purple": "#8c62c8"}
+
 COLORS: dict[str, dict[str, str]] = {
-    "dark": {  # the sheet on a dark bench
-        "bg": "#141414",
-        "panel": "#1a1a1a",
-        "sidebar": "#080808",
-        "text": "#ece9e2",
-        "text_muted": "#a09d96",
-        "accent": "#d92d17",
-        "accent_text": "#ffffff",
-        "border": "#2c2c2c",
-        "hover": "#242424",
-        "selected": "#2e2e2e",
-        "input_bg": "#101010",
-        "scrollbar": "#3d3d3d",
-        "raised": "#212121",
-        "border_strong": "#4a4a4a",
-        "marker": "#ff4a30",
-        "live": "#f5a524",
-        "failed": "#ff7a9c",
-        "done": "#ece9e2",
-        "frame": "#000000",
-        "frame_text": "#ece9e2",
-        "frame_muted": "#9b9890",
-        "rail_text": "#ece9e2",
-        "rail_muted": "#94918a",
-        "rail_hover": "#1a1a1a",
-        "rail_selected": "#262626",
-        "rail_border": "#232323",
+    "dark": {  # a mid-grey bench, so a picture's colours can be judged
+        "sidebar": "#1b1b1d", "rail_text": "#dcdcdc", "rail_muted": "#8c8c8c", "rail_hover": "#262628",
+        "rail_selected": "#303033", "rail_border": "#141416",
+        "header": "#222224", "panel": "#29292b", "raised": "#333336", "bg": "#333333",
+        "cell": "#474747", "cell_hover": "#505050", "cell_selected": "#5a5a5a",
+        "text": "#e4e4e4", "text_muted": "#9b9b9b", "faint": "#9a9a9a",
+        "border": "#19191a", "border_strong": "#4a4a4c", "hover": "#38383b", "selected": "#424245",
+        "input_bg": "#1f1f21", "scrollbar": "#4a4a4c",
+        "accent": "#e5562b", "accent_text": "#ffffff", "marker": "#e5562b",
+        "live": "#f0a417", "failed": "#e46c8c", "done": "#e4e4e4",
+        "star": "#e2e2e2", "star_empty": "#5a5a5a",
+        "frame": "#3a3a3a", "frame_text": "#e4e4e4", "frame_muted": "#9b9b9b",
+        **_LABELS,
     },
-    "light": {  # the sheet on a light table
-        "bg": "#efefed",
-        "panel": "#f8f8f6",
-        "sidebar": "#080808",
-        "text": "#161616",
-        "text_muted": "#5a5955",
-        "accent": "#c7240f",
-        "accent_text": "#ffffff",
-        "border": "#d3d3cf",
-        "hover": "#e3e3e0",
-        "selected": "#d9d9d5",
-        "input_bg": "#ffffff",
-        "scrollbar": "#b4b4b0",
-        "raised": "#ffffff",
-        "border_strong": "#8e8e8a",
-        "marker": "#c7240f",
-        "live": "#a65f00",
-        "failed": "#b5124f",
-        "done": "#161616",
-        "frame": "#000000",
-        "frame_text": "#ece9e2",
-        "frame_muted": "#9b9890",
-        "rail_text": "#ece9e2",
-        "rail_muted": "#94918a",
-        "rail_hover": "#1a1a1a",
-        "rail_selected": "#262626",
-        "rail_border": "#232323",
+    "light": {  # the lights up
+        "sidebar": "#d4d4d6", "rail_text": "#1c1c1c", "rail_muted": "#5c5c5c", "rail_hover": "#c8c8ca",
+        "rail_selected": "#bdbdc0", "rail_border": "#c2c2c4",
+        "header": "#dadadc", "panel": "#e6e6e8", "raised": "#f1f1f2", "bg": "#a9a9a9",
+        "cell": "#b9b9b9", "cell_hover": "#c3c3c3", "cell_selected": "#cdcdcd",
+        "text": "#161616", "text_muted": "#3f3f3f", "faint": "#555557",
+        "border": "#c4c4c6", "border_strong": "#8a8a8c", "hover": "#d0d0d2", "selected": "#c4c4c7",
+        "input_bg": "#f6f6f7", "scrollbar": "#9a9a9c",
+        "accent": "#c8401a", "accent_text": "#ffffff", "marker": "#c8401a",
+        "live": "#7a4a00", "failed": "#b3164f", "done": "#161616",
+        "star": "#1c1c1c", "star_empty": "#8c8c8c",
+        "frame": "#b9b9b9", "frame_text": "#161616", "frame_muted": "#4f4f4f",
+        **_LABELS,
     },
 }
 
@@ -84,7 +61,7 @@ MODES = tuple(COLORS)
 
 # Three sizes only; rank comes from weight and case.
 UI_FONT = '"Segoe UI Variable Text", "Segoe UI"'
-TITLE_FONT = '"Bahnschrift SemiBold SemiCondensed", "Bahnschrift", "Segoe UI"'
+TITLE_FONT = '"Segoe UI Variable Display", "Segoe UI"'
 DATA_FONT = '"Cascadia Mono", Consolas'
 
 _current_mode = "dark"
@@ -163,6 +140,12 @@ def _control_images(mode: str) -> dict[str, str]:
     return out
 
 
+def lighten(color: str, amount: float = 0.08) -> str:
+    """``color`` moved ``amount`` of the way to white: the primary button's hover."""
+    rgb = [int(color[i:i + 2], 16) for i in (1, 3, 5)]
+    return "#" + "".join(f"{round(v + (255 - v) * amount):02x}" for v in rgb)
+
+
 def build_qss(mode: str, images: dict[str, str] | None = None) -> str:
     c = COLORS.get(mode, COLORS["dark"])
     img = images or {"down": "", "up": "", "rail_down": "", "check": ""}
@@ -171,18 +154,19 @@ QWidget {{
     background-color: {c['bg']};
     color: {c['text']};
     font-family: {UI_FONT};
-    font-size: 13px;
+    font-size: 12px;
 }}
 QLabel, QCheckBox, QRadioButton {{ background-color: transparent; }}
 QMainWindow, QStackedWidget {{ background-color: {c['bg']}; }}
 *:disabled {{ color: {c['text_muted']}; }}
 
-/* ---- rail: dark in both modes, like the sheet's own rebate ---- */
+/* ---- rail ---- */
 #Sidebar {{ background-color: {c['sidebar']}; }}
 #Sidebar QWidget {{ background-color: transparent; color: {c['rail_text']}; }}
 #SidebarTitle {{
     font-family: {TITLE_FONT};
-    font-size: 20px;
+    font-size: 15px;
+    font-weight: 600;
     letter-spacing: 0.2px;
     padding: 0 2px;
 }}
@@ -220,77 +204,78 @@ QPushButton#NavButton:focus, QPushButton#SidebarFooterButton:focus, QPushButton#
 #Sidebar QToolButton::menu-indicator {{ image: none; width: 0; }}
 
 /* ---- type ---- */
-#PageTitle {{ font-family: {TITLE_FONT}; font-size: 20px; }}
+#PageTitle {{ font-family: {TITLE_FONT}; font-size: 15px; font-weight: 600; }}
+#RunBar, #ToolRow {{ background-color: {c['header']}; border-bottom: 1px solid {c['border']}; }}
+#RunBar QWidget, #ToolRow QWidget {{ background-color: transparent; }}
 #PageBody, #DemoBanner, #StatsNote {{ color: {c['text_muted']}; }}
 #RunNotice {{ color: {c['text_muted']}; font-weight: 600; }}
 #RunNotice[live="true"] {{ color: {c['live']}; }}
-#CreditMeter {{ color: {c['text']}; font-family: {DATA_FONT}; font-size: 11px; }}
+#CreditMeter {{ color: {c['text_muted']}; font-family: {UI_FONT}; font-size: 11px; }}  /* a sentence, not frame data */
 #CreditMeter[stale="true"] {{ color: {c['text_muted']}; }}
 #FieldHeading {{ font-weight: 600; }}
 #Hint {{ color: {c['text_muted']}; }}
-#EmptyTitle {{ font-family: {TITLE_FONT}; font-size: 20px; }}
+#EmptyTitle {{ font-family: {TITLE_FONT}; font-size: 15px; font-weight: 600; }}
 QLabel#StatsHeader {{ color: {c['text_muted']}; font-family: {DATA_FONT}; font-size: 11px; }}
 a {{ color: {c['marker']}; }}
 
-/* ---- buttons ---- */
+/* ---- buttons: flat fills, no outlines; the accent is kept for Start ---- */
 QPushButton, QToolButton {{
     background-color: {c['raised']};
-    border: 1px solid {c['border']};
+    border: none;
     border-radius: 2px;
-    padding: 5px 11px;
-    min-height: 18px;
+    padding: 0 10px;
+    min-height: 26px;
 }}
-QPushButton:hover, QToolButton:hover {{ background-color: {c['hover']}; border-color: {c['border_strong']}; }}
+QPushButton:hover, QToolButton:hover {{ background-color: {c['hover']}; }}
 QPushButton:pressed, QToolButton:pressed {{ background-color: {c['selected']}; }}
-QPushButton:focus, QToolButton:focus {{ border-color: {c['text']}; }}
-QPushButton:disabled, QToolButton:disabled {{
-    background-color: transparent;
-    color: {c['text_muted']};
-    border-color: {c['border']};
-}}
-QPushButton:checked, QToolButton:checked {{ background-color: {c['selected']}; border-color: {c['border_strong']}; }}
+QPushButton:focus, QToolButton:focus {{ outline: 1px solid {c['text_muted']}; }}
+QPushButton:disabled, QToolButton:disabled {{ color: {c['faint']}; }}
+QPushButton:checked, QToolButton:checked {{ background-color: {c['selected']}; color: {c['text']}; }}
 QPushButton#PrimaryButton {{
     background-color: {c['accent']};
     color: {c['accent_text']};
-    border-color: {c['accent']};
     font-weight: 600;
 }}
-QPushButton#PrimaryButton:hover {{ background-color: {c['marker']}; border-color: {c['marker']}; }}
-QPushButton#PrimaryButton:focus {{ border-color: {c['text']}; }}
-QPushButton#PrimaryButton:disabled {{
-    background-color: transparent;
-    color: {c['text_muted']};
-    border-color: {c['border']};
-    font-weight: 400;
-}}
-QToolButton#IconButton {{ background-color: transparent; border-color: transparent; padding: 4px; }}
+QPushButton#PrimaryButton:hover {{ background-color: {lighten(c['accent'])}; }}
+QPushButton#PrimaryButton:disabled {{ background-color: {c['raised']}; color: {c['faint']}; font-weight: 400; }}
+QToolButton#IconButton {{ background-color: transparent; padding: 4px; min-height: 0; }}
 QToolButton#IconButton:hover {{ background-color: {c['hover']}; }}
-QToolButton#IconButton:focus {{ border-color: {c['border_strong']}; }}
 QToolButton#IconButton:checked {{ background-color: {c['selected']}; }}
 QToolButton#Segment {{
     background-color: transparent;
     border: none;
-    border-bottom: 2px solid transparent;
-    border-radius: 0;
     color: {c['text_muted']};
-    padding: 4px 8px;
+    padding: 0 8px;
 }}
-QToolButton#Segment:hover {{ color: {c['text']}; }}
-QToolButton#Segment:focus {{ color: {c['text']}; background-color: {c['hover']}; }}
-QToolButton#Segment:checked {{ color: {c['text']}; border-bottom-color: {c['text']}; font-weight: 600; }}
+QToolButton#Segment:hover {{ color: {c['text']}; background-color: {c['hover']}; }}
+QToolButton#Segment:checked {{ color: {c['text']}; background-color: {c['selected']}; }}
+QToolButton#SectionHeader {{
+    background-color: {c['header']};
+    border-bottom: 1px solid {c['border']};
+    border-radius: 0;
+    padding: 0;
+    min-height: 26px;
+}}
+QToolButton#SectionHeader:hover {{ background-color: {c['hover']}; }}
+#SectionTitle {{ color: {c['text_muted']}; font-size: 11px; font-weight: 600; }}
+#RowLabel {{ color: {c['text_muted']}; font-size: 11px; }}
+QToolButton#StarButton {{ background: transparent; color: {c['star_empty']}; padding: 0 1px; min-height: 18px; font-size: 12px; }}
+QToolButton#StarButton:checked {{ color: {c['star']}; background: transparent; }}
+QToolButton#StarButton:hover {{ color: {c['text']}; }}
+QToolButton#LabelSwatch {{ padding: 0; min-height: 0; }}
 #Inspector QWidget#TakeStrip {{ background-color: transparent; border: none; }}
 #Inspector QPushButton#TakeChip {{ background-color: transparent; }}
 QPushButton#TakeChip {{
     background-color: transparent;
-    border: 1px solid {c['border']};
     color: {c['text_muted']};
-    font-family: 'Cascadia Mono';
-    padding: 3px 8px;
+    font-family: {DATA_FONT};
+    font-size: 11px;
+    padding: 0 8px;
     min-width: 0;
 }}
-QPushButton#TakeChip:hover {{ color: {c['text']}; }}
-QPushButton#TakeChip:checked {{ color: {c['text']}; border: 2px solid {c['text']}; font-weight: 600; }}
-QPushButton#HelpButton {{ background-color: transparent; border-color: transparent; padding: 0; }}
+QPushButton#TakeChip:hover {{ color: {c['text']}; background-color: {c['hover']}; }}
+QPushButton#TakeChip:checked {{ color: {c['text']}; background-color: {c['selected']}; font-weight: 600; }}
+QPushButton#HelpButton {{ background-color: transparent; padding: 0; min-height: 0; }}
 QPushButton#HelpButton:hover {{ background-color: {c['hover']}; }}
 
 /* ---- fields ---- */
@@ -298,19 +283,19 @@ QPlainTextEdit, QTextEdit, QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {{
     background-color: {c['input_bg']};
     border: 1px solid {c['border']};
     border-radius: 2px;
-    selection-background-color: {c['accent']};
-    selection-color: {c['accent_text']};
+    selection-background-color: {c['selected']};
+    selection-color: {c['text']};
 }}
 QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {{ padding: 4px 7px; min-height: 18px; }}
 QPlainTextEdit, QTextEdit {{ padding: 5px 7px; }}
 QLineEdit:hover, QComboBox:hover, QSpinBox:hover, QDoubleSpinBox:hover, QPlainTextEdit:hover {{ border-color: {c['border_strong']}; }}
-QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus, QPlainTextEdit:focus, QTextEdit:focus {{ border-color: {c['text']}; }}
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus, QPlainTextEdit:focus, QTextEdit:focus {{ border-color: {c['text_muted']}; }}
 QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled {{
     color: {c['text_muted']};
     background-color: transparent;
 }}
-QSpinBox, QDoubleSpinBox {{ max-width: 130px; font-family: {DATA_FONT}; font-size: 12px; }}
-QPlainTextEdit#LogView, QPlainTextEdit#CodeView {{ font-family: {DATA_FONT}; font-size: 12px; }}
+QSpinBox, QDoubleSpinBox {{ max-width: 130px; font-family: {DATA_FONT}; font-size: 11px; }}
+QPlainTextEdit#LogView, QPlainTextEdit#CodeView {{ font-family: {DATA_FONT}; font-size: 11px; }}
 QComboBox::drop-down {{ border: none; width: 20px; }}
 QComboBox::down-arrow {{ image: url({img['down']}); width: 12px; height: 12px; }}
 QComboBox QAbstractItemView {{
@@ -336,7 +321,7 @@ QCheckBox::indicator {{
 }}
 QCheckBox::indicator:hover {{ border-color: {c['text']}; }}
 QCheckBox::indicator:checked {{ background: {c['accent']}; border-color: {c['accent']}; image: url({img['check']}); }}
-QCheckBox:focus {{ color: {c['text']}; font-weight: 600; }}
+QCheckBox:focus {{ color: {c['text']}; outline: 1px solid {c['text_muted']}; }}
 QSlider::groove:horizontal {{ height: 2px; background: {c['border_strong']}; }}
 QSlider::handle:horizontal {{ width: 8px; margin: -7px 0; background: {c['text']}; border-radius: 1px; }}
 QSlider {{ background: transparent; }}
@@ -344,23 +329,25 @@ QSlider {{ background: transparent; }}
 /* ---- panels ---- */
 #Inspector {{ background-color: {c['panel']}; border-left: 1px solid {c['border']}; }}
 #Inspector QTabWidget::tab-bar {{ left: 12px; }}
+#Inspector QTabBar {{ background-color: {c['header']}; }}
 #Inspector QWidget {{ background-color: {c['panel']}; }}
-#Inspector QLabel, #Inspector QCheckBox, #Inspector QToolButton#Segment, #Inspector QToolButton#IconButton {{ background-color: transparent; }}
+#Inspector QLabel, #Inspector QCheckBox, #Inspector QToolButton#Segment, #Inspector QToolButton#IconButton,
+#Inspector QToolButton#StarButton {{ background-color: transparent; }}
 #Inspector QPushButton, #Inspector QToolButton {{ background-color: {c['raised']}; }}
 #Inspector QPushButton:hover, #Inspector QToolButton:hover {{ background-color: {c['hover']}; }}
-#Inspector QPushButton:disabled {{ background-color: transparent; }}
+#Inspector QToolButton#SectionHeader {{ background-color: {c['header']}; }}
+#Inspector QToolButton#SectionHeader:hover {{ background-color: {c['hover']}; }}
 #Inspector QPushButton#PrimaryButton {{ background-color: {c['accent']}; }}
-#Inspector QPushButton#PrimaryButton:hover {{ background-color: {c['marker']}; }}
-#Inspector QPushButton#PrimaryButton:disabled {{ background-color: transparent; }}
+#Inspector QPushButton#PrimaryButton:hover {{ background-color: {lighten(c['accent'])}; }}
 #Inspector QLineEdit, #Inspector QComboBox, #Inspector QSpinBox, #Inspector QDoubleSpinBox, #Inspector QPlainTextEdit {{ background-color: {c['input_bg']}; }}
-#TakePreview {{ background-color: {c['frame']}; color: {c['frame_muted']}; }}
+#TakePreview {{ background-color: {c['cell']}; color: {c['text_muted']}; }}
 #Viewer, #Viewer QWidget {{ background-color: {c['frame']}; color: {c['frame_text']}; }}
 #Viewer QLabel {{ background-color: transparent; }}
 #Viewer QPushButton, #Viewer QToolButton {{ background-color: {c['rail_selected']}; border-color: {c['rail_border']}; color: {c['frame_text']}; }}
 #Viewer QPushButton:hover, #Viewer QToolButton:hover {{ background-color: {c['rail_hover']}; border-color: {c['frame_muted']}; }}
 #Viewer QPushButton:disabled, #Viewer QToolButton:disabled {{ background-color: transparent; color: {c['frame_muted']}; }}
-#Viewer QPushButton#PrimaryButton {{ background-color: {c['accent']}; border-color: {c['accent']}; color: {c['accent_text']}; }}
-#Viewer QPushButton#PrimaryButton:disabled {{ background-color: transparent; border-color: {c['rail_border']}; color: {c['frame_muted']}; }}
+#Viewer QPushButton#PrimaryButton {{ background-color: {c['accent']}; color: {c['accent_text']}; }}
+#Viewer QPushButton#PrimaryButton:disabled {{ background-color: transparent; color: {c['frame_muted']}; }}
 #ViewerText {{ color: {c['frame_muted']}; font-family: {DATA_FONT}; font-size: 11px; }}
 #ViewerPrompt {{ color: {c['frame_text']}; }}
 QTextBrowser#HelpView {{ background-color: {c['bg']}; border: none; padding: 0 16px; }}
@@ -386,7 +373,7 @@ QTabBar::tab {{
     margin-right: 16px;
 }}
 QTabBar::tab:hover {{ color: {c['text']}; }}
-QTabBar::tab:selected {{ color: {c['text']}; border-bottom-color: {c['text']}; font-weight: 600; }}
+QTabBar::tab:selected {{ color: {c['text']}; border-bottom-color: {c['text']}; }}
 QTabBar:focus {{ outline: none; }}
 
 /* ---- lists and tables ---- */
@@ -411,25 +398,26 @@ QTableView {{
 }}
 QTableView::item {{ border-bottom: 1px solid {c['border']}; padding: 2px 6px; }}
 QTableView::item:selected {{ background-color: {c['selected']}; }}
-QHeaderView {{ background-color: {c['bg']}; }}
+QHeaderView {{ background-color: {c['header']}; }}
 QHeaderView::section {{
-    background-color: {c['bg']};
+    background-color: {c['header']};
     color: {c['text_muted']};
+    font-size: 11px;
     border: none;
-    border-bottom: 1px solid {c['border_strong']};
+    border-bottom: 1px solid {c['border']};
+    border-right: 1px solid {c['border']};
     padding: 5px 6px;
-    font-weight: 600;
     text-align: left;
 }}
 QScrollArea {{ border: none; background: transparent; }}
 
-QScrollBar:vertical {{ background: transparent; width: 10px; margin: 0; }}
-QScrollBar::handle:vertical {{ background: {c['scrollbar']}; min-height: 24px; margin: 2px; border-radius: 1px; }}
+QScrollBar:vertical {{ background: transparent; width: 8px; margin: 0; }}
+QScrollBar::handle:vertical {{ background: {c['scrollbar']}; min-height: 24px; margin: 1px; border-radius: 2px; }}
 QScrollBar::handle:vertical:hover {{ background: {c['border_strong']}; }}
 QScrollBar::add-line, QScrollBar::sub-line {{ height: 0; width: 0; }}
 QScrollBar::add-page, QScrollBar::sub-page {{ background: transparent; }}
-QScrollBar:horizontal {{ background: transparent; height: 10px; margin: 0; }}
-QScrollBar::handle:horizontal {{ background: {c['scrollbar']}; min-width: 24px; margin: 2px; border-radius: 1px; }}
+QScrollBar:horizontal {{ background: transparent; height: 8px; margin: 0; }}
+QScrollBar::handle:horizontal {{ background: {c['scrollbar']}; min-width: 24px; margin: 1px; border-radius: 2px; }}
 
 QMenu {{ background-color: {c['raised']}; border: 1px solid {c['border_strong']}; padding: 4px 0; }}
 QMenu::item {{ padding: 5px 24px 5px 14px; background: transparent; }}
@@ -445,5 +433,5 @@ QToolTip {{
 #Palette {{ background-color: {c['raised']}; border: 1px solid {c['border_strong']}; }}
 #Palette QWidget {{ background-color: {c['raised']}; }}
 #Palette QListWidget {{ border: none; }}
-#Palette QLineEdit {{ border: none; border-bottom: 1px solid {c['border']}; border-radius: 0; font-size: 13px; padding: 8px 10px; }}
+#Palette QLineEdit {{ border: none; border-bottom: 1px solid {c['border']}; border-radius: 0; font-size: 12px; padding: 8px 10px; }}
 """

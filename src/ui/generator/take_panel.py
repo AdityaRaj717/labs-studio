@@ -5,21 +5,69 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
-    QComboBox, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea, QSizePolicy, QVBoxLayout,
-    QWidget,
+    QComboBox, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QScrollArea, QSizePolicy, QToolButton,
+    QVBoxLayout, QWidget,
 )
 
 from src.gen.models import Job, JobStatus, Take
 from src.gen.provider import SHOT_KEYS, ConfigField
 from src.gen.progress import clock, progress_view, stage_word
 from src.i18n import tr
-from src.ui.generator.sheet import edge_state, is_video, picture_path
+from src import theme
+from src.ui import icons
+from src.ui.generator.sheet import LABELS, edge_state, is_video, picture_path, star_icon
 from src.ui.generator.thumbs import service as thumbs
-from src.ui.kit import FlowLayout, IconButton, set_icon
+from src.ui.kit import FlowLayout, IconButton, column_label, fit_combo, label_column, set_icon
 
 PREVIEW_HEIGHT = 180
+LABEL_COLUMN = 92  # narrower so "Page setting (Nano Banana 2.1)" fits at 1280
+_COLLAPSED: set[str] = set()  # sections the owner folded, kept for the session
+
+
+class Section(QWidget):
+    """A 26px header bar that folds its body away; the fold is remembered in memory per section."""
+
+    def __init__(self, key: str, *widgets: QWidget):
+        super().__init__()
+        self.key = key
+        self.header = QToolButton()
+        self.header.setObjectName("SectionHeader")
+        self.header.setCheckable(True)
+        self.header.setFixedHeight(26)
+        self.header.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.header.setAccessibleName(tr("gen_section_toggle", name=tr(key)))
+        row = QHBoxLayout(self.header)
+        row.setContentsMargins(12, 0, 10, 0)
+        title = QLabel(tr(key))
+        title.setObjectName("SectionTitle")
+        self.chevron = QLabel()
+        for w in (title, self.chevron):
+            w.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        row.addWidget(title)
+        row.addStretch(1)
+        row.addWidget(self.chevron)
+        self.body = QWidget()
+        box = QVBoxLayout(self.body)
+        box.setContentsMargins(12, 8, 12, 10)
+        box.setSpacing(8)
+        for w in widgets:
+            box.addWidget(w)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self.header)
+        layout.addWidget(self.body)
+        self.header.setChecked(key not in _COLLAPSED)
+        self.header.toggled.connect(self._fold)
+        self._fold(self.header.isChecked())
+
+    def _fold(self, open_: bool) -> None:
+        (_COLLAPSED.discard if open_ else _COLLAPSED.add)(self.key)
+        self.body.setVisible(open_)
+        self.chevron.setPixmap(icons.pixmap("caret-down" if open_ else "caret-right", theme.tokens()["text_muted"],
+                                            12, self.devicePixelRatioF()))
 
 
 def can_approve(job: Job) -> bool:
@@ -84,6 +132,7 @@ class TakePanel(QScrollArea):
     take_review_requested = Signal(int, int, str, str)  # row, take, approve or reject, note
     frame_changed = Signal(int, str, object)  # row, start_frame or end_frame, Path or None
     shot_override_changed = Signal(list, str, object)  # rows, a SHOT_KEYS key, value or None for the page's
+    mark_requested = Signal(int, object, object)  # row, rating or None, label or None
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -106,8 +155,7 @@ class TakePanel(QScrollArea):
         self.edge.setWordWrap(True)
 
         self.btn_approve = self._action("gen_approve", "check", "gen_approve_tip",
-                                        lambda: self._verdict("approve"), "accent_text")
-        self.btn_approve.setObjectName("PrimaryButton")
+                                        lambda: self._verdict("approve"))
         self.btn_reject = self._action("gen_reject", "x", "gen_reject_tip",
                                        lambda: self._verdict("reject"))
         self.btn_retry = self._action("gen_retry", "arrow-clockwise", "gen_retry_tip",
@@ -122,6 +170,38 @@ class TakePanel(QScrollArea):
         flow = FlowLayout(self.actions_holder)
         for b in (self.btn_approve, self.btn_reject, self.btn_retry, self.btn_edit, self.btn_view, self.btn_open):
             flow.addWidget(b)
+
+        # The owner's own grade: stars and a colour label, local only.
+        self.marks = QWidget()
+        marks = QHBoxLayout(self.marks)
+        marks.setContentsMargins(0, 0, 0, 0)
+        marks.setSpacing(2)
+        self.star_buttons: list[QToolButton] = []
+        for n in range(1, 6):
+            b = QToolButton()
+            b.setObjectName("StarButton")
+            b.setFixedSize(18, 18)
+            b.setIconSize(QSize(12, 12))
+            b.setCheckable(True)
+            b.setToolTip(tr("gen_rating_tip", n=n))
+            b.setAccessibleName(tr("gen_rating_tip", n=n))
+            b.clicked.connect(lambda _c=False, n=n: self._rate(n))
+            marks.addWidget(b)
+            self.star_buttons.append(b)
+        marks.addSpacing(10)
+        self.label_buttons: dict[str, QToolButton] = {}
+        for name in ("",) + LABELS:
+            b = QToolButton()
+            b.setObjectName("LabelSwatch")
+            b.setCheckable(True)
+            b.setFixedSize(14, 14)
+            tip = tr("gen_label_tip", name=tr(f"gen_label_{name}")) if name else tr("gen_label_none")
+            b.setToolTip(tip)
+            b.setAccessibleName(tip)
+            b.clicked.connect(lambda _c=False, name=name: self.mark_requested.emit(self.row, None, name))
+            marks.addWidget(b)
+            self.label_buttons[name] = b
+        marks.addStretch(1)
 
         self.strip_title = QLabel(tr("gen_take_takes"))
         self.strip_title.setObjectName("FieldHeading")
@@ -166,21 +246,17 @@ class TakePanel(QScrollArea):
             frames.addLayout(line)
             self.frame_slots[which] = (name, choose, clear)
 
-        self.shot_title = QLabel(tr("gen_take_shot"))
-        self.shot_title.setObjectName("FieldHeading")
         self.shot = QWidget()
-        self.shot_form = QFormLayout(self.shot)
+        self.shot_form = label_column(QFormLayout(self.shot))
         self.shot_form.setContentsMargins(0, 0, 0, 0)
-        self.shot_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)  # narrow Inspector at 1280
         self.shot_fields: list[ConfigField] = []
         self.shot_boxes: dict[str, QComboBox] = {}
         self.page_values = lambda: {}  # the page's own settings, set by GeneratorPage
-        self.shot_title.hide()
         self.shot.hide()
 
-        self.error = self._field("gen_take_error")
+        self.error = self._field("gen_take_error", labelled=False)
         self.live = self._field("gen_take_progress")
-        self.prompt = self._field("gen_take_prompt")
+        self.prompt = self._field("gen_take_prompt", labelled=False)
         self.cast = self._field("gen_take_cast")
         self.scene = self._field("gen_take_scene")
         self.refs = self._field("gen_take_refs")
@@ -191,23 +267,20 @@ class TakePanel(QScrollArea):
         self.none.setObjectName("Hint")
         self.none.setWordWrap(True)
 
+        self.none.setContentsMargins(12, 12, 12, 0)
+        self.take_section = Section("gen_tab_take", self.preview, self.edge, self.marks, self.strip_title, self.strip,
+                                    self.take_info, self.note, self.actions_holder, self.live, self.cast, self.scene,
+                                    self.refs, self.frames_title, self.frames, self.origin)
+        self.prompt_section = Section("gen_take_prompt", self.prompt)
+        self.error_section = Section("gen_take_error", self.error)
+        self.shot_section = Section("gen_take_shot", self.shot)
         body = QWidget()
         layout = QVBoxLayout(body)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(10)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
         layout.addWidget(self.none)
-        layout.addWidget(self.preview)
-        layout.addWidget(self.edge)
-        for w in (self.strip_title, self.strip, self.take_info, self.note):
-            layout.addWidget(w)
-        layout.addWidget(self.actions_holder)
-        for field in (self.live, self.error, self.prompt, self.cast, self.scene, self.refs):
-            layout.addWidget(field)
-        layout.addWidget(self.frames_title)
-        layout.addWidget(self.frames)
-        layout.addWidget(self.shot_title)
-        layout.addWidget(self.shot)
-        layout.addWidget(self.origin)
+        for section in (self.take_section, self.prompt_section, self.error_section, self.shot_section):
+            layout.addWidget(section)
         layout.addStretch(1)
         self.setWidget(body)
         self.show_rows(None, [])
@@ -219,19 +292,45 @@ class TakePanel(QScrollArea):
         b.clicked.connect(lambda _checked=False: slot())
         return b
 
-    def _field(self, key: str) -> QWidget:
+    def _field(self, key: str, labelled: bool = True) -> QWidget:
+        """A label and value row: the label right-aligned in a fixed column.
+        Unlabelled when the section header already names it."""
         holder = QWidget()
-        box = QVBoxLayout(holder)
+        box = QHBoxLayout(holder)
         box.setContentsMargins(0, 0, 0, 0)
-        box.setSpacing(2)
+        box.setSpacing(8)
         title = QLabel(tr(key))
-        title.setObjectName("FieldHeading")
+        title.setObjectName("RowLabel")
+        title.setFixedWidth(LABEL_COLUMN)
+        title.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
         holder.value = QLabel()
         holder.value.setWordWrap(True)
+        holder.value.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         holder.value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        box.addWidget(title)
-        box.addWidget(holder.value)
+        if labelled:
+            box.addWidget(title, 0, Qt.AlignmentFlag.AlignTop)
+        box.addWidget(holder.value, 1)
         return holder
+
+    def _rate(self, n: int) -> None:
+        """A star sets the rating; the current rating's star again clears it."""
+        job = self.model_.job_at(self.row) if self.model_ is not None and self.row >= 0 else None
+        if job is not None:
+            self.mark_requested.emit(self.row, 0 if job.rating == n else n, None)
+
+    def _show_marks(self, job: Job | None) -> None:
+        self.marks.setVisible(job is not None)
+        if job is None:
+            return
+        c = theme.tokens()
+        for i, b in enumerate(self.star_buttons):
+            b.setChecked(i < job.rating)
+            b.setIcon(star_icon(c["star" if i < job.rating else "star_empty"]))
+        for name, b in self.label_buttons.items():
+            b.setChecked(job.label == name)
+            fill = c[f"label_{name}"] if name else "transparent"
+            ring = c["text"] if job.label == name else (c["border_strong"] if not name else fill)
+            b.setStyleSheet(f"QToolButton {{ background-color: {fill}; border: 1px solid {ring}; border-radius: 2px; }}")
 
     def _set(self, field: QWidget, text: str) -> None:
         field.value.setText(text)
@@ -246,10 +345,10 @@ class TakePanel(QScrollArea):
             self.shot_form.removeRow(0)
         self.shot_boxes = {}
         for f in self.shot_fields:
-            box = QComboBox()
+            box = fit_combo(QComboBox())
             box.setAccessibleName(tr(f.label_key))
             box.activated.connect(lambda _i, key=f.key: self._shot_picked(key))
-            self.shot_form.addRow(tr(f.label_key), box)
+            self.shot_form.addRow(column_label(tr(f.label_key), LABEL_COLUMN), box)
             self.shot_boxes[f.key] = box
 
     def _shot_options(self, f: ConfigField, values: dict) -> list[str]:
@@ -269,7 +368,6 @@ class TakePanel(QScrollArea):
     def _show_shot(self, jobs: list[Job]) -> None:
         own = [j for j in jobs if not j.production_id]
         shown = bool(self.shot_fields) and bool(own) and len(own) == len(jobs)
-        self.shot_title.setVisible(shown)
         self.shot.setVisible(shown)
         if not shown:
             return
@@ -390,6 +488,11 @@ class TakePanel(QScrollArea):
         self.btn_reject.setText(tr("gen_take_reject_n", n=take.n) if take is not None else tr("gen_reject"))
         self._show_frames(job)
         self._show_shot(jobs)
+        self._show_marks(job)
+        self.take_section.setVisible(bool(jobs))
+        self.prompt_section.setVisible(not self.prompt.isHidden())
+        self.error_section.setVisible(not self.error.isHidden())
+        self.shot_section.setVisible(not self.shot.isHidden())
         if job is None:
             return
         self.edge.setText("  ".join(p for p in (f"{job.index:03d}", job.item_id, edge_state(job)) if p))
@@ -406,6 +509,7 @@ class TakePanel(QScrollArea):
             self.btn_reject.setEnabled(take_can_reject(job, take))
             if take.prompt:
                 self._set(self.prompt, take.prompt)
+                self.prompt_section.setVisible(True)
             if take.refs_used:
                 self._set(self.refs, "\n".join(Path(r).name for r in take.refs_used))
             path = take_path(take) or (path if take.n == job.take else None)

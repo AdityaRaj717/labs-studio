@@ -332,8 +332,97 @@ def test_retry_disabled_on_running_frame(page):
     assert page.take_panel.btn_retry.isEnabled()
 
 
-def test_ring_path_is_cached_and_tapered():
-    from src.ui.generator.sheet import ring_path
-    a = ring_path(7, 200, 120, 3.4, 181)
-    assert ring_path(7, 200, 120, 3.4, 181) is a
-    assert not a.isEmpty() and a.boundingRect().width() > 180
+def _old_group_start(sheet, row):
+    """The per-paint algorithm the cache replaced, kept here as the reference."""
+    model = sheet.model()
+    stage = model.job_at(row).production_stage
+    if not stage:
+        return ""
+    stages = {model.job_at(r).production_stage for r in range(model.rowCount()) if not sheet.isRowHidden(r)}
+    if len(stages - {""}) < 2:
+        return ""
+    for r in range(row):
+        if not sheet.isRowHidden(r) and model.job_at(r).production_stage == stage:
+            return ""
+    return stage
+
+
+@pytest.mark.parametrize("filter_key", ["all", "review", "failed"])
+def test_group_start_cache_matches_the_old_algorithm(page, filter_key):
+    jobs = page.add_prompts(["four", "five", "six"])
+    for job, stage in zip(page.jobs, ["", "reference", "still", "reference", "still", "animation"]):
+        job.production_stage = stage
+    jobs[0].status = JobStatus.DONE
+    page.model.refresh_all()
+    page.set_filter(filter_key)
+    for row in range(page.model.rowCount()):
+        assert page.sheet.group_start(row) == _old_group_start(page.sheet, row)
+
+
+def test_rating_and_label_keys_set_fields_and_persist(page):
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QKeyEvent
+
+    from src.projects.store import job_to_row, row_to_job
+
+    def press(key):
+        page.sheet.keyPressEvent(QKeyEvent(QKeyEvent.Type.KeyPress, key, Qt.KeyboardModifier.NoModifier))
+
+    page.select_row(0)
+    press(Qt.Key.Key_4)
+    press(Qt.Key.Key_8)
+    job = page.jobs[0]
+    assert (job.rating, job.label) == (4, "green")
+    press(Qt.Key.Key_8)
+    press(Qt.Key.Key_6)
+    assert job.label == "red"
+    back = row_to_job(job_to_row(job), 1)
+    assert (back.rating, back.label) == (4, "red")
+    assert row_to_job({"prompt": "old file"}, 1).rating == 0  # rows saved before marks still load
+    press(Qt.Key.Key_0)
+    assert job.rating == 0
+    page.model.flush()
+    assert page.filter_bar.buttons["labelled"].text().endswith("1")
+
+
+def test_density_cycle_changes_the_cell_height(page):
+    sheet = page.sheet
+    heights = {}
+    for _ in range(3):
+        heights[sheet.density] = sheet.frame_size().height()
+        sheet.cycle_density()
+    assert sheet.density == 1
+    assert heights[0] < heights[1] < heights[2]
+
+
+def test_lights_cycle_and_escape(qapp):
+    from src.ui.main_window import LIGHTS, MainWindow
+
+    w = MainWindow()
+    try:
+        levels = []
+        for _ in range(3):
+            w.cycle_lights()
+            levels.append(LIGHTS[w.lights][0])
+        assert levels == ["dim", "out", "full"]
+        w.set_lights(2)
+        assert w._lights_esc.isEnabled()
+        w._lights_esc.activated.emit()
+        assert w.lights == 0 and not w._lights_esc.isEnabled()
+    finally:
+        w.close()
+
+
+def test_lights_again_after_the_fade_ended(qapp):
+    # The fade deletes itself when it ends; a second L after that must not touch the deleted animation.
+    from PySide6.QtTest import QTest
+    from src.ui.main_window import MainWindow
+
+    w = MainWindow()
+    try:
+        w.cycle_lights()
+        QTest.qWait(300)
+        w.cycle_lights()
+        assert w.lights == 2
+    finally:
+        w.close()
