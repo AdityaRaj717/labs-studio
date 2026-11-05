@@ -41,6 +41,8 @@ pmcache` in this folder. Labs Studio starts the server itself and passes
 > `config/flow.config.example.json`; `FLOW_MCP_CONFIG` points at another file. An empty
 > `expectedAccount` accepts whichever Google account is signed in.
 
+> **Architecture note (Labs Studio fork).** One local engine (`src/engine`) owns Chrome, the queue, the ledger and the files; `src/index.js` is a thin shim that starts or joins it through `engine.json` in `FLOW_DATA_DIR`. To share the engine with the Labs Studio app, set `FLOW_DATA_DIR` to the app's folder (default `D:\glabs_web\flow-mcp`). Setup for Claude Code, Claude Desktop, Cursor and Codex, the Production prompt format and recovery steps: `help/en/mcp-agents.md`. Tests: `npm test` (offline). Some sections below describe the older single-process design.
+
 ## 📸 What It Does
 
 This MCP server connects your AI agent to **[Google Flow](https://labs.google/fx/tools/flow)** — Google's creative suite for image and video generation. Your agent can:
