@@ -29,7 +29,7 @@ With a token set, every request needs `Authorization: Bearer <token>` (or `X-Api
 
 | Field | Type | Meaning |
 |---|---|---|
-| `page` | string, required | `flow_image` in Flow-only mode. With everything shown also `flow_video`, `grok`, `openai_image` and `demo` (an offline test page) |
+| `page` | string, required | `flow_image` or `flow_video` |
 | `prompt` or `prompts` | string, or list of strings | Up to 1000 prompts per request |
 | `refs` | list of file paths | Reference images on this PC, added to every prompt |
 | `characters`, `scenes` | lists of names | From the [character and scene library](characters-and-scenes.md), matched without regard to case. An unknown name answers **400** and lists the known ones |

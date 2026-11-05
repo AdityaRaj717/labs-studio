@@ -11,18 +11,32 @@ function ensureDir() {
   }
 }
 
-export async function takeScreenshot(page, name) {
+// CDP, not page.screenshot: that hung on Flow waiting for fonts. Never throws; a job must not fail on this.
+export async function takeScreenshot(page, name, timeoutMs = 10000) {
+  let timer;
   try {
     ensureDir();
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = `${timestamp}_${name}.png`;
     const filepath = path.join(SCREENSHOT_DIR, filename);
-    await page.screenshot({ path: filepath, fullPage: false });
+    const capture = async () => {
+      const session = await page.context().newCDPSession(page);
+      const { data } = await session.send('Page.captureScreenshot', { format: 'png' });
+      session.detach().catch(() => {});
+      return data;
+    };
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`timed out after ${timeoutMs}ms`)), timeoutMs);
+    });
+    const data = await Promise.race([capture(), timeout]);
+    fs.writeFileSync(filepath, Buffer.from(data, 'base64'));
     logger.info('Screenshot saved', { name, path: filepath });
     return filepath;
   } catch (err) {
     logger.warn('Failed to take screenshot', { name, error: err.message });
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

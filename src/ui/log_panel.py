@@ -15,9 +15,10 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QPlainTextEdit, QPushButton, QVBoxLayout, QWidget
 
 from src.i18n import tr
+from src.ui.kit import header_row, page_layout, set_icon
 
 LOG_FORMAT = "%(asctime)s %(levelname)-7s %(name)s: %(message)s"
 DATE_FORMAT = "%H:%M:%S"
@@ -89,10 +90,10 @@ class LogPanel(QWidget):
         super().__init__(parent)
         self.handler = handler or _qt_handler
 
-        title = QLabel(tr("nav_log"))
-        title.setObjectName("PageTitle")
         clear_btn = QPushButton(tr("log_clear"))
+        set_icon(clear_btn, "eraser")
         open_btn = QPushButton(tr("log_open_file"))
+        set_icon(open_btn, "folder-open")
         open_btn.setEnabled(log_file_path() is not None)
 
         self.view = QPlainTextEdit()
@@ -101,16 +102,8 @@ class LogPanel(QWidget):
         self.view.setMaximumBlockCount(MAX_LINES)
         self.view.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
 
-        header = QHBoxLayout()
-        header.addWidget(title)
-        header.addStretch(1)
-        header.addWidget(open_btn)
-        header.addWidget(clear_btn)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(32, 28, 32, 28)
-        layout.setSpacing(12)
-        layout.addLayout(header)
+        layout = page_layout(self)
+        layout.addLayout(header_row(tr("nav_log"), open_btn, clear_btn))
         layout.addWidget(self.view, 1)
 
         clear_btn.clicked.connect(self.view.clear)

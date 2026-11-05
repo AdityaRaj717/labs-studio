@@ -1,0 +1,18 @@
+<!doctype html><meta charset="utf-8"><title>Editor</title><!--fake-->
+<style>.cdk-overlay-backdrop{position:fixed;inset:0}[role=menu]{position:fixed;top:40px;left:40px;background:#fff}</style>
+<main>
+  <button id="add">Add clip</button> <button>Done editing scene</button>
+  <div id="prompt"><div role="textbox" contenteditable aria-label="Describe how to edit this video…"></div></div>
+</main>
+<div class="cdk-overlay-container"></div>
+<script>
+  const overlay = document.querySelector('.cdk-overlay-container');
+  document.getElementById('add').onclick = () => {
+    overlay.innerHTML = `<div class="cdk-overlay-backdrop" onclick="this.parentNode.innerHTML=''"></div>
+      <div role="menu"><div role="menuitem">Add clip</div><div role="menuitem" id="ext">Extend (Veo 3.1 - Lite)</div></div>`;
+    document.getElementById('ext').onclick = () => {
+      overlay.innerHTML = '';
+      document.getElementById('prompt').innerHTML = `<div role="textbox" contenteditable aria-label="What happens next?"></div><button>Exit extend mode</button>`;
+    };
+  };
+</script>

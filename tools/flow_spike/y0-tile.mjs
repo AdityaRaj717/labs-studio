@@ -1,0 +1,12 @@
+import * as y from './y0lib.mjs';
+const { page } = await y.attach();
+const t=y.tiles(page).first(); console.log(await t.getAttribute('aria-label'));
+await t.hover(); await page.waitForTimeout(500);
+const btns=await t.getByRole('button').evaluateAll(a=>a.map(b=>b.getAttribute('aria-label')||b.innerText.slice(0,30)));
+console.log(btns);
+const label=await t.getAttribute('aria-label');
+await t.getByRole('button',{name:label,exact:true}).first().click({timeout:4000}).catch(e=>console.log('noclick',e.message.split('\n')[0]));
+await page.waitForTimeout(1000);
+const s=await y.snap(page,'img-assetinfo'); const i=s.indexOf('Created'); console.log(i<0?'NO Created':s.slice(Math.max(0,i-300),i+200));
+await t.getByRole('button',{name:label,exact:true}).first().click({timeout:3000}).catch(()=>{});
+process.exit(0);

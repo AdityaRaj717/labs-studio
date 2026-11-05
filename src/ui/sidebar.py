@@ -1,12 +1,12 @@
 """Collapsible sidebar: nav buttons, theme toggle and version button.
 
-Icons are glyphs from the Segoe MDL2 Assets font that ships with Windows
-10/11, so the app bundles no icon images.
+The rail follows the mode. The current page gets a fill, never the accent; a page with a batch
+running gets the live dot.
 """
 
 from __future__ import annotations
 
-from PySide6.QtCore import QRect, QSize, Qt, Signal
+from PySide6.QtCore import QRect, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPainter
 from PySide6.QtWidgets import (
     QButtonGroup, QHBoxLayout, QLabel, QPushButton, QScrollArea, QSizePolicy, QVBoxLayout, QWidget,
@@ -15,48 +15,36 @@ from PySide6.QtWidgets import (
 from src import APP_NAME, __version__
 from src import features, theme
 from src.i18n import tr
+from src.ui import icons
+from src.ui.kit import IconButton, set_icon
 
-ICON_FONT = "Segoe MDL2 Assets"
-
-# (page key, i18n label key, MDL2 glyph) in sidebar order.
+# (page key, i18n label key, Phosphor icon) in sidebar order.
 NAV_ITEMS: list[tuple[str, str, str]] = [
-    ("flow_image", "nav_img", ""),
-    ("flow_video", "nav_video", ""),
-    ("grok", "nav_grok", ""),
-    ("openai_image", "nav_openai", ""),
-    ("meta_vibes", "nav_meta_vibes", ""),
-    ("meta_muse", "nav_meta_muse", ""),
-    ("google_vids", "nav_google_vids", ""),
-    ("google_pics", "nav_google_pics", ""),
-    ("projects", "nav_projects", ""),
-    ("characters", "nav_characters", ""),
-    ("scenes", "nav_scenes", ""),
-    ("workflow", "nav_workflow", ""),
-    ("video_editor", "nav_video_editor", ""),
-    ("upscaler", "nav_upscaler", ""),
-    ("video_cut", "nav_video_cut", ""),
-    ("webhook", "nav_webhook", ""),
-    ("course", "nav_course", ""),
-    ("log", "nav_log", ""),
-    ("settings", "nav_settings", ""),
-    ("help", "nav_help", ""),  # Phase 15
+    ("flow_image", "nav_img", "image"),
+    ("flow_video", "nav_video", "film-strip"),
+    ("productions", "nav_productions", "film-slate"),  # S5-1
+    ("projects", "nav_projects", "folders"),
+    ("characters", "nav_characters", "users-three"),
+    ("scenes", "nav_scenes", "mountains"),
+    ("webhook", "nav_webhook", "plugs-connected"),
+    ("log", "nav_log", "scroll"),
+    ("settings", "nav_settings", "gear-six"),
+    ("help", "nav_help", "question"),  # Phase 15
 ]
 NAV_KEYS = [key for key, _, _ in NAV_ITEMS]
+GROUP_STARTS = {"projects", "webhook"}  # a gap before each: the desk, the library, the back room
 
-GLYPH_MENU = ""
-GLYPH_SUN = ""
-GLYPH_MOON = ""
-GLYPH_INFO = ""
-
-EXPANDED_WIDTH = 210
-COLLAPSED_WIDTH = 56
+EXPANDED_WIDTH = 200
+COLLAPSED_WIDTH = 52
+ROW_HEIGHT = 30
+ICON_COLUMN = COLLAPSED_WIDTH - 16
 
 
 class SidebarButton(QPushButton):
-    """Flat button that paints an icon glyph plus a label (label hidden when collapsed).
+    """Flat button that paints an icon plus a label (label hidden when collapsed).
 
-    The stylesheet paints the background (hover/checked); text is drawn here so
-    the glyph and label keep a fixed column whether collapsed or not.
+    The stylesheet paints the background (hover/checked); the rest is drawn here so
+    the icon and label keep a fixed column whether collapsed or not.
     """
 
     def __init__(self, glyph: str, label: str, checkable: bool = True, parent: QWidget | None = None):
@@ -64,45 +52,60 @@ class SidebarButton(QPushButton):
         self.glyph = glyph
         self.label = label
         self.collapsed = False
+        self.live = False
+        self.setObjectName("NavButton")
         self.setCheckable(checkable)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setFixedHeight(36)
+        self.setFixedHeight(ROW_HEIGHT)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setToolTip(label)
+        self.setAccessibleName(label)
 
     def set_label(self, label: str) -> None:
         self.label = label
         self.setToolTip(label)
+        self.setAccessibleName(label)
         self.update()
 
     def set_collapsed(self, collapsed: bool) -> None:
         self.collapsed = collapsed
         self.update()
 
-    def sizeHint(self) -> QSize:
-        return QSize(COLLAPSED_WIDTH - 12, 36)
+    def set_live(self, live: bool) -> None:
+        if live != self.live:
+            self.live = live
+            self.update()
+
+    def sizeHint(self) -> QSize:  # noqa: N802 - Qt override
+        return QSize(ICON_COLUMN, ROW_HEIGHT)
 
     def paintEvent(self, event) -> None:  # noqa: N802 - Qt override
         super().paintEvent(event)
-        colors = theme.COLORS[theme.current_mode()]
-        color = QColor(colors["accent"] if self.isChecked() else colors["text"])
+        colors = theme.tokens()
+        on = self.isChecked()
+        muted = self.objectName() == "SidebarFooterButton"
+        ink = colors["rail_muted"] if muted else colors["rail_text"]  # the icon is always muted; no accent on the rail
         p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.setRenderHint(QPainter.RenderHint.TextAntialiasing)
-        p.setPen(color)
-
-        icon_font = QFont(ICON_FONT)
-        icon_font.setPixelSize(16)
-        p.setFont(icon_font)
-        p.drawText(QRect(0, 0, COLLAPSED_WIDTH - 12, self.height()), Qt.AlignmentFlag.AlignCenter, self.glyph)
+        ratio = self.devicePixelRatioF()
+        x = (ICON_COLUMN - 16) // 2
+        p.drawPixmap(x, (self.height() - 16) // 2, icons.pixmap(self.glyph, colors["rail_muted"], 16, ratio))
 
         if not self.collapsed:
             text_font = QFont(self.font())
-            text_font.setBold(self.isChecked())
+            text_font.setWeight(QFont.Weight.DemiBold if on else QFont.Weight.Normal)
             p.setFont(text_font)
-            p.setPen(QColor(colors["text"]))
-            text_rect = QRect(COLLAPSED_WIDTH - 12, 0, self.width() - COLLAPSED_WIDTH + 8, self.height())
+            p.setPen(QColor(ink))
+            text_rect = QRect(ICON_COLUMN, 0, self.width() - ICON_COLUMN - 22, self.height())
             elided = p.fontMetrics().elidedText(self.label, Qt.TextElideMode.ElideRight, text_rect.width())
             p.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, elided)
+        if self.live:
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor(colors["live"]))
+            cx = ICON_COLUMN - 7 if self.collapsed else self.width() - 12
+            cy = 9 if self.collapsed else self.height() / 2
+            p.drawEllipse(QRectF(cx - 3.5, cy - 3.5, 7, 7))
         p.end()
 
 
@@ -120,17 +123,17 @@ class Sidebar(QWidget):
         self.buttons: dict[str, SidebarButton] = {}
 
         # Header: collapse toggle + app name
-        self.toggle_btn = QPushButton(GLYPH_MENU)
+        self.toggle_btn = QPushButton()
         self.toggle_btn.setObjectName("SidebarToggle")
-        self.toggle_btn.setFont(QFont(ICON_FONT, 11))
-        self.toggle_btn.setFixedSize(COLLAPSED_WIDTH - 12, 36)
+        self.toggle_btn.setFixedSize(ICON_COLUMN, ROW_HEIGHT)
+        set_icon(self.toggle_btn, "sidebar-simple", "rail_muted")
         self.toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.toggle_btn.clicked.connect(self.toggle_collapsed)
         self.title = QLabel(APP_NAME)
         self.title.setObjectName("SidebarTitle")
         header = QHBoxLayout()
         header.setContentsMargins(0, 0, 0, 0)
-        header.setSpacing(2)
+        header.setSpacing(0)
         header.addWidget(self.toggle_btn)
         header.addWidget(self.title, 1)
 
@@ -138,7 +141,7 @@ class Sidebar(QWidget):
         nav = QWidget()
         nav_layout = QVBoxLayout(nav)
         nav_layout.setContentsMargins(0, 0, 0, 0)
-        nav_layout.setSpacing(2)
+        nav_layout.setSpacing(1)
         self.group = QButtonGroup(self)
         self.group.setExclusive(True)
         for key, label_key, glyph in NAV_ITEMS:
@@ -148,6 +151,8 @@ class Sidebar(QWidget):
             self.group.addButton(btn)
             self.buttons[key] = btn
             btn.setVisible(features.page_shown(key))  # Phase 14b: Flow-only mode
+            if key in GROUP_STARTS:
+                nav_layout.addSpacing(14)
             nav_layout.addWidget(btn)
         nav_layout.addStretch(1)
         scroll = QScrollArea()
@@ -157,21 +162,25 @@ class Sidebar(QWidget):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         # Footer: theme toggle + version
-        self.theme_btn = SidebarButton(GLYPH_SUN, tr("theme_light"), checkable=False)
+        self.theme_btn = SidebarButton("sun", tr("theme_light"), checkable=False)
         self.theme_btn.setObjectName("SidebarFooterButton")
         self.theme_btn.clicked.connect(self.theme_toggled.emit)
-        self.version_btn = SidebarButton(GLYPH_INFO, f"v{__version__}", checkable=False)
+        self.version_btn = SidebarButton("info", f"v{__version__}", checkable=False)
         self.version_btn.setObjectName("SidebarFooterButton")
         self.version_btn.setToolTip(tr("version", version=__version__))
         self.version_btn.clicked.connect(self.version_clicked.emit)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(6, 8, 6, 8)
-        layout.setSpacing(6)
+        layout.setContentsMargins(8, 10, 8, 8)
+        layout.setSpacing(10)
         layout.addLayout(header)
         layout.addWidget(scroll, 1)
-        layout.addWidget(self.theme_btn)
-        layout.addWidget(self.version_btn)
+        footer = QVBoxLayout()
+        footer.setSpacing(1)
+        self.footer = footer
+        footer.addWidget(self.theme_btn)
+        footer.addWidget(self.version_btn)
+        layout.addLayout(footer)
 
         self.update_theme_button()
         self._apply_collapsed()
@@ -186,6 +195,11 @@ class Sidebar(QWidget):
         btn = self.buttons.get(key)
         if btn is not None:
             btn.setChecked(True)
+
+    def set_live(self, key: str, live: bool) -> None:
+        btn = self.buttons.get(key)
+        if btn is not None:
+            btn.set_live(live)
 
     def toggle_collapsed(self) -> None:
         self.set_collapsed(not self.collapsed)
@@ -203,13 +217,14 @@ class Sidebar(QWidget):
         if getattr(self, "project_widget", None) is not None:
             self.project_widget.setVisible(not self.collapsed)
         self.toggle_btn.setToolTip(tr("sidebar_expand") if self.collapsed else tr("sidebar_collapse"))
-        for btn in (*self.buttons.values(), self.theme_btn, self.version_btn):
+        self.toggle_btn.setAccessibleName(self.toggle_btn.toolTip())
+        for btn in self.findChildren(SidebarButton):
             btn.set_collapsed(self.collapsed)
 
     def update_theme_button(self) -> None:
         """Show the action the button will take: sun → go light, moon → go dark."""
         dark = theme.current_mode() == "dark"
-        self.theme_btn.glyph = GLYPH_SUN if dark else GLYPH_MOON
+        self.theme_btn.glyph = "sun" if dark else "moon"
         self.theme_btn.set_label(tr("theme_light") if dark else tr("theme_dark"))
 
     def retranslate(self) -> None:

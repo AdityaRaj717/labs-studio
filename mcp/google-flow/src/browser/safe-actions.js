@@ -87,7 +87,7 @@ export async function safeGoto(url, options = {}) {
 
   await delay(preDelay);
   logger.info('Navigating', { url: url.substring(0, 80) });
-  await page.goto(url, { waitUntil: 'networkidle', timeout });
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout });
   await delay(ACTION_DELAY);
 }
 

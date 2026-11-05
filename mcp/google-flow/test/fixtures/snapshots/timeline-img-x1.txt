@@ -1,0 +1,216 @@
+
+===     0.2s url=/project/<id>
++ - link "Skip to main content":
++   - /url: "#main-content"
++ - main:
++   - text: Start creating or drop media
++   - navigation:
++     - button "Home"
++     - heading "spike-2026-11-02" [level=1]
++     - textbox "Editable text":
++       - /placeholder: ""
++       - text: spike-2026-11-02
++   - button "More options for the project"
++   - button "Search"
++   - textbox "Search"
++   - button "Filtering and sorting options"
++   - button "Add media menu"
++   - button "Product help"
++   - button "Settings"
++   - button "More options"
++   - button "Account details":
++     - text: PRO
++     - 'button "Google Account: <name> (<email>), Google membership"'
++   - navigation "Project navigation":
++     - button "All media"
++     - button "Characters"
++     - button "Scenes"
++     - separator
++     - link "Library Create collection":
++       - /url: /project/<id>
++       - text: Library
++       - button "Create collection"
++     - separator
++     - link "Tools":
++       - /url: /project/<id>/tools
++     - link "Create tool":
++       - /url: /project/<id>/create-tool
++     - link "Trash":
++       - /url: /project/<id>/trash
++     - button "Collapse"
++   - button "Open session history"
++   - heading "Untitled session" [level=2]
++   - button "Start new session"
++   - button "Close"
++   - heading "Hi <name>" [level=3]
++   - heading "What would you like to create?" [level=3]
++   - button "Build a visual moodboard"
++   - button "Organize my grid into collections"
++   - button "Turn a concept into prompts"
++   - textbox "What do you want to create?":
++     - paragraph
++   - button "Add ingredients to the prompt box"
++   - button "Agent instructions"
++   - button "Settings"
++   - button "Start generation" [disabled]
++   - paragraph: Google Flow can make mistakes, so double check it
+
+===    12.4s url=/project/<id>
+-     - paragraph
+-   - button "Start generation" [disabled]
++     - paragraph: "Generate one image: a smal"
++   - button "Clear prompt"
++   - button "Start generation"
+
+===    13.4s url=/project/<id>
+-     - paragraph: "Generate one image: a smal"
++     - paragraph: "Generate one image: a small red paper boat on a calm blue"
+
+===    14.5s url=/project/<id>
+-     - paragraph: "Generate one image: a small red paper boat on a calm blue"
++     - paragraph: "Generate one image: a small red paper boat on a calm blue pond, soft morning light."
+
+===    16.5s url=/project/<id>
+-   - heading "Hi <name>" [level=3]
+-   - heading "What would you like to create?" [level=3]
+-   - button "Build a visual moodboard"
+-   - button "Organize my grid into collections"
+-   - button "Turn a concept into prompts"
+-     - paragraph: "Generate one image: a small red paper boat on a calm blue pond, soft morning light."
+-   - button "Clear prompt"
+-   - button "Start generation"
++   - text: "Generate one image: a small red paper boat on a calm blue pond, soft morning light."
++   - status "Thinking"
++     - paragraph
++   - button "Stop"
+
+===    25.7s url=/project/<id>
+-   - status "Thinking"
++   - button "Defining Visual Parameters"
++   - paragraph: I'm going to generate 1 image of a small red paper boat on a calm blue pond with soft morning light using 🍌 Nano Banana 2.1 in 16:9 aspect ratio.
+
+===    26.7s url=/project/<id>
+-   - text: Start creating or drop media
++     - button "Images"
++   - group "a small red paper boat on a calm blue pond, soft morning light":
++     - text: 0% a small red paper boat on a calm blue pond, soft morning light
++     - button "Reuse prompt"
+
+===    27.7s url=/project/<id>
+-     - text: 0% a small red paper boat on a calm blue pond, soft morning light
++     - text: 3% a small red paper boat on a calm blue pond, soft morning light
++   - group "Media options gallery":
++     - button "Open image in editor"
+
+===    28.7s url=/project/<id>
+-     - text: 3% a small red paper boat on a calm blue pond, soft morning light
++     - text: 6% a small red paper boat on a calm blue pond, soft morning light
+
+===    29.8s url=/project/<id>
+-     - text: 6% a small red paper boat on a calm blue pond, soft morning light
++     - text: 10% a small red paper boat on a calm blue pond, soft morning light
+
+===    30.8s url=/project/<id>
+-     - text: 10% a small red paper boat on a calm blue pond, soft morning light
++     - text: 13% a small red paper boat on a calm blue pond, soft morning light
+
+===    31.8s url=/project/<id>
+-     - text: 13% a small red paper boat on a calm blue pond, soft morning light
++     - text: 16% a small red paper boat on a calm blue pond, soft morning light
+
+===    32.8s url=/project/<id>
+-     - text: 16% a small red paper boat on a calm blue pond, soft morning light
++     - text: 20% a small red paper boat on a calm blue pond, soft morning light
+
+===    33.9s url=/project/<id>
+-     - text: 20% a small red paper boat on a calm blue pond, soft morning light
++     - text: 23% a small red paper boat on a calm blue pond, soft morning light
+
+===    34.9s url=/project/<id>
+-     - text: 23% a small red paper boat on a calm blue pond, soft morning light
++     - text: 26% a small red paper boat on a calm blue pond, soft morning light
+
+===    35.9s url=/project/<id>
+-     - text: 26% a small red paper boat on a calm blue pond, soft morning light
++     - text: 30% a small red paper boat on a calm blue pond, soft morning light
+
+===    36.9s url=/project/<id>
+-     - text: 30% a small red paper boat on a calm blue pond, soft morning light
++     - text: 33% a small red paper boat on a calm blue pond, soft morning light
+
+===    38.0s url=/project/<id>
+-     - text: 33% a small red paper boat on a calm blue pond, soft morning light
++     - text: 36% a small red paper boat on a calm blue pond, soft morning light
+
+===    39.0s url=/project/<id>
+-     - text: 36% a small red paper boat on a calm blue pond, soft morning light
++     - text: 40% a small red paper boat on a calm blue pond, soft morning light
+
+===    40.0s url=/project/<id>
+-     - text: 40% a small red paper boat on a calm blue pond, soft morning light
++     - text: 43% a small red paper boat on a calm blue pond, soft morning light
+
+===    41.0s url=/project/<id>
+-     - text: 43% a small red paper boat on a calm blue pond, soft morning light
++     - text: 47% a small red paper boat on a calm blue pond, soft morning light
+
+===    42.0s url=/project/<id>
+-     - text: 47% a small red paper boat on a calm blue pond, soft morning light
++     - text: 50% a small red paper boat on a calm blue pond, soft morning light
+
+===    43.1s url=/project/<id>
+-     - text: 50% a small red paper boat on a calm blue pond, soft morning light
++     - text: 53% a small red paper boat on a calm blue pond, soft morning light
+
+===    44.1s url=/project/<id>
+-     - text: 53% a small red paper boat on a calm blue pond, soft morning light
++     - text: 57% a small red paper boat on a calm blue pond, soft morning light
+
+===    45.1s url=/project/<id>
+-     - text: 57% a small red paper boat on a calm blue pond, soft morning light
++     - text: 60% a small red paper boat on a calm blue pond, soft morning light
+
+===    46.1s url=/project/<id>
+-     - text: 60% a small red paper boat on a calm blue pond, soft morning light
++     - text: 63% a small red paper boat on a calm blue pond, soft morning light
+
+===    47.1s url=/project/<id>
+-     - text: 63% a small red paper boat on a calm blue pond, soft morning light
++     - text: 67% a small red paper boat on a calm blue pond, soft morning light
+
+===    48.2s url=/project/<id>
+-     - text: 67% a small red paper boat on a calm blue pond, soft morning light
++     - text: 70% a small red paper boat on a calm blue pond, soft morning light
+
+===    49.2s url=/project/<id>
+-     - text: 70% a small red paper boat on a calm blue pond, soft morning light
++     - text: 73% a small red paper boat on a calm blue pond, soft morning light
+
+===    50.2s url=/project/<id>
+-     - text: 73% a small red paper boat on a calm blue pond, soft morning light
++     - text: 77% a small red paper boat on a calm blue pond, soft morning light
+
+===    51.3s url=/project/<id>
+-   - group "a small red paper boat on a calm blue pond, soft morning light":
+-     - text: 77% a small red paper boat on a calm blue pond, soft morning light
+-     - button "Open image in editor"
++   - group "Red paper boat on pond":
++     - img "Tile displaying a user's image"
++     - button "Open image in editor":
++       - img "Option 1"
+
+===    52.3s url=/project/<id>
+-     - button "Reuse prompt"
+
+===    55.4s url=/project/<id>
++   - paragraph: Here is the image of a small red paper boat floating on a calm blue pond in soft morning light.
+
+===    57.4s url=/project/<id>
+-   - button "Defining Visual Parameters"
+-   - button "Stop"
++   - button "Show thinking"
++   - button "Good response"
++   - button "Bad response"
++   - button "Copy"
++   - button "Flag output"
++   - button "Start generation" [disabled]

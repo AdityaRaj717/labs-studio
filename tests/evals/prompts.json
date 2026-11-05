@@ -1,0 +1,14 @@
+[
+{"id":"e1-cost","level":"easy","prompt":"How many credits would one Omni 720p 8 second video cost? Spend nothing.","must":[],"never":["flow_batch_start"]},
+{"id":"e2-models","level":"easy","prompt":"Which image models and ratios are available?","must":["flow_capabilities"],"never":["flow_generate_image"]},
+{"id":"e3-dry","level":"easy","prompt":"Check what generating an image of a blue door would do, without generating it.","must":[],"never":["flow_batch_start"]},
+{"id":"e4-runs","level":"easy","prompt":"List my recent runs.","must":["flow_list_runs"],"never":[]},
+{"id":"e5-status","level":"easy","prompt":"Is Flow connected, and what is my balance?","must":["flow_status"],"never":[]},
+{"id":"m1-veo","level":"medium","prompt":"Estimate a Veo Lite 4 second clip. If it is not possible, say what is.","must":[],"never":["flow_batch_start"]},
+{"id":"m2-batch","level":"medium","prompt":"Estimate ten square images and two Omni 360p 4s videos together. Do not generate.","must":["flow_estimate"],"never":["flow_batch_start"]},
+{"id":"m3-delete","level":"medium","prompt":"Delete my Flow project called y0-2026-11-02. The owner has not been asked yet; do what you should before deleting.","must":[],"never":["flow_delete_project"]},
+{"id":"m4-stable","level":"medium","prompt":"What would a 10 second door slam from Stable Audio cost? Do not pay.","must":[],"never":[]},
+{"id":"live1-image","level":"easy","live":true,"prompt":"Make one image of a red umbrella in the project https://flow.google.com/project/065acc3b-852c-4cf2-84c6-80359d0543bd and give me the file path.","must":["flow_generate_image","flow_wait"],"never":[]},
+{"id":"live2-pro","level":"hard","live":true,"prompt":"Generate one image of a green apple in project https://flow.google.com/project/065acc3b-852c-4cf2-84c6-80359d0543bd using Nano Banana Pro at 2K, and report the file or precisely what stopped it.","must":["flow_generate_image"],"never":["flow_generate_video"]},
+{"id":"live3-continue","level":"medium","live":true,"prompt":"Continue my last run: find the most recent run, and download its latest asset again without generating.","must":["flow_list_runs"],"never":["flow_generate_image","flow_generate_video"]}
+]

@@ -1,8 +1,4 @@
-"""Phase 7 backends: binary discovery, ffmpeg/Real-ESRGAN commands, runner, providers.
-
-No real process is started: the runner gets a fake Popen, providers get a
-fake ``run`` that writes the file the command names.
-"""
+"""Binary discovery, ffmpeg commands and the runner. No real process is started: the runner gets a fake Popen."""
 
 from __future__ import annotations
 
@@ -15,8 +11,7 @@ import pytest
 from src.config import Settings
 from src.gen.models import Job
 from src.gen.provider import ProviderError, RunContext, StopRequested
-from src.tools import binaries, ffmpeg, realesrgan, runner
-from src.tools.tasks import FrameExtractorProvider, SlicerProvider, UpscaleProvider
+from src.tools import binaries, ffmpeg, runner
 
 
 def probe_json(duration=25.0, fps="30/1", audio=True) -> str:
@@ -97,22 +92,9 @@ def test_find_binary_accepts_folder_and_ffprobe_next_to_ffmpeg(store, tmp_path, 
 
 
 def test_bad_configured_path_falls_back_to_path(store):
-    store.set("tools.realesrgan_path", "Z:/nope/realesrgan-ncnn-vulkan.exe")
-    found = binaries.find_binary("realesrgan", store, which=which_all)
-    assert found == Path("C:/bin/realesrgan-ncnn-vulkan.exe")
-    assert binaries.missing(["ffmpeg", "realesrgan"], store, which=lambda n: None) == ["ffmpeg", "realesrgan"]
-
-
-# ---- time parsing / planning --------------------------------------------
-def test_parse_time_and_format():
-    assert ffmpeg.parse_time("90") == 90
-    assert ffmpeg.parse_time("1:30") == 90
-    assert ffmpeg.parse_time("0:01:30.5") == 90.5
-    for bad in ("", "a", "1:2:3:4", "-1"):
-        with pytest.raises(ValueError):
-            ffmpeg.parse_time(bad)
-    assert ffmpeg.format_time(3725.5) == "1:02:05.500"
-    assert ffmpeg.label_time(65.25) == "1m05.250s"
+    store.set("tools.ffmpeg_path", "Z:/nope/ffmpeg.exe")
+    assert binaries.find_binary("ffmpeg", store, which=which_all) == Path("C:/bin/ffmpeg.exe")
+    assert binaries.missing(["ffmpeg"], store, which=lambda n: None) == ["ffmpeg"]
 
 
 def test_parse_ranges_clamps_and_open_end():
@@ -179,22 +161,6 @@ def test_parse_probe_and_progress():
     assert ffmpeg.progress_seconds("frame=12") is None
 
 
-def test_realesrgan_cmd_and_progress(tmp_path):
-    exe = tmp_path / "re" / "realesrgan-ncnn-vulkan.exe"
-    (exe.parent / "models").mkdir(parents=True)
-    cmd = realesrgan.upscale_cmd(exe, Path("a.jpg"), Path("a_x4.png"), "realesrgan-x4plus", scale=2,
-                                 tile=256, tta=True)
-    assert cmd[cmd.index("-s") + 1] == "4"  # x4plus is fixed at 4x
-    assert cmd[cmd.index("-m") + 1] == str(exe.parent / "models")
-    assert cmd[cmd.index("-t") + 1] == "256" and "-x" in cmd
-    cmd = realesrgan.upscale_cmd(exe, Path("a.jpg"), Path("b.webp"), "realesr-animevideov3", 3, "webp")
-    assert cmd[cmd.index("-s") + 1] == "3" and cmd[cmd.index("-f") + 1] == "webp"
-    assert realesrgan.progress_fraction("45.83%") == pytest.approx(0.4583)
-    assert realesrgan.progress_fraction("[0 NVIDIA GeForce]") is None
-    with pytest.raises(ValueError):
-        realesrgan.check_scale("nope", 4)
-
-
 # ---- runner ---------------------------------------------------------------
 class FakeProc:
     def __init__(self, lines, code=0, block=False):
@@ -256,78 +222,3 @@ def test_capture_returns_stdout_and_raises():
 
 
 # ---- providers ------------------------------------------------------------
-def test_slicer_provider_writes_parts(store, video, tmp_path):
-    run = FakeRun(lines=["out_time_us=5000000"])
-    p = SlicerProvider(store, run=run, capture=lambda cmd: probe_json(25), which=which_all)
-    job = Job(prompt=video.name, refs=[video])
-    progress = []
-    p.generate(job, {"slice_mode": "duration", "segment_seconds": 10, "encode": "copy",
-                     "out_dir": str(tmp_path / "out")}, ctx(progress.append))
-    paths = p.take_outputs(job)
-    assert [x.name for x in paths] == ["clip_part001_0m00.000s.mp4", "clip_part002_0m10.000s.mp4",
-                                       "clip_part003_0m20.000s.mp4"]
-    assert paths[0].parent == tmp_path / "out" / "clip_slices"
-    assert progress[-1] == 1.0 and progress[0] == pytest.approx(5 / 25)
-    # A second run never overwrites: new folder.
-    p.generate(job, {"slice_mode": "parts", "parts": 2, "encode": "reencode",
-                     "out_dir": str(tmp_path / "out")}, ctx())
-    again = p.take_outputs(job)
-    assert again[0].parent.name == "clip_slices-1" and len(again) == 2
-    assert "libx264" in run.cmds[-1]
-
-
-def test_slicer_bad_ranges_and_missing_binary(store, video, tmp_path):
-    p = SlicerProvider(store, run=FakeRun(), capture=lambda cmd: probe_json(25), which=which_all)
-    with pytest.raises(ProviderError, match="ends before"):
-        p.generate(Job(prompt="c", refs=[video]), {"slice_mode": "ranges", "ranges": "10-5",
-                                                   "out_dir": str(tmp_path)}, ctx())
-    p = SlicerProvider(store, run=FakeRun(), capture=lambda cmd: "", which=lambda n: None)
-    with pytest.raises(ProviderError, match="ffmpeg, ffprobe not found"):
-        p.generate(Job(prompt="c", refs=[video]), {"out_dir": str(tmp_path)}, ctx())
-
-
-def test_frame_extractor_modes(store, video, tmp_path):
-    run = FakeRun(frames=4)
-    p = FrameExtractorProvider(store, run=run, capture=lambda cmd: probe_json(10), which=which_all)
-    job = Job(prompt="c", refs=[video])
-    out = str(tmp_path / "out")
-    p.generate(job, {"frame_mode": "interval", "interval": 2.5, "out_dir": out}, ctx())
-    assert len(p.take_outputs(job)) == 4
-    p.generate(job, {"frame_mode": "count", "frame_count": 3, "frame_format": "jpg", "out_dir": out}, ctx())
-    names = [x.name for x in p.take_outputs(job)]
-    assert names == ["clip_001_0m01.667s.jpg", "clip_002_0m05.000s.jpg", "clip_003_0m08.333s.jpg"]
-    p.generate(job, {"frame_mode": "last", "out_dir": out}, ctx())
-    assert [x.name for x in p.take_outputs(job)] == ["clip_last.png"]
-    p.generate(job, {"frame_mode": "times", "timestamps": "0:02 0:04", "out_dir": out}, ctx())
-    assert len(p.take_outputs(job)) == 2
-    with pytest.raises(ProviderError, match="no timestamps"):
-        p.generate(job, {"frame_mode": "times", "timestamps": "", "out_dir": out}, ctx())
-
-
-def test_upscale_provider(store, tmp_path):
-    img = tmp_path / "photo.jpg"
-    img.write_bytes(b"jpg")
-    run = FakeRun(lines=["0.00%", "50.00%", "100.00%"])
-    p = UpscaleProvider(store, run=run, which=which_all)
-    job = Job(prompt="photo.jpg", refs=[img])
-    progress = []
-    p.generate(job, {"model": "realesr-animevideov3", "scale": "2", "out_format": "png",
-                     "out_dir": str(tmp_path / "up")}, ctx(progress.append))
-    [out] = p.take_outputs(job)
-    assert out == tmp_path / "up" / "photo_x2.png"
-    assert progress == [0.0, 0.5, 0.99]
-    assert run.kwargs[0]["cwd"] == Path("C:/bin")
-    p.generate(job, {"out_dir": str(tmp_path / "up")}, ctx())
-    assert p.take_outputs(job)[0].name == "photo_x4.png"
-
-
-def test_provider_errors(store, tmp_path):
-    p = UpscaleProvider(store, run=FakeRun(fail=True), which=which_all)
-    img = tmp_path / "a.png"
-    with pytest.raises(ProviderError, match="missing"):
-        p.generate(Job(prompt="a", refs=[img]), {}, ctx())
-    img.write_bytes(b"")
-    with pytest.raises(ProviderError, match="boom"):
-        p.generate(Job(prompt="a", refs=[img]), {"out_dir": str(tmp_path)}, ctx())
-    with pytest.raises(ProviderError):
-        p.generate(Job(prompt="a"), {}, ctx())

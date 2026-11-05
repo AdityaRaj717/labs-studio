@@ -1,68 +1,154 @@
-"""Google Flow image generation through the google-flow MCP server.
+"""Google Flow image generation through the shared engine.
 
-Uses the Flow web app (flow.google.com) in the user's signed-in Chrome with
-their own Google AI Pro subscription instead of an API key. The browser work is
-done by the google-flow MCP (``src/web/flow_mcp.py``); this provider adds the
-app's pacing: one job at a time, a random gap between jobs and a daily cap
-(Settings → Web Sessions). A sign-in wall, CAPTCHA or limit message stops the
-whole queue and brings the Chrome window to the front.
+Uses the Flow web app in the user's signed-in Chrome with their own Google AI Pro
+subscription instead of an API key. The engine (``src/web/flow_mcp.py``) does the browser
+work and the pacing, and keeps each result in a permanent run folder. A sign-in wall, CAPTCHA
+or limit stops the whole queue and brings the Chrome window to the front.
 """
 
 from __future__ import annotations
 
-import concurrent.futures
+import json
 import logging
-import shutil
-import threading
-from datetime import datetime
+import uuid
 from pathlib import Path
 from typing import Any
 
 from src.characters.flow_sync import SyncError
 from src.gen.models import Job, OutputFile
-from src.gen.provider import ConfigField, Provider, ProviderError, RunContext, StopRequested
-from src.web.adapters.base import BLOCK_MESSAGES, load_selectors
-from src.web.mcp_client import McpError, McpToolError
+from src.gen.progress import parse_ts
+from src.gen.provider import ConfigField, Estimate, Provider, ProviderError, RunContext, StopRequested
+from src.web.engine_client import EngineError, EngineToolError
 
 log = logging.getLogger(__name__)
 
 SITE = "flow"
 SITE_TITLE = "Google Flow"
 
-# MCP error code -> how the queue treats it.
+BLOCK_MESSAGES = {
+    "captcha": "{site} is showing a CAPTCHA or bot check. Solve it yourself in the Chrome window, then start again.",
+    "login": "{site} wants you to sign in. Sign in by hand in the Chrome window (Settings → Web Sessions → Launch browser), then start again.",
+    "quota": "{site} says the usage limit is reached. The queue was stopped; try again later.",
+}
+# Engine error code -> how the queue treats it.
 BLOCK_CODES = {
     "NOT_LOGGED_IN": "login", "WRONG_GOOGLE_ACCOUNT": "login",
-    "MANUAL_VERIFICATION_REQUIRED": "captcha", "GOOGLE_LIMIT_REACHED": "quota",
+    "MANUAL_VERIFICATION_REQUIRED": "captcha", "WAF_BLOCK": "captcha", "FLOW_ACTIVITY_FLAG": "captcha",
+    "GOOGLE_LIMIT_REACHED": "quota", "DAILY_MODEL_LIMIT": "quota",
 }
 STOP_CODES = {  # every later job would fail the same way
-    "UNKNOWN_UI_CHANGE", "GENERATION_BUTTON_DISABLED", "MODEL_NOT_AVAILABLE",
-    "RATIO_NOT_AVAILABLE", "INVALID_PARAMS", "PROJECT_NOT_FOUND",
+    "UNKNOWN_UI_CHANGE", "GENERATION_BUTTON_DISABLED", "MODEL_NOT_AVAILABLE", "RATIO_NOT_AVAILABLE",
+    "INVALID_PARAMS", "PROJECT_NOT_FOUND", "COMBINATION_NOT_SUPPORTED", "BROWSER_NOT_CONNECTED",
+    "FLOW_PAGE_NOT_FOUND", "DAILY_CAP_REACHED", "BUDGET_EXCEEDED",
 }
-JOB_CODES = {"GENERATION_REFUSED"}  # only this prompt failed
-# Codes raised after the prompt was sent, so the attempt counts towards the daily cap.
-SUBMITTED_CODES = {"GENERATION_REFUSED", "GENERATION_TIMEOUT", "DOWNLOAD_FAILED"}
+JOB_CODES = {"GENERATION_REFUSED", "SAFETY_BLOCKED"}  # only this prompt failed
 
 
-def _flow_options() -> tuple[list[str], list[str], int]:
-    image = load_selectors(SITE).get("image", {})
-    return list(image.get("models", {})), list(image.get("aspects", {})), int(image.get("max_count", 4))
+def capabilities() -> dict[str, Any]:
+    """What ``flow_capabilities`` answers, from the engine's own file: pages are built on the
+    GUI thread, which must not wait for an engine to start."""
+    from src.web.flow_mcp import flow_mcp
+
+    return json.loads((flow_mcp().mcp_dir / "config" / "capabilities.json").read_text(encoding="utf-8"))
+
+
+def map_engine_error(exc: EngineToolError, session) -> ProviderError:
+    code, msg = exc.code, str(exc)
+    if code in BLOCK_CODES:
+        session.bring_to_front(SITE)
+        return ProviderError(BLOCK_MESSAGES[BLOCK_CODES[code]].format(site=SITE_TITLE), stop_queue=True)
+    if code in STOP_CODES:
+        if code == "UNKNOWN_UI_CHANGE":
+            session.bring_to_front(SITE)
+        return ProviderError(f"{SITE_TITLE}: {msg} ({code})", stop_queue=True)
+    if code in JOB_CODES:
+        return ProviderError(f"{SITE_TITLE} refused the prompt: {msg}")
+    # The engine says what may repeat: past the credit line another try spends again.
+    return ProviderError(f"{SITE_TITLE}: {msg}" + (f" ({code})" if code else ""),
+                         retryable=bool(exc.payload.get("retryable")))
+
+
+def report_event(event: dict[str, Any], ctx: RunContext) -> None:
+    """Show an engine job event on the row: only ``source: flow`` is Flow's own percent."""
+    if event.get("type") == "job.progress":
+        if event.get("progress") is not None:
+            ctx.note(str(event.get("source") or ""))
+            ctx.progress(float(event["progress"]) / 100)
+            ctx.info(tiles=int(event.get("tiles") or 1))
+        if event.get("previewPath"):
+            ctx.partial(Path(event["previewPath"]))
+    elif event.get("type") == "job.transition":
+        # A new stage: Flow's last percent no longer says anything, so it is dropped.
+        ctx.note("phase")
+        ctx.progress(0.0)
+        fields = {"stage": str(event.get("state") or "")}
+        if event.get("submittedAt"):
+            fields["started_at"] = parse_ts(event["submittedAt"])
+        ctx.info(**fields)
+
+
+def read_outputs(view: dict[str, Any], what: str) -> list[OutputFile]:
+    files = []
+    for output in view.get("outputs") or []:
+        path = Path(output["file"])
+        ext = path.suffix.lstrip(".").lower() or "jpg"
+        files.append(OutputFile(path.read_bytes(), "jpg" if ext == "jpeg" else ext))
+    if not files:
+        raise ProviderError(f"{SITE_TITLE} finished but no {what} was downloaded")
+    return files
+
+
+def clip_source(view: dict[str, Any]) -> str:
+    """What Extend and Edit open later: the clip's page URL, else its mediaId (the engine finds that tile)."""
+    first = (view.get("outputs") or [{}])[0] or {}
+    return str(first.get("flowClipUrl") or first.get("mediaId") or "")
+
+
+def run_engine_job(provider, job: Job, tool: str, args: dict[str, Any], timeout: float, ctx: RunContext,
+                   what: str) -> list[OutputFile]:
+    """One job through the engine, keyed so a repeat after a crash or timeout spends nothing."""
+    from src.characters.attach import character_ids
+
+    job.engine_key = job.engine_key or f"app:{uuid.uuid4()}"
+    chars, scenes = character_ids(job), list(job.scenes)
+    extra = {"characters": chars, "scenes": scenes} if chars or scenes else {}
+    ctx.note("phase")
+    try:
+        view = provider.backend.run_job(tool, {**args, "idempotency_key": job.engine_key}, timeout,
+                                        on_event=lambda e: report_event(e, ctx), should_stop=ctx.should_stop, **extra)
+        files = read_outputs(view, what)
+        job.flow_url = clip_source(view)
+    except StopRequested:  # the engine job was cancelled: a Retry must queue a new one
+        job.engine_key = ""
+        raise
+    except TimeoutError:  # still running in the engine: the key picks it up again
+        raise ProviderError(f"{SITE_TITLE} did not finish in time", retryable=True) from None
+    except EngineToolError as exc:
+        job.engine_key = ""
+        raise map_engine_error(exc, provider.session) from None
+    except EngineError as exc:
+        raise ProviderError(f"Google Flow engine problem: {exc}. Check the MCP folder in "
+                            "Settings → Web Sessions.", stop_queue=True) from None
+    except SyncError as exc:
+        job.engine_key = ""
+        raise ProviderError(f"{SITE_TITLE}: {exc}") from None
+    job.engine_key = ""
+    ctx.progress(1.0)
+    return files
 
 
 class WebFlowImageProvider(Provider):
     key = "web_flow_image"
     name = "Google Flow web (image)"
     site = SITE
+    max_count = 4
 
-    def __init__(self, backend=None, pacer=None, session=None, out_root: Path | None = None):
+    def __init__(self, backend=None, session=None):
         self._backend = backend
         self._session = session
-        if pacer is None:
-            from src.web.pacing import Pacer
 
-            pacer = Pacer(SITE)
-        self.pacer = pacer
-        self.out_root = out_root
-        self._lock = threading.Lock()
+    def estimate(self, jobs: list[Job], options: dict[str, Any]) -> Estimate:
+        return Estimate(len(jobs), capabilities()["image"]["credits"], "gen_estimate_quota")
 
     @property
     def backend(self):
@@ -81,103 +167,28 @@ class WebFlowImageProvider(Provider):
         return self._session
 
     def config_fields(self) -> list[ConfigField]:
-        models, aspects, _ = _flow_options()
+        image = capabilities()["image"]
         return [
-            ConfigField("model", "gen_model", "choice", models[0], models),
-            ConfigField("aspect", "gen_aspect", "choice", aspects[0], aspects),
-            ConfigField("download_size", "gen_image_size", "choice", "1K", ["1K", "2K"]),
+            ConfigField("model", "gen_model", "choice", image["defaultModel"], image["models"], option_prefix="flow_model_"),
+            ConfigField("aspect", "gen_aspect", "choice", "1:1", ["1:1", "16:9", "9:16", "4:3", "3:4"]),
+            ConfigField("download_size", "gen_image_size", "choice", image["sizes"][0], image["sizes"]),
             ConfigField("timeout", "gen_timeout", "int", 300, minimum=60, maximum=900),
         ]
 
-    def _out_dir(self, job: Job) -> Path:
-        root = self.out_root
-        if root is None:
-            from src import config
-
-            root = Path(config.get("web.diag_dir", r"D:\glabs_web\diag")).parent / "flow_tmp"
-        return root / f"{datetime.now():%Y%m%d-%H%M%S}-job{job.id}"
-
     # ---- run ---------------------------------------------------------
     def generate(self, job: Job, options: dict[str, Any], ctx: RunContext) -> list[OutputFile]:
-        timeout = float(options.get("timeout", 300))
-        _, _, max_count = _flow_options()
         # Library characters and scenes go to Flow by name (set up in its Characters
         # section first), so their images are not uploaded as loose references.
-        from src.characters.attach import character_ids
-
-        chars, scenes = character_ids(job), list(job.scenes)
         library = set(job.character_refs) | set(job.scene_refs)
-        refs = [r for r in job.refs if r not in library] if chars or scenes else list(job.refs)
+        refs = [r for r in job.refs if r not in library]
         args = {
             "prompt": job.prompt,
             "model": options.get("model") or None,
             "ratio": options.get("aspect") or "1:1",
-            "count": max(1, min(int(options.get("count", 1)), max_count)),
-            "download_size": options.get("download_size") or "1K",
-            "reference_images": [str(Path(r).resolve()) for r in refs],
-            "filename": "img",
+            "count": max(1, int(options.get("count", 1))),
+            "size": options.get("download_size") or "1K",
+            "ingredients": [str(Path(r).resolve()) for r in refs],
+            "max_generation_retries": 0,  # the app's retries are the only ones
         }
         args = {k: v for k, v in args.items() if v not in (None, [])}
-        with self._lock:
-            if self.pacer.cap_reached():
-                raise ProviderError(
-                    f"Daily cap for {SITE_TITLE} reached ({self.pacer.cap} prompts). "
-                    "Raise it in Settings → Web Sessions or try tomorrow.", stop_queue=True)
-            if not self.pacer.wait_turn(ctx.should_stop):
-                raise StopRequested()
-            ctx.progress(0.05)
-            out = self._out_dir(job)
-            args["output_folder"] = str(out)
-            try:
-                extra = {"characters": chars, "scenes": scenes} if chars or scenes else {}
-                result = self.backend.generate_image(args, timeout, **extra)
-                used = self.pacer.record_use()
-                log.info("%s: job %d done via MCP (%d today): %s", SITE_TITLE, job.index, used,
-                         str(result.get("agent_reply", ""))[:120])
-                files = self._read_files(result)
-            except McpToolError as exc:
-                if exc.code in SUBMITTED_CODES:
-                    self.pacer.record_use()
-                raise self._map_error(exc) from None
-            except McpError as exc:
-                raise ProviderError(f"Google Flow MCP server problem: {exc}. Check the MCP folder in "
-                                    "Settings → Web Sessions.", stop_queue=True) from None
-            except concurrent.futures.TimeoutError:
-                raise ProviderError(f"{SITE_TITLE} MCP did not answer in time", retryable=True) from None
-            except ProviderError:
-                raise
-            except SyncError as exc:
-                raise ProviderError(f"{SITE_TITLE}: {exc}") from None
-            except Exception as exc:  # noqa: BLE001 - e.g. Chrome could not be launched
-                raise ProviderError(f"{type(exc).__name__}: {exc}", stop_queue=True) from None
-            finally:
-                self.pacer.mark_done()
-                shutil.rmtree(out, ignore_errors=True)
-        ctx.progress(1.0)
-        return files
-
-    def _read_files(self, result: dict[str, Any]) -> list[OutputFile]:
-        if result.get("status") != "success":
-            raise ProviderError(f"{SITE_TITLE} MCP returned status {result.get('status')!r}: "
-                                f"{result.get('message', '')}", retryable=True)
-        files = []
-        for f in result.get("files") or []:
-            p = Path(f)
-            ext = p.suffix.lstrip(".").lower() or "jpg"
-            files.append(OutputFile(p.read_bytes(), "jpg" if ext == "jpeg" else ext))
-        if not files:
-            raise ProviderError(f"{SITE_TITLE} finished but no image was downloaded", retryable=True)
-        return files
-
-    def _map_error(self, exc: McpToolError) -> ProviderError:
-        code, msg = exc.code, str(exc)
-        if code in BLOCK_CODES:
-            self.session.bring_to_front(SITE)
-            return ProviderError(BLOCK_MESSAGES[BLOCK_CODES[code]].format(site=SITE_TITLE), stop_queue=True)
-        if code in STOP_CODES:
-            if code == "UNKNOWN_UI_CHANGE":
-                self.session.bring_to_front(SITE)
-            return ProviderError(f"{SITE_TITLE}: {msg} ({code})", stop_queue=True)
-        if code in JOB_CODES:
-            return ProviderError(f"{SITE_TITLE} refused the prompt: {msg}")
-        return ProviderError(f"{SITE_TITLE}: {msg}" + (f" ({code})" if code else ""), retryable=True)
+        return run_engine_job(self, job, "flow_generate_image", args, float(options.get("timeout", 300)), ctx, "image")

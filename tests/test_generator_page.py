@@ -8,7 +8,7 @@ from openpyxl import Workbook
 from PySide6.QtCore import Qt
 
 from src.config import Settings
-from src.gen.fake_provider import FakeProvider
+from fake_provider import FakeProvider
 from src.gen.models import JobStatus
 from src.ui.generator.config_panel import ConfigPanel, COMMON_FIELDS
 from src.ui.generator.page import GeneratorPage
@@ -47,8 +47,13 @@ def test_fake_batch_updates_rows(qapp, tmp_path):
     assert run_until(qapp, lambda: not page.queue.is_running() and page.stats_header.stats.get("done") == 2)
 
     assert [j.status for j in page.jobs] == [JobStatus.DONE, JobStatus.FAILED, JobStatus.DONE]
-    assert {"Running", "Done", "Failed"} <= seen
+    page.model.flush()
+    assert {"Done", "Failed"} <= seen  # updates coalesce every 100 ms, so a short Running may not surface
     assert page.jobs[0].outputs[0].parent.parent == tmp_path / "out"
+    from src.ui.generator.thumbs import service
+
+    page.model.data(page.model.index(0, COL_OUTPUT), Qt.ItemDataRole.DecorationRole)  # queues the decode
+    service().wait()
     assert page.model.data(page.model.index(0, COL_OUTPUT), Qt.ItemDataRole.DecorationRole) is not None
     assert "Done 2" in page.stats_header.text() and "Failed 1" in page.stats_header.text()
     assert page.btn_retry.isEnabled() and page.btn_clear.isEnabled()

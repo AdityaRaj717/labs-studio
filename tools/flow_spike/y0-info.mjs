@@ -1,0 +1,10 @@
+import * as y from './y0lib.mjs';
+const { page } = await y.attach();
+const t=y.tiles(page).first(); const label=await t.getAttribute('aria-label');
+const title=t.getByRole('button',{name:label,exact:true});
+console.log('count',await title.count());
+await t.hover(); await title.click({timeout:3000}); await page.waitForTimeout(100);
+for (const [n,l] of [['^Created',page.getByText(/^Created /)],['Created',page.getByText(/Created /)]]) console.log(n,await l.count(), await l.first().innerText({timeout:1500}).catch(e=>'ERR '+e.message.split('\n')[0]));
+console.log(await page.evaluate(()=>{const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);let n;while(n=w.nextNode()){if(/Created/.test(n.textContent)){let p=n.parentElement;return [JSON.stringify(n.textContent),p.tagName,p.parentElement.innerText.slice(0,120)]}}return 'none'}));
+await title.click({timeout:3000}).catch(()=>{});
+process.exit(0);

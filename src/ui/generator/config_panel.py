@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from PySide6.QtCore import Signal
@@ -15,6 +16,7 @@ from src.gen.importer import MODES as IMPORT_MODES
 from src.gen.output import SUBDIR_MODES
 from src.gen.provider import ConfigField
 from src.i18n import tr
+from src.ui import kit
 
 COMMON_FIELDS: list[ConfigField] = [
     ConfigField("count", "gen_count", "int", 1, minimum=1, maximum=8),
@@ -29,6 +31,12 @@ COMMON_FIELDS: list[ConfigField] = [
     ConfigField("import_mode", "gen_import_mode", "choice", "auto", list(IMPORT_MODES),
                 option_prefix="import_"),
 ]
+
+
+def fields_for(provider) -> list[ConfigField]:
+    """The provider's fields plus the common ones, with Count capped at what the provider takes."""
+    common = [replace(f, maximum=provider.max_count) if f.key == "count" else f for f in COMMON_FIELDS]
+    return provider.config_fields() + common
 
 
 class FolderEdit(QWidget):
@@ -70,16 +78,37 @@ class ConfigPanel(QWidget):
         self._values: dict[str, Any] = {}
         self.editors: dict[str, QWidget] = {}
 
-        form = QFormLayout(self)
-        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        form = kit.label_column(QFormLayout(self))
+        form.setContentsMargins(0, 0, 8, 8)
+        form.setVerticalSpacing(5)
         for f in fields:
+            if f.depends_on:
+                f = self.fields[f.key] = replace(f, options=self._options(f))
             value = self.store.get(self._path(f.key), f.default)
             if f.kind == "choice" and value not in f.options and f.options:
                 value = f.default if f.default in f.options else f.options[0]
             self._values[f.key] = value
             editor = self._make_editor(f, value)
             self.editors[f.key] = editor
-            form.addRow(tr(f.label_key), editor)
+            form.addRow(kit.column_label(tr(f.label_key)), editor)
+
+    def _options(self, f: ConfigField) -> list[str]:
+        return f.options_by.get(self._values.get(f.depends_on), f.options)
+
+    def _refill(self, f: ConfigField) -> None:
+        """A choice whose options follow another field: keep the value if still offered."""
+        options = self._options(f)
+        self.fields[f.key] = f = replace(f, options=options)
+        w = self.editors[f.key]
+        w.blockSignals(True)
+        w.clear()
+        for opt in options:
+            w.addItem(tr(f.option_prefix + opt) if f.option_prefix else opt, opt)
+        w.blockSignals(False)
+        value = self._values[f.key]
+        if value not in options and options:
+            value = f.default if f.default in options else options[0]
+        self.set_value(f.key, value)
 
     def _path(self, key: str) -> str:
         return f"pages.{self.page_key}.{key}"
@@ -89,7 +118,7 @@ class ConfigPanel(QWidget):
             self.set_value(key, v, update_editor=False)
 
         if f.kind == "choice":
-            w = QComboBox()
+            w = kit.fit_combo(QComboBox())
             for opt in f.options:
                 w.addItem(tr(f.option_prefix + opt) if f.option_prefix else opt, opt)
             w.setCurrentIndex(max(0, w.findData(value)))
@@ -143,3 +172,6 @@ class ConfigPanel(QWidget):
                 w.setText(str(value))
             w.blockSignals(False)
         self.changed.emit(key, value)
+        for f in list(self.fields.values()):
+            if f.depends_on == key:
+                self._refill(f)

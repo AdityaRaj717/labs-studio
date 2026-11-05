@@ -4,12 +4,14 @@ This is where you run a batch of image prompts through Google Flow. Sign in firs
 
 ![The Flow Image page with a few prompts](img/flow-image.png)
 
-1. **Settings.** Model, aspect ratio, image size and the rest (below). They are saved per [project](projects.md).
-2. **Add prompts.** **Import file** loads a `.txt` or `.xlsx`, **Paste** takes text, and you can also drop a file on the table.
+1. **Side panel.** The side panel. **Take** shows the selected frame, its prompt and its actions. **Settings** holds the options for the next run; **Runs**, **Audio** and **Assets** list the engine's runs, this run's audio and the Flow project's newest 28 tiles. The panel button in the tool row shows or hides it.
+2. **Add prompts.** **Import file** loads a `.txt` or `.xlsx`, **Paste** takes text, and you can also drop a file on the sheet.
 3. **Match refs / Match characters.** Attach reference images, or saved characters and scenes, to the rows that mention them.
 4. **Run controls.** **Start**, **Pause**, **Stop**, **Retry failed** and **Open folder**.
 5. **Counters.** Total, queued, running, done, failed and stopped rows, and the time the batch has taken.
-6. **Prompt table.** One row per prompt with its character, scene, reference count, status, progress and output. Right-click rows for more.
+6. **Sheet.** One grey cell per prompt, with its number at the top and its marks and state below the picture. An orange flag means approved; an orange x and a faded picture mean rejected. An amber outline and dot mean running; a rose dot and hatching mean failed. With a cell selected, **P** approves, **X** rejects, **R** retries and **E** edits. **1** to **5** set stars (**0** clears them), and **6** to **9** toggle the red, yellow, green and blue labels. **J** changes how much each cell shows. **L** dims everything but the selected take (press again for darker, **Esc** to restore). Switch to **Queue** for the same rows as a table with character, scene, references and progress. Right-click for more.
+
+Keys on the sheet: **P** approve, **X** reject, **R** retry (asks first if the frame is finished), **E** edit the prompt, **Space** view full size, arrow keys move. In the viewer, **Esc** or **Space** goes back and **[** **]** step through a row's files. **Ctrl+K** opens the command palette from any page, and **Ctrl+1** to **Ctrl+9** go to pages. Pressing P or X again on a local still takes the mark back.
 
 ## Settings
 
@@ -31,7 +33,7 @@ This is where you run a batch of image prompts through Google Flow. Sign in firs
 
 - **Paste**: one prompt per line, or longer prompts separated by a blank line.
 - **Import file**: a `.txt` file, or an `.xlsx` sheet. In a sheet the column headed `prompt` is used, otherwise column A.
-- **Drop** a file on the table.
+- **Drop** a file on the sheet or the queue.
 
 ## Reference images
 

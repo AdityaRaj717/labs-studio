@@ -107,7 +107,7 @@ def test_build_export_graph():
     # audio: video clip's own sound (input 2) + looped music, mixed without normalising
     assert parts[7].startswith("[2:a]atrim=duration=4") and "volume=0.5" in parts[7] and "adelay=2500:all=1" in parts[7]
     assert parts[8].startswith("[4:a]") and "afade=t=out:st=4.5:d=2" in parts[8] and "volume=0.5" in parts[8]
-    assert parts[9] == "[a0][a1]amix=inputs=2:normalize=0:dropout_transition=0,apad,atrim=0:6.5[aout]"
+    assert parts[9] == "[a0][a1]amix=inputs=2:normalize=0:dropout_transition=0,apad=whole_dur=6.5,atrim=0:6.5[aout]"
     assert "TITLE" not in plan.ass_text and "Title" in plan.ass_text and "hello" in plan.ass_text
 
 
@@ -144,7 +144,7 @@ def test_single_audio_source_skips_amix_and_srt_sidecar():
     p.first_track("audio").clips.append(Clip("audio", "m.mp3", start=0.5, duration=1.5))
     p.cues = [Cue(0, 1, "x")]
     plan = ff.build_export(p, "o.mp4", ff.ExportSettings(write_srt=True))
-    assert "amix" not in plan.graph and "[a0]apad,atrim=0:2[aout]" in plan.graph
+    assert "amix" not in plan.graph and "[a0]apad=whole_dur=2,atrim=0:2[aout]" in plan.graph
     assert plan.srt_text.startswith("1\n00:00:00,000 --> 00:00:01,000\nx")
 
 

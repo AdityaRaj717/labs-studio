@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QFileDialog, QInputDialog, QMessageBox, QWidget
 
@@ -104,3 +104,38 @@ def open_in_flow(parent: QWidget, store: ProjectStore, pid: str) -> None:
         if store.settings.get("web.flow_open_on_switch", True):
             return  # switching already opens it
     open_project_async(store.projects[pid])
+
+
+def bind_flow(parent: QWidget, store: ProjectStore, pid: str, client=None) -> Project | None:
+    """Pick one of Flow's projects (``flow_list_projects``) and store its url on this project."""
+    from PySide6.QtWidgets import QApplication
+
+    from src.web.production_actions import ActionError, ProductionActions
+
+    if client is None:
+        from src.web.flow_mcp import flow_mcp
+
+        client = flow_mcp().client
+    project = store.projects[pid]
+    # shortcut: blocks the window while Flow lists (seconds); move to a thread if it gets slow.
+    QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+    try:
+        found = ProductionActions(client).list_projects()
+    except ActionError as exc:
+        QMessageBox.warning(parent, tr("proj_bind_flow"), tr("proj_bind_failed", message=exc.message))
+        return None
+    finally:
+        QApplication.restoreOverrideCursor()
+    found = [p for p in found if p.get("url")]
+    if not found:
+        QMessageBox.information(parent, tr("proj_bind_flow"), tr("proj_bind_none"))
+        return None
+    labels = [f"{p.get('title') or '—'}  ({p['url']})" for p in found]
+    current = next((i for i, p in enumerate(found) if p["url"] == project.flow_url), 0)
+    choice, ok = QInputDialog.getItem(parent, tr("proj_bind_flow"), tr("proj_bind_pick", name=project.name),
+                                      labels, current, False)
+    if not ok:
+        return None
+    picked = found[labels.index(choice)]
+    project.set_flow(picked["url"], str(picked.get("title") or ""))
+    return project

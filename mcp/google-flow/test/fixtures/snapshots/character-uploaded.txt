@@ -1,0 +1,33 @@
+- link "Skip to main content":
+  - /url: "#main-content"
+- main:
+  - button "Go back"
+  - textbox "Editable text":
+    - /placeholder: Untitled character
+    - text: Untitled character
+  - button "Favorite"
+  - button "Move to trash"
+  - button "Hide history"
+  - button "Done"
+  - main:
+    - textbox "Character name": Untitled character
+    - button "Edit name"
+    - button "Select a voice"
+    - text: Character info (optional)
+    - textbox "Character personality":
+      - /placeholder: Describe how your character acts...
+    - text: The Flow agent can use this information to help craft scenes with your character.
+    - img "Generated character image"
+    - button "Download image"
+    - button "Delete image"
+    - button "Portrait"
+    - button "Create body"
+    - textbox "What do you want to change?":
+      - paragraph
+    - button "Add ingredients to the prompt box"
+    - button "Format" [disabled]
+    - button "Select model family": 🍌 Nano Banana 2.1
+    - button "Start generation" [disabled]
+  - img "Tile displaying a user's image"
+  - text: 100%
+  - paragraph: Google Flow can make mistakes, so double check it

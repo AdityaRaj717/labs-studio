@@ -4,20 +4,22 @@ from __future__ import annotations
 
 import logging
 import threading
+from pathlib import Path
 
-from PySide6.QtCore import QObject, QUrl, Signal
+from PySide6.QtCore import QObject, Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QSpinBox, QVBoxLayout, QWidget,
+    QPushButton, QScrollArea, QSpinBox, QVBoxLayout, QWidget,
 )
 
 from src import config
 from src.i18n import tr
-from src.web.adapters import SITE_TITLES
-from src.web.pacing import Pacer
+from src.web.engine_client import uses_today
 
 log = logging.getLogger(__name__)
+
+SITE_TITLES = {"flow": "Google Flow"}
 
 
 class _Bridge(QObject):
@@ -55,7 +57,6 @@ class SiteRow(QGroupBox):
         self.site = site
         self.store = store
         self.run_async = run_async
-        self.pacer = Pacer(site, store)
 
         self.status = QLabel(tr("web_status_unknown"))
         self.status.setWordWrap(True)
@@ -63,7 +64,7 @@ class SiteRow(QGroupBox):
         self.cap = QSpinBox()
         self.cap.setRange(0, 1000)
         self.cap.setSpecialValueText(tr("web_cap_none"))
-        self.cap.setValue(self.pacer.cap)
+        self.cap.setValue(int(store.get(f"web.caps.{site}", 0) or 0))
         self.cap.valueChanged.connect(self._set_cap)
 
         self.btn_launch = QPushButton(tr("web_launch"))
@@ -81,7 +82,9 @@ class SiteRow(QGroupBox):
         form.addRow(tr("web_logged_in"), self.status)
         form.addRow(tr("web_used_today"), self.usage)
         form.addRow(tr("web_daily_cap"), self.cap)
+        form.setContentsMargins(0, 0, 0, 0)
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 2, 0, 6)
         layout.addLayout(form)
         layout.addLayout(buttons)
         self.refresh_usage()
@@ -91,8 +94,9 @@ class SiteRow(QGroupBox):
         self.refresh_usage()
 
     def refresh_usage(self) -> None:
-        cap = self.pacer.cap
-        self.usage.setText(tr("web_usage", used=self.pacer.used_today(),
+        cap = int(self.store.get(f"web.caps.{self.site}", 0) or 0)
+        data_dir = Path(self.store.get("web.diag_dir", r"D:\glabs_web\diag")).parent / "flow-mcp"
+        self.usage.setText(tr("web_usage", used=uses_today(data_dir),
                               cap=cap if cap else tr("web_cap_none")))
 
     def set_busy(self, busy: bool) -> None:
@@ -114,6 +118,7 @@ class WebSessionsTab(QWidget):
 
         browser = QGroupBox(tr("web_browser"))
         form = QFormLayout(browser)
+        form.setContentsMargins(0, 2, 0, 6)
         form.addRow(tr("web_chrome_path"), PathEdit("web.chrome_path", self.store, folder=False))
         form.addRow(tr("web_profile_dir"), PathEdit("web.profile_dir", self.store, folder=True))
         form.addRow(tr("web_diag_dir"), PathEdit("web.diag_dir", self.store, folder=True))
@@ -135,12 +140,21 @@ class WebSessionsTab(QWidget):
             form.addRow(tr(label), spin)
 
         self.rows = {site: SiteRow(site, self.store, self.run_async) for site in SITE_TITLES}
-        layout = QVBoxLayout(self)
+        body = QWidget()
+        layout = QVBoxLayout(body)
+        layout.setContentsMargins(0, 8, 10, 8)
         layout.addWidget(note)
         layout.addWidget(browser)
         for row in self.rows.values():
             layout.addWidget(row)
         layout.addStretch(1)
+        scroll = QScrollArea()  # the form is taller than the minimum window
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setWidget(body)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(scroll)
 
     @property
     def session(self):
@@ -170,17 +184,14 @@ class WebSessionsTab(QWidget):
         self.bridge.done.emit(site, action, result)
 
     def do_action(self, site: str, action: str):
-        from src.web.adapters import page_status
-
         if action == "launch":
-            self.session.open_site(site)
-            return self.session.run(site, lambda page: page_status(page, site), timeout=60)
+            return self.session.open_site(site)
         if action == "check":
-            return self.session.run(site, lambda page: page_status(page, site), timeout=60)
+            return self.session.login_state(site)
         if action == "diagnose":
             from src.web.diagnose import diagnose
 
-            return diagnose(site, self.session)
+            return diagnose(site, self.session.backend)
         raise ValueError(action)
 
     def _on_done(self, site: str, action: str, result) -> None:

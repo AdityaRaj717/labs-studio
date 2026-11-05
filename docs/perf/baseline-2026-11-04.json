@@ -1,0 +1,105 @@
+{
+  "date": "2026-11-04",
+  "rows": 2000,
+  "frame_width": 240,
+  "window": "1920x1080",
+  "platform": "Windows-11-10.0.26300-SP0",
+  "processor": "AMD64 Family 25 Model 68 Stepping 1, AuthenticAMD",
+  "python": "3.12.10",
+  "qt_platform": "windows",
+  "image_size": "1376x768",
+  "image_mean_kb": {
+    ".jpg": 189,
+    ".png": 204
+  },
+  "metrics": {
+    "cold_start_s": {
+      "measured": 2.25,
+      "unit": "s",
+      "target": "<= 1.5 s",
+      "meets_target": false,
+      "note": "script start (imports and demo setup included, synthetic image creation subtracted) to window shown and first grab, warm disk cache, offscreen (WA_DontShowOnScreen)"
+    },
+    "first_page_build_ms": {
+      "measured": 359.17,
+      "unit": "ms",
+      "target": "<= 200 ms",
+      "meets_target": false,
+      "note": "first switch_page('flow_video') (builds a GeneratorPage, lazily) plus event pump; the image page's own build is inside cold_start_s"
+    },
+    "import_rows_ms": {
+      "measured": 115.89,
+      "unit": "ms",
+      "target": "<= 500 ms",
+      "meets_target": true,
+      "note": "page.add_prompts(2000) plus event pump; rows have no outputs yet",
+      "attach_outputs_ms": 384.43
+    },
+    "filter_change_ms": {
+      "measured": 2075.66,
+      "unit": "ms",
+      "target": "<= 50 ms",
+      "meets_target": false,
+      "note": "set_filter plus pump, mean of 6",
+      "worst_ms": 5917.07
+    },
+    "scroll_frame_p95_ms": {
+      "measured": 5315.78,
+      "unit": "ms",
+      "target": "<= 20 ms",
+      "meets_target": false,
+      "note": "268 frames, each scrollbar step plus synchronous viewport repaint plus events (range 83845 px, step 40); 269 paint events seen",
+      "paint_event_interval_p95_ms": 5325.2,
+      "paint_event_interval_worst_ms": 7798.46
+    },
+    "scroll_frame_worst_ms": {
+      "measured": 7789.48,
+      "unit": "ms",
+      "target": "<= 40 ms",
+      "meets_target": false,
+      "note": "same frames"
+    },
+    "rss_after_scroll_mb": {
+      "measured": 153.03,
+      "unit": "MB",
+      "target": "<= 600 MB",
+      "meets_target": true,
+      "note": "RSS 134 MB before scrolling; after scrolling all 2000 rows twice"
+    },
+    "slider_drag_fps": {
+      "measured": 0.58,
+      "unit": "fps",
+      "target": ">= 30 fps",
+      "meets_target": false,
+      "note": "86 steps, each setValue plus synchronous repaint; step p95 7537.1 ms, worst 7715.0 ms"
+    },
+    "slider_drag_no_ui_decode": {
+      "measured": null,
+      "unit": "bool",
+      "target": "no decode on the UI thread",
+      "meets_target": null,
+      "note": "not measured: no decode counter without app changes; frame_pixmap decodes inside paint today (S6 code facts), so expect false"
+    },
+    "burst_100_per_s_ui_busy_pct": {
+      "measured": 99.63,
+      "unit": "%",
+      "target": "< 10 %",
+      "meets_target": false,
+      "note": "13 updates in 7.5s (2/s) via model.refresh_job (filter, stats, save-timer slots and the repaints included); busy = time inside processEvents / wall, 1 ms sleeps excluded"
+    },
+    "viewer_cycles_rss_growth_pct": {
+      "measured": 29.43,
+      "unit": "%",
+      "target": "< 5 %",
+      "meets_target": false,
+      "note": "RSS 185 MB to 239 MB over 20 open/close; open plus pump mean 1035 ms, worst 11334 ms"
+    },
+    "thumbnail_memory_mb": {
+      "measured": null,
+      "unit": "MB",
+      "target": "256 MB cap by bytes",
+      "meets_target": null,
+      "note": "not measurable: the thumb cache has no byte accounting or cap yet (prompt_model._thumb is unbounded); S6-2 adds it"
+    }
+  }
+}

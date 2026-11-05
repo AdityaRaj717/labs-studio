@@ -20,7 +20,7 @@ Start with the **Detailed Log** page. It shows everything the app does, and **Op
 | "UI changed", or every job fails at the same step | Google changed Flow's page. Press **Diagnose page** in Web Sessions and keep the snapshot, then check for an app update |
 | One prompt fails with a refusal | Flow declined that prompt, for example for its content policy. Change the prompt; the others carry on |
 | Timeouts | Flow was slow. Raise **Request timeout** on the page. Timeouts are retried by themselves |
-| A batch and your agent at the same time | Only one program should generate in the app's Chrome at a time. See [Use the google-flow MCP from your own agent](mcp-agents.md) |
+| A batch and your agent at the same time | They must share one engine: give the agent the same `FLOW_DATA_DIR` as the app. See [Use the google-flow MCP from your own agent](mcp-agents.md), including its Recovery section for a killed engine, closed Chrome, or the daily cap |
 | A character keeps getting set up again | It was renamed or deleted in Flow. The app sets it up again by its name. See [Characters and scenes](characters-and-scenes.md) |
 | 4K isn't offered | Flow's 4K download isn't available on every plan, so the app offers 1K and 2K only |
 
@@ -29,14 +29,13 @@ Start with the **Detailed Log** page. It shows everything the app does, and **Op
 | What you see | What to do |
 |---|---|
 | "No … API key" | Add the key in **Settings → API keys**. See [Getting started](getting-started.md) |
-| The key is refused, or "refused the request" (403) | Check the key on the provider's site. Some OpenAI image models need a verified organization |
+| The key is refused, or "refused the request" (403) | Check the key on the provider's site |
 | Rate limited (429), server errors | Retried by themselves up to **Auto retries**. Lower **Concurrent threads** |
 
 ## Tools and editor
 
 | What you see | What to do |
 |---|---|
-| "ffmpeg not found" or "Real-ESRGAN not found" | Install it and put it on PATH, or set its path in **Settings → Tools** (the Video Editor has its own ffmpeg box). See [Video Cut and Image Upscaler](video-tools.md) |
 | Export fails on a long timeline | Use ffmpeg 7 or newer |
 
 ## Other

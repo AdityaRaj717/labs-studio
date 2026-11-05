@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 import time
 
-from src.gen.fake_provider import FakeProvider
+from fake_provider import FakeProvider
 from src.gen.models import Job, JobStatus
 from src.gen.output import save_outputs
 from src.gen.queue import JobQueue, QueueSettings

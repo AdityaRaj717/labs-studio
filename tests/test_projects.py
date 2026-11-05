@@ -10,7 +10,7 @@ import pytest
 
 from src import projects
 from src.config import Settings
-from src.gen.fake_provider import FakeProvider
+from fake_provider import FakeProvider
 from src.gen.models import Job, JobStatus
 from src.gen.output import default_save_dir
 from src.projects import ProjectBusyError, ProjectStore
@@ -76,11 +76,11 @@ def test_old_mcp_dir_means_repo_copy(tmp_path):
 
 def test_create_rename_duplicate_delete(installed):
     settings, store = installed
-    settings.set("pages.grok.count", 3)  # routed to Default
+    settings.set("pages.flow_video.count", 3)  # routed to Default
     a = store.create("Cats")
     b = store.create("Dogs", settings_from="default")
     assert a.output_dir == store.projects_dir / a.id / "outputs"
-    assert a.get("pages.grok.count") is None and b.get("pages.grok.count") == 3
+    assert a.get("pages.flow_video.count") is None and b.get("pages.flow_video.count") == 3
     with pytest.raises(ValueError):
         store.create("cats")
     with pytest.raises(ValueError):
@@ -110,7 +110,7 @@ def test_settings_route_pages_to_active_project(installed):
     store.activate("default")
     assert settings.get("pages.flow_image.aspect") == "16:9"
     assert "pages" not in json.loads(settings.path.read_text())  # never written to settings.json
-    assert default_save_dir("grok") == store.active.output_dir / "grok"
+    assert default_save_dir("flow_video") == store.active.output_dir / "flow_video"
 
 
 def test_switch_refused_while_busy(installed):
@@ -172,17 +172,18 @@ def test_main_window_switch_rebuilds_project_pages(qapp, installed, monkeypatch,
     window = MainWindow()
     window.attach_projects(store)
     register_pages(window)
-    window.switch_page("demo")
-    demo = window.page("demo")
+    window.register_page("flow_image", lambda: GeneratorPage("flow_image", FakeProvider()))
+    window.switch_page("flow_image")
+    demo = window.page("flow_image")
     demo.add_prompts(["kept in Default"])
     other = store.create("Other")
     window.picker.refresh()
     assert window.picker.combo.count() == 2
     store.activate(other.id)
-    assert window.page("demo") is not demo and window.page("demo").jobs == []
+    assert window.page("flow_image") is not demo and window.page("flow_image").jobs == []
     assert "Other" in window.windowTitle()
     store.activate("default")
-    assert [j.prompt for j in window.page("demo").jobs] == ["kept in Default"]
+    assert [j.prompt for j in window.page("flow_image").jobs] == ["kept in Default"]
     window.switch_page("projects")
     assert window.page("projects").table.rowCount() == 2
     window.close()
@@ -221,18 +222,18 @@ def test_webhook_project_field(qapp, installed, tmp_path):
 
 # ---- Flow project per app project --------------------------------------
 def test_flow_project_created_once_and_used_for_jobs(installed, tmp_path):
-    from tests.test_mcp_client import make_flow
+    from tests.test_engine_client import make_flow, tools
 
     _, store = installed
-    flow, clients, _ = make_flow(tmp_path)
-    flow.generate_image({"prompt": "a"}, timeout=60)
-    flow.generate_image({"prompt": "b"}, timeout=60)
-    calls = clients[0].calls
-    assert [n for n, _ in calls] == ["flow_connect", "flow_open_project", "flow_generate_image",
-                                     "flow_generate_image"]
-    assert calls[1][1] == {"name": "Default", "create_if_missing": True}
+    flow, clients = make_flow(tmp_path)
+    flow.run_job("flow_generate_image", {"prompt": "a"}, 60)
+    flow.run_job("flow_generate_image", {"prompt": "b"}, 60)
+    calls = dict(clients[0].calls)
+    assert tools(clients[0]) == ["flow_open_project", "flow_generate_image", "flow_generate_image"]
+    assert calls["flow_open_project"] == {"name": "Default", "create_if_missing": True}
     url = store.active.flow_url
-    assert url.startswith("https://flow.google.com/project/") and calls[2][1]["project_url"] == url
+    assert url.startswith("https://flow.google.com/project/") and calls["flow_generate_image"]["project_url"] == url
+    assert calls["flow_generate_image"]["output_root"] == str(store.active.output_dir)
     assert json.loads(store.active.file.read_text())["flow"]["url"] == url
 
     other = store.create("Other")
@@ -246,16 +247,16 @@ def test_flow_project_created_once_and_used_for_jobs(installed, tmp_path):
 
 
 def test_flow_project_gone_is_recreated(installed, tmp_path):
-    from tests.test_mcp_client import make_flow
+    from tests.test_engine_client import make_flow, tools
 
     _, store = installed
-    flow, clients, _ = make_flow(tmp_path)
+    flow, clients = make_flow(tmp_path)
     flow.ensure_project(store.active)
-    clients[0].fail_next = ["PROJECT_NOT_FOUND"]  # deleted in Flow after it was opened
-    assert flow.generate_image({"prompt": "a"}, timeout=60)["status"] == "success"
-    names = [n for n, _ in clients[0].calls]
-    assert names == ["flow_connect", "flow_open_project", "flow_generate_image", "flow_open_project",
-                     "flow_generate_image"]
+    clients[0].fail_queue = ["PROJECT_NOT_FOUND"]  # deleted in Flow after it was opened
+    assert flow.run_job("flow_generate_image", {"prompt": "a", "idempotency_key": "k"}, 60)["state"] == "done"
+    assert tools(clients[0]) == ["flow_open_project", "flow_generate_image", "flow_open_project", "flow_generate_image"]
+    keys = [args["idempotency_key"] for tool, args in clients[0].calls if tool == "flow_generate_image"]
+    assert keys[0] != keys[1]  # the first job failed for good: the repeat must not return it
 
 
 def test_flow_mcp_defaults_to_repo_copy_and_passes_env(tmp_path):

@@ -22,7 +22,7 @@
     },
     {
       "n": 3,
-      "target": "table",
+      "target": "sheet",
       "label": "The page"
     },
     {

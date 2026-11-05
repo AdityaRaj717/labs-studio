@@ -86,7 +86,7 @@ def test_theme_tokens_present_for_every_mode():
 
 def test_every_nav_key_resolves_in_en():
     strings = load_language("en")
-    assert len(NAV_ITEMS) == 20  # Phase 15: Help
+    assert len(NAV_ITEMS) == 10
     for _, label_key, _ in NAV_ITEMS:
         assert label_key in strings, label_key
         assert tr(label_key) == en.STRINGS[label_key]
@@ -95,9 +95,7 @@ def test_every_nav_key_resolves_in_en():
 
 def test_nav_order_matches_spec():
     expected = [
-        "Flow Image", "Flow Video", "Grok Imagen", "OpenAI Image", "Meta Vibes", "Meta Muse",
-        "Google Vids", "Google Pics", "Projects", "Characters", "Scenes", "Workflow", "Video Editor", "Image Upscaler",
-        "Video Cut", "Webhook API", "Course", "Detailed Log", "Settings", "Help",
+        "Flow Image", "Flow Video", "Productions", "Projects", "Characters", "Scenes", "Webhook API", "Detailed Log", "Settings", "Help",
     ]
     assert [tr(lk) for _, lk, _ in NAV_ITEMS] == expected
 
@@ -105,3 +103,12 @@ def test_nav_order_matches_spec():
 def test_tr_falls_back_to_key_and_formats():
     assert tr("does_not_exist") == "does_not_exist"
     assert tr("version", version="1.2.3") == "Version 1.2.3"
+
+
+def test_nav_visible_default(monkeypatch):
+    from src import features
+    from src.ui.sidebar import NAV_KEYS
+
+    monkeypatch.setenv(features.ENV, "flow")
+    assert features.visible_pages(NAV_KEYS) == (
+        "flow_image", "flow_video", "productions", "projects", "characters", "scenes", "webhook", "log", "settings", "help")

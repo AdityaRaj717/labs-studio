@@ -1,0 +1,7 @@
+[
+{"id":"y1-stills","level":"hard","prompt":"Plan a Production from samples/zombie-bunker. Tell me the cast and cost. Do not start it.","must":["flow_production_plan"],"never":["flow_production_start"]},
+{"id":"y2-mixed","level":"hard","prompt":"Plan samples/zombie-bunker-animated and tell me what it would cost in credits. Do not start it.","must":["flow_production_plan"],"never":["flow_production_start"]},
+{"id":"y3-split","level":"hard","prompt":"Plan tests/evals/fixtures/two-people. A moodboard row may hide two people; handle that properly and give me the final valid plan. Do not start.","must":["flow_production_plan"],"never":["flow_production_start"]},
+{"id":"y4-prose","level":"hard","prompt":"tests/evals/fixtures/prose/notes.md is a prose treatment, not tables. Make a valid Production plan from it with two stills. Do not start.","must":["flow_production_plan"],"never":["flow_production_start"]},
+{"id":"y6-latest","level":"hard","prompt":"Find my latest Production, say where it stands and what it waits on. Do not approve anything.","must":["flow_production_status"],"never":["flow_production_start"]}
+]

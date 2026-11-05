@@ -16,7 +16,7 @@ from src.characters.store import CharacterStore
 from src.config import Settings
 from src.gen.models import Job
 from src.projects.store import job_to_row, row_to_job
-from src.web.mcp_client import McpToolError
+from src.web.engine_client import EngineToolError
 
 A = "https://flow.google.com/project/aaa"
 B = "https://flow.google.com/project/bbb"
@@ -48,7 +48,7 @@ class FakeMcp:
     def __call__(self, tool, args, timeout):
         self.calls.append((tool, dict(args)))
         if tool in self.fail:
-            raise McpToolError(self.fail[tool], {"error_code": self.fail[tool]})
+            raise EngineToolError(self.fail[tool], {"error_code": self.fail[tool]})
         if tool == "flow_list_characters":
             return {"status": "success", "characters": [{"name": n} for n in self.present]}
         if tool == "flow_import_character":
@@ -176,25 +176,9 @@ class FakeBackend:
         self.out = out
         self.calls = []
 
-    def generate_image(self, args, timeout, **extra):
+    def run_job(self, tool, args, timeout, on_event=None, should_stop=None, **extra):
         self.calls.append((args, extra))
-        return {"status": "success", "files": [str(png(self.out / "o.png"))]}
-
-
-class FakePacer:
-    cap = 0
-
-    def cap_reached(self):
-        return False
-
-    def wait_turn(self, should_stop):
-        return True
-
-    def record_use(self):
-        return 1
-
-    def mark_done(self):
-        pass
+        return {"state": "done", "outputs": [{"file": str(png(self.out / "o.png"))}]}
 
 
 def test_provider_passes_library_ids_not_their_images(tmp_path, libs):
@@ -210,12 +194,12 @@ def test_provider_passes_library_ids_not_their_images(tmp_path, libs):
     attach.set_scenes(job, [bunker.id], scenes)
     (tmp_path / "gen").mkdir()
     backend = FakeBackend(tmp_path / "gen")
-    provider = WebFlowImageProvider(backend=backend, pacer=FakePacer(), session=object(), out_root=tmp_path / "o")
+    provider = WebFlowImageProvider(backend=backend, session=object())
     ctx = RunContext(should_stop=lambda: False, progress=lambda f: None)
-    files = provider.generate(job, {"model": "Nano Banana 2", "aspect": "1:1"}, ctx)
+    files = provider.generate(job, {"model": "banana21", "aspect": "1:1"}, ctx)
     args, extra = backend.calls[0]
     assert extra == {"characters": [surv.id], "scenes": [bunker.id]}
-    assert args["reference_images"] == [str(own.resolve())] and len(files) == 1
+    assert args["ingredients"] == [str(own.resolve())] and len(files) == 1
 
     plain = Job("no library", refs=[own])
     provider.generate(plain, {}, ctx)
@@ -225,7 +209,7 @@ def test_provider_passes_library_ids_not_their_images(tmp_path, libs):
 def test_flow_mcp_sets_characters_up_before_the_job(tmp_path, monkeypatch, img):
     from src import projects
     from src.characters import store as store_mod
-    from tests.test_mcp_client import make_flow
+    from tests.test_engine_client import make_flow, tools
 
     monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
     settings = Settings(tmp_path / "settings.json")
@@ -234,14 +218,13 @@ def test_flow_mcp_sets_characters_up_before_the_job(tmp_path, monkeypatch, img):
         chars, scenes = store_mod.default_store(), store_mod.scene_store()
         mia = chars.add("Mia", images=[img])
         bunker = scenes.add("Bunker", images=[img])
-        flow, clients, _ = make_flow(tmp_path)
-        flow.generate_image({"prompt": "Mia in the Bunker"}, timeout=60, characters=[mia.id], scenes=[bunker.id])
-        names = [n for n, _ in clients[0].calls]
-        assert names == ["flow_connect", "flow_open_project", "flow_list_characters",
-                         "flow_create_character", "flow_create_scene", "flow_generate_image"]
+        flow, clients = make_flow(tmp_path)
+        flow.run_job("flow_generate_image", {"prompt": "Mia in the Bunker"}, 60, characters=[mia.id], scenes=[bunker.id])
+        assert tools(clients[0]) == ["flow_open_project", "flow_list_characters", "flow_create_character",
+                                     "flow_create_scene", "flow_generate_image"]
         url = pstore.active.flow_url
-        gen = clients[0].calls[-1][1]
-        assert gen["project_url"] == url and gen["characters"] == ["Mia"] and gen["scenes"] == ["Bunker"]
+        gen = dict(clients[0].calls)["flow_generate_image"]
+        assert gen["project_url"] == url and gen["ingredients"] == [{"character": "Mia"}, {"scene": "Bunker"}]
         assert chars.get(mia.id).flow == {url: "Mia"}
 
         # on switch: everything the saved rows use
@@ -250,7 +233,7 @@ def test_flow_mcp_sets_characters_up_before_the_job(tmp_path, monkeypatch, img):
         pstore.active.set_rows("flow_image", [job_to_row(job)])
         res = flow.sync_project(pstore.active)
         assert res["characters"] == {mia.id: "Mia"} and not res["errors"]
-        assert [n for n, _ in clients[0].calls][-1] == "flow_generate_image"  # nothing new to set up
+        assert tools(clients[0])[-1] == "flow_generate_image"  # nothing new to set up
     finally:
         projects.uninstall()
 
@@ -268,7 +251,7 @@ def test_parse_submit_characters_and_scenes():
 
 
 def test_webhook_attaches_characters_and_scenes(qapp, tmp_path, libs):
-    from src.gen.fake_provider import FakeProvider
+    from fake_provider import FakeProvider
     from src.ui.generator.page import GeneratorPage
     from src.ui.webhook.backend import PageBackend
     from src.webhook.server import ApiError
@@ -295,7 +278,7 @@ def test_webhook_attaches_characters_and_scenes(qapp, tmp_path, libs):
 
 # ---- UI ---------------------------------------------------------------------
 def test_scene_column_and_menu_actions(qapp, tmp_path, libs):
-    from src.gen.fake_provider import FakeProvider
+    from fake_provider import FakeProvider
     from src.ui.generator.page import GeneratorPage
     from src.ui.generator.prompt_model import COL_CHARACTER, COL_SCENE
 
@@ -327,7 +310,7 @@ def test_scenes_page_and_setup_in_flow(qapp, libs, img):
     page = CharactersPage(scenes, kind="scene", flow_setup=lambda kind, eid: (
         seen.append((kind, eid)), scenes.set_flow(eid, A, "Bunker")))
     sid = page.new_character()
-    assert scenes.get(sid).name == "New scene" and not page.voice_row_shown
+    assert scenes.get(sid).name == "New scene"
     page.add_images([img])
     page.name_edit.setText("Bunker")  # unsaved: setting up in Flow saves it first
     page.setup_in_flow()
@@ -346,14 +329,14 @@ def test_flow_only_switch(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "_settings", Settings(tmp_path / "s.json"))
     monkeypatch.delenv(features.ENV, raising=False)
     assert features.flow_only()  # the default
-    assert not features.page_shown("grok") and features.page_shown("flow_image")
+    assert features.page_shown("flow_video") and features.page_shown("flow_image")
     assert features.page_shown("scenes") and features.page_shown("characters") and features.page_shown("projects")
-    assert not features.shown("provider:gemini_image") and not features.shown("settings:api_keys")
-    assert features.visible_pages(("flow_image", "flow_video", "demo")) == ("flow_image",)
+    assert features.shown("settings:api_keys")  # audio uses keys now
+    assert features.visible_pages(("flow_image", "flow_video")) == ("flow_image", "flow_video")
     config.set("features.flow_only", False)
-    assert features.page_shown("grok") and features.shown("settings:api_keys")
+    assert not features.flow_only()
     monkeypatch.setenv(features.ENV, "flow")
-    assert not features.page_shown("grok")
+    assert features.flow_only()
 
 
 def test_app_in_flow_only_mode_shows_only_working_features(qapp, monkeypatch, tmp_path):
@@ -368,14 +351,13 @@ def test_app_in_flow_only_mode_shows_only_working_features(qapp, monkeypatch, tm
     try:
         register_pages(window)
         shown = [k for k, b in window.sidebar.buttons.items() if not b.isHidden()]
-        assert shown == ["flow_image", "projects", "characters", "scenes", "webhook", "log", "settings", "help"]
+        assert shown == ["flow_image", "flow_video", "productions", "projects", "characters", "scenes", "webhook", "log", "settings", "help"]
         img_page = window.page("flow_image")
         assert isinstance(img_page.provider, WebFlowImageProvider) and img_page.provider_combo is None
         tabs = window.page("settings").tabs
-        assert [tabs.tabText(i) for i in range(tabs.count())] == ["Web Sessions"]
-        assert not window.page("characters").voice_row_shown
+        assert [tabs.tabText(i) for i in range(tabs.count())] == ["Web Sessions", "API keys"]
         wh = window.page("webhook")
-        assert wh.backend.page_keys == ("flow_image",) and wh.btn_demo.isHidden()
+        assert wh.backend.page_keys == ("flow_image", "flow_video")
         wh.shutdown()
     finally:
         window.close()

@@ -18,7 +18,7 @@ from PIL import Image
 
 from src.characters.store import CharacterStore
 from src.config import Settings
-from src.gen.fake_provider import FakeProvider
+from fake_provider import FakeProvider
 from src.gen.models import Job, JobStatus
 from src.gen.queue import JobQueue, add_finish_hook, remove_finish_hook
 from src.stats.store import StatsStore
@@ -81,6 +81,7 @@ def setup(qapp, tmp_path, stats):
     pages = {"demo": demo}
     switched = []
     wh = WebhookPage(lambda key: pages[key], switched.append, store=store, stats=stats)
+    wh.backend.page_keys = ("demo",)
     yield wh, demo, store, switched
     wh.shutdown()
     demo.shutdown()
@@ -265,8 +266,6 @@ def test_page_token_refs_and_character(qapp, setup, tmp_path):
                                   token="tok-123")
     assert status == 400 and "not found" in body["error"]
 
-    wh.btn_demo.click()
-    assert switched == ["demo"]
 
 
 def test_lan_mode_needs_token(qapp, setup):
@@ -326,7 +325,7 @@ def test_queue_hook_counts_each_finished_job(tmp_path):
         remove_finish_hook(store.on_job_finished)
 
 
-def test_main_window_registers_webhook_and_demo(qapp, tmp_path, monkeypatch):
+def test_main_window_registers_webhook(qapp, tmp_path, monkeypatch):
     from src import config
     from src.app import register_pages
     from src.ui.main_window import MainWindow
@@ -339,7 +338,4 @@ def test_main_window_registers_webhook_and_demo(qapp, tmp_path, monkeypatch):
     window.switch_page("webhook")
     page = window.page("webhook")
     assert isinstance(page, WebhookPage) and not page.running
-    assert isinstance(window.page("demo"), GeneratorPage)
-    page.btn_demo.click()
-    assert window.current_key == "demo"
     window.close()

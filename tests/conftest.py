@@ -17,6 +17,14 @@ def qapp():
 
     app = QApplication.instance() or QApplication([])
     yield app
+    # Delete leftover widgets while Python still runs, so interpreter shutdown does not
+    # run event filters on half-deleted objects (it crashed 2 runs in 5 without this).
+    for w in app.topLevelWidgets():
+        w.close()
+        w.deleteLater()
+    from PySide6.QtCore import QCoreApplication, QEvent
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    app.processEvents()
 
 
 @pytest.fixture(autouse=True)

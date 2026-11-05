@@ -1,0 +1,51 @@
+{
+  "verifiedAt": "2026-11-02",
+  "image": {
+    "defaultModel": "banana21",
+    "models": ["banana21", "bananaPro", "banana2Lite"],
+    "ratios": ["16:9", "4:3", "1:1", "3:4", "9:16"],
+    "counts": [1, 2, 3, 4],
+    "sizes": ["1K", "2K"],
+    "credits": 0
+  },
+  "video": {
+    "defaultModel": "omni",
+    "ratios": ["16:9", "9:16"],
+    "counts": [1, 2, 3, 4],
+    "models": {
+      "omni": {
+        "modes": ["text", "frames", "ingredients", "edit"],
+        "defaults": { "duration": 8, "resolution": "720p" },
+        "credits": {
+          "720p": { "4": 7, "6": 10, "8": 12, "10": 15 },
+          "360p": { "4": 4, "6": 5, "8": 6, "10": 7 }
+        },
+        "editCredits": 20
+      },
+      "veoLite": {
+        "modes": ["text", "frames", "ingredients", "extend"],
+        "defaults": { "duration": 8, "resolution": "720p" },
+        "credits": { "720p": { "8": 10 } }
+      },
+      "veoFast": {
+        "modes": ["text", "frames", "ingredients"],
+        "defaults": { "duration": 8, "resolution": "720p" },
+        "credits": { "720p": { "8": 20 } }
+      },
+      "veoQuality": {
+        "modes": ["text", "frames"],
+        "defaults": { "duration": 8, "resolution": "720p" },
+        "credits": { "720p": { "8": 100 } }
+      }
+    }
+  },
+  "limits": {
+    "imageDaily": [
+      { "models": ["bananaPro"], "limit": 100 },
+      { "models": ["banana21", "banana2Lite"], "limit": 1000 }
+    ],
+    "upscale2kDaily": 200,
+    "monthlyCredits": 1000,
+    "dailyBonusCredits": 50
+  }
+}

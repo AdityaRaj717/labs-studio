@@ -1,0 +1,85 @@
+- link "Skip to main content":
+  - /url: "#main-content"
+- main:
+  - navigation:
+    - button "Home"
+    - heading "spike-2026-11-02" [level=1]
+    - textbox "Editable text":
+      - /placeholder: ""
+      - text: spike-2026-11-02
+  - button "More options for the project"
+  - button "Search"
+  - textbox "Search"
+  - button "Filtering and sorting options"
+  - button "Add media menu"
+  - button "Product help"
+  - button "Settings"
+  - button "More options"
+  - button "Account details":
+    - text: PRO
+    - 'button "Google Account: <name> (<email>), Google membership"'
+  - navigation "Project navigation":
+    - button "All media"
+    - button "Images"
+    - button "Videos"
+    - button "Characters"
+    - button "Scenes"
+    - button "Uploads"
+    - separator
+    - link "Library Create collection":
+      - /url: /project/<id>
+      - text: Library
+      - button "Create collection"
+    - separator
+    - link "Tools":
+      - /url: /project/<id>/tools
+    - link "Create tool":
+      - /url: /project/<id>/create-tool
+    - link "Trash":
+      - /url: /project/<id>/trash
+    - button "Collapse"
+  - group "Untitled Scene 11-01 20:07:35"
+  - group "Paper boat turns in water":
+    - img "Generated video thumbnail"
+    - text: 360p
+  - group "Paper boat drifting past lilies":
+    - img "Generated video thumbnail"
+  - group "Paper boat turns in water":
+    - img "Generated video thumbnail"
+  - group "Paper boat drifting on pond":
+    - img "Generated video thumbnail"
+    - text: 360p
+  - group "Red paper boat on lake":
+    - img "Tile displaying a user's image"
+  - group "Red paper boat on lake":
+    - img "Tile displaying a user's image"
+  - group "boat-1k.png":
+    - img "Tile displaying a user's image"
+  - group "Red paper boat on pond":
+    - img "Tile displaying a user's image"
+  - textbox "What do you want to create?":
+    - paragraph
+  - button "Add ingredients to the prompt box"
+  - button "Agent"
+  - button "Settings trigger": 🍌 Nano Banana 2.1 x1
+  - button "Start generation" [disabled]
+  - paragraph: Google Flow can make mistakes, so double check it
+- radiogroup:
+  - radio "Image" [checked]
+  - radio "Video"
+- radiogroup:
+  - radio "16:9"
+  - radio "4:3"
+  - radio "1:1" [checked]
+  - radio "3:4"
+  - radio "9:16"
+- separator
+- button "Select model family": 🍌 Nano Banana 2.1
+- radiogroup:
+  - radio "x1" [checked]
+  - radio "x2"
+  - radio "x3"
+  - radio "x4"
+- text: Generating will use
+- link "0 credits":
+  - /url: https://support.google.com/googleone?p=g1_ai_credit_menu

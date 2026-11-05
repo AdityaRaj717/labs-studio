@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPersistentModelIndex, QPointF, Qt
-from PySide6.QtGui import QColor, QPainter, QPixmap, QPolygonF
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPersistentModelIndex, QPointF, Qt, QTimer
+from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPixmap, QPolygonF
 
+from src import theme
 from src.gen.models import Job, JobStatus
+from src.gen.progress import clock, progress_view, shown_percent, stage_word
 from src.i18n import tr
+from src.ui.generator.thumbs import service as thumbs
 
 COL_INDEX, COL_PROMPT, COL_CHARACTER, COL_SCENE, COL_REFS, COL_STATUS, COL_PROGRESS, COL_OUTPUT = range(8)
 COLUMN_KEYS = ("gen_col_index", "gen_col_prompt", "gen_col_character", "gen_col_scene", "gen_col_refs",
@@ -16,36 +20,58 @@ COLUMN_KEYS = ("gen_col_index", "gen_col_prompt", "gen_col_character", "gen_col_
 THUMB_HEIGHT = 56
 VIDEO_EXTS = {".mp4", ".webm", ".mov"}
 
-STATUS_COLORS = {
-    JobStatus.PENDING: "#8b919c",
-    JobStatus.QUEUED: "#d29922",
-    JobStatus.RUNNING: "#4f8cff",
-    JobStatus.DONE: "#3fb950",
-    JobStatus.FAILED: "#f85149",
-    JobStatus.STOPPED: "#8b919c",
-}
+STATUS_COLORS: dict[JobStatus, str] = {}
+REVIEW_COLORS: dict[str, str] = {}
+
+
+def _sync_colors() -> None:
+    """Status colours follow the theme: amber alone means live; decisions read in plain text."""
+    c = theme.tokens()
+    STATUS_COLORS.update({
+        JobStatus.PENDING: c["text_muted"],
+        JobStatus.QUEUED: c["text_muted"],
+        JobStatus.RUNNING: c["live"],
+        JobStatus.DONE: c["done"],
+        JobStatus.FAILED: c["failed"],
+        JobStatus.STOPPED: c["text_muted"],
+    })
+    REVIEW_COLORS.update({
+        "pending_review": c["done"],
+        "approved": c["done"],  # accent is for Start and flags only
+        "rejected": c["done"],
+        "regenerating": c["live"],
+    })
+
+
+_sync_colors()
 
 Index = QModelIndex | QPersistentModelIndex
 
 _video_pix: QPixmap | None = None
 
 
+def device_ratio() -> float:
+    app = QGuiApplication.instance()
+    return app.devicePixelRatio() if app else 1.0
+
+
+def status_color(job: Job) -> str:
+    _sync_colors()
+    return REVIEW_COLORS.get(job.review) or STATUS_COLORS[job.status]
+
+
 def video_placeholder() -> QPixmap:
-    """A drawn 16:9 film tile with a play triangle (no decoding of the video)."""
+    """A black 16:9 tile with a play triangle (no decoding of the video)."""
     global _video_pix
     if _video_pix is None:
         h = THUMB_HEIGHT
         w = h * 16 // 9
         pix = QPixmap(w, h)
-        pix.fill(QColor("#1f2430"))
+        pix.fill(QColor("#000000"))
         p = QPainter(pix)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor("#3a4150"))
-        for x in range(4, w, 12):  # sprocket holes
-            p.drawRect(x, 3, 6, 4)
-            p.drawRect(x, h - 7, 6, 4)
-        p.setBrush(QColor("#4f8cff"))
+        p.setBrush(QColor("#9b9890"))
         cx, cy, r = w / 2, h / 2, h / 5
         p.drawPolygon(QPolygonF([QPointF(cx - r * 0.7, cy - r), QPointF(cx - r * 0.7, cy + r),
                                  QPointF(cx + r, cy)]))
@@ -59,7 +85,11 @@ class PromptTableModel(QAbstractTableModel):
         super().__init__(parent)
         self.jobs: list[Job] = []
         self._rows: dict[int, int] = {}
-        self._thumbs: dict[Path, QPixmap] = {}
+        self._dirty: set[int] = set()  # job ids waiting for the next coalesced dataChanged
+        self._flush_timer = QTimer(self)
+        self._flush_timer.setSingleShot(True)
+        self._flush_timer.setInterval(100)
+        self._flush_timer.timeout.connect(self.flush)
         self.editable = True
         self.character_name = None  # callable(job) -> str, set by GeneratorPage (Phase 6)
         self.scene_name = None  # callable(job) -> str, set by GeneratorPage (Phase 14b)
@@ -78,7 +108,7 @@ class PromptTableModel(QAbstractTableModel):
 
     def flags(self, index: Index):
         base = super().flags(index)
-        if index.column() == COL_PROMPT and self.editable:
+        if index.column() == COL_PROMPT and self.editable and not self.jobs[index.row()].production_id:
             base |= Qt.ItemFlag.ItemIsEditable
         return base
 
@@ -91,24 +121,32 @@ class PromptTableModel(QAbstractTableModel):
             if col == COL_INDEX:
                 return job.index
             if col == COL_PROMPT:
-                return job.prompt
+                return f"{job.item_id} · {job.prompt}" if job.production_id else job.prompt
+            if col == COL_CHARACTER and job.production_id:
+                return ", ".join(job.ref_labels)
             if col == COL_CHARACTER:
                 return self.character_name(job) if self.character_name else ""
             if col == COL_SCENE:
                 return self.scene_name(job) if self.scene_name else ""
             if col == COL_REFS:
                 return str(len(job.refs)) if job.refs else ""
+            if col == COL_STATUS and job.review and not job.production_id:
+                return tr(f"gen_filter_{job.review}")  # a local still has no takes to count
+            if col == COL_STATUS and job.review:
+                return tr(f"review_{job.review}", take=job.take)
             if col == COL_STATUS:
                 text = tr(f"status_{job.status.value}")
                 if job.status is JobStatus.RUNNING and job.attempts > 1:
                     text += f" ({job.attempts})"
                 return text
             if col == COL_PROGRESS:
-                return int(round(job.progress * 100))
+                view = progress_view(job, time.time())
+                percent = shown_percent(job, view)
+                if percent is not None:
+                    return percent
+                return tr("progress_elapsed", time=clock(view.elapsed_s)) if view.elapsed_s is not None                     else stage_word(view)
             if col == COL_OUTPUT and len(job.outputs) > 1:
                 return f"+{len(job.outputs) - 1}"
-            if col == COL_OUTPUT and not job.outputs and job.error:
-                return job.error  # failed row: show why, where the image would be
         elif role == Qt.ItemDataRole.EditRole and col == COL_PROMPT:
             return job.prompt
         elif role == Qt.ItemDataRole.ToolTipRole:
@@ -116,6 +154,14 @@ class PromptTableModel(QAbstractTableModel):
                 return job.prompt
             if col == COL_REFS and job.refs:
                 return "\n".join(p.name for p in job.refs)
+            if col == COL_PROGRESS and job.status is JobStatus.RUNNING:
+                view = progress_view(job, time.time())
+                return f"{view.percent}% · {tr('progress_from_flow')}" if view.percent is not None \
+                    else tr("progress_no_percent")
+            if col == COL_CHARACTER and job.production_id:
+                return ", ".join(job.ref_labels) or None
+            if col == COL_STATUS and job.stale:
+                return "\n".join(filter(None, [job.error, tr("review_stale", items=job.stale)]))
             if col == COL_CHARACTER and self.character_name:
                 return self.character_name(job) or None
             if col == COL_SCENE and self.scene_name:
@@ -124,16 +170,20 @@ class PromptTableModel(QAbstractTableModel):
                 return job.error
             if col == COL_OUTPUT and job.outputs:
                 return "\n".join(str(p) for p in job.outputs)
+            if col == COL_PROGRESS and job.progress_source == "flow":
+                return tr("gen_progress_flow", percent=int(round(job.progress * 100)))
+            if col == COL_PROGRESS and job.progress_source == "phase":
+                return tr("gen_progress_phase")
         elif role == Qt.ItemDataRole.ForegroundRole and col in (COL_STATUS, COL_OUTPUT):
-            return QColor(STATUS_COLORS[job.status])
-        elif role == Qt.ItemDataRole.DecorationRole and col == COL_OUTPUT and job.outputs:
-            return self._thumb(job.outputs[0])
+            return QColor(status_color(job))
+        elif role == Qt.ItemDataRole.DecorationRole and col == COL_OUTPUT and (job.outputs or job.preview):
+            return self._thumb(job.outputs[0] if job.outputs else job.preview)
         elif role == Qt.ItemDataRole.TextAlignmentRole and col in (COL_INDEX, COL_REFS):
             return Qt.AlignmentFlag.AlignCenter
         return None
 
     def setData(self, index: Index, value, role=Qt.ItemDataRole.EditRole) -> bool:  # noqa: N802
-        if role != Qt.ItemDataRole.EditRole or index.column() != COL_PROMPT:
+        if role != Qt.ItemDataRole.EditRole or index.column() != COL_PROMPT or self.jobs[index.row()].production_id:
             return False
         text = str(value).strip()
         if not text:
@@ -143,16 +193,13 @@ class PromptTableModel(QAbstractTableModel):
         return True
 
     def _thumb(self, path: Path) -> QPixmap | None:
-        pix = self._thumbs.get(path)
-        if pix is None and path.suffix.lower() in VIDEO_EXTS:
-            pix = self._thumbs[path] = video_placeholder()
-        if pix is None:
-            pix = QPixmap(str(path))
-            if pix.isNull():
-                return None
-            pix = pix.scaledToHeight(THUMB_HEIGHT, Qt.TransformationMode.SmoothTransformation)
-            self._thumbs[path] = pix
-        return pix
+        if path.suffix.lower() in VIDEO_EXTS:
+            return video_placeholder()
+        return thumbs().get(path, THUMB_HEIGHT * 2, THUMB_HEIGHT, device_ratio())
+
+    def rows_showing(self, path: str) -> list[int]:
+        """Rows whose thumb is ``path``: a decoded thumb repaints just these."""
+        return [r for r, job in enumerate(self.jobs) if str(job.outputs[0] if job.outputs else job.preview) == path]
 
     # ---- mutation ----------------------------------------------------
     def add_prompts(self, prompts: list[str]) -> list[Job]:
@@ -188,13 +235,27 @@ class PromptTableModel(QAbstractTableModel):
     def clear(self) -> None:
         self.beginResetModel()
         self.jobs.clear()
-        self._thumbs.clear()
         self.endResetModel()
         self._reindex()
 
     def refresh_job(self, job_id: int) -> None:
-        row = self._rows.get(job_id)
-        if row is not None:
+        """Coalesced: one dataChanged per changed row at most every 100 ms."""
+        if job_id in self._rows:
+            self._dirty.add(job_id)
+            if not self._flush_timer.isActive():
+                self._flush_timer.start()
+
+    def flush(self) -> None:
+        """Emit the rows ``refresh_job`` collected; tests call it instead of waiting 100 ms."""
+        self._flush_timer.stop()
+        dirty, self._dirty = self._dirty, set()
+        for job_id in dirty:
+            row = self._rows.get(job_id)
+            if row is None:
+                continue
+            job = self.jobs[row]
+            if job.outputs or job.preview:
+                thumbs().refresh(job.outputs[0] if job.outputs else job.preview)
             self.dataChanged.emit(self.index(row, 0), self.index(row, len(COLUMN_KEYS) - 1))
 
     def refresh_all(self) -> None:

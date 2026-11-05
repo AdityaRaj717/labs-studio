@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable
 
 from src.gen.models import Job, OutputFile
@@ -22,6 +23,18 @@ class StopRequested(Exception):
     """Raised by a provider when ``ctx.should_stop()`` turned true mid-job."""
 
 
+SHOT_KEYS = ("model", "aspect", "count", "duration", "resolution")  # settings one shot may set for itself
+
+
+def shot_options(job: Job, options: dict[str, Any]) -> dict[str, Any]:
+    """The page's options with this shot's own settings on top. ``_shared`` is the page's dict,
+    where state a whole run shares (the video run tally) lives."""
+    own = {k: v for k, v in job.overrides.items() if k in SHOT_KEYS}
+    if not own:
+        return options
+    return {**options, **own, "_shared": options.get("_shared", options)}
+
+
 @dataclass
 class ConfigField:
     """One setting on a page's config panel.
@@ -39,6 +52,18 @@ class ConfigField:
     minimum: float = 0
     maximum: float = 9999
     option_prefix: str = ""
+    depends_on: str = ""  # another field's key: ``options_by[its value]`` replaces ``options``
+    options_by: dict[str, list[str]] = field(default_factory=dict)
+
+
+@dataclass
+class Estimate:
+    """What a Start would ask for, before anything is spent. ``credits`` None: the provider bills it.
+    ``note`` is a language key that replaces the credit line."""
+
+    shots: int
+    credits: int | None
+    note: str = ""
 
 
 @dataclass
@@ -47,11 +72,18 @@ class RunContext:
 
     progress: Callable[[float], None]
     should_stop: Callable[[], bool]
+    partial: Callable[[Path], None] = lambda path: None  # a first look at the result (sets ``Job.preview``)
+    note: Callable[[str], None] = lambda source: None  # whose number ``progress`` is: "flow" or "phase"
+    info: Callable[..., None] = lambda **fields: None  # engine truth: stage, started_at, tiles
 
 
 class Provider:
     key = "base"
     name = "Base provider"
+    max_count = 8  # takes per shot the provider accepts
+
+    def estimate(self, jobs: list[Job], options: dict[str, Any]) -> Estimate:
+        return Estimate(len(jobs), None, "gen_estimate_billed")
 
     def config_fields(self) -> list[ConfigField]:
         return []

@@ -1,0 +1,10 @@
+import { connect, PROJECT } from './mcp.mjs';
+const { call, wait, client } = await connect();
+const st0 = await call('flow_status'); console.log('quota', st0.ledger?.todayQuota?.banana21?.used, JSON.stringify(st0.queue));
+const job_id = process.argv[2];
+console.log(JSON.stringify(await call('flow_job_control', { action: 'resume' })).slice(0, 200));
+console.log(JSON.stringify(await call('flow_job_control', { action: 'retry_failed', job_id })).slice(0, 300));
+const s = await wait(job_id); console.log(s.state, JSON.stringify(s.error ?? '').slice(0, 300));
+const f = await call('flow_job_status', { job_id }); console.log(JSON.stringify(f.outputs).slice(0, 500), 'attempt', f.attempt);
+const st = await call('flow_status'); console.log('quota after', st.ledger?.todayQuota?.banana21?.used);
+await client.close(); process.exit(0);

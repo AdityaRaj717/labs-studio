@@ -4,7 +4,7 @@ Labs Studio runs prompts in batches and saves the results to folders on your PC.
 
 ![The main window on first launch](img/main-window.png)
 
-1. **Sidebar.** Every page of the app. The ☰ button at the top folds it down to icons.
+1. **Sidebar.** Every page of the app. The panel button at the top folds it down to icons.
 2. **Project picker.** The active project. Each project keeps its own prompts, settings and output folder. See [Projects](projects.md).
 3. **The page.** Here it's the [Flow Image page](flow-image.md), where most of the work happens.
 4. **Help button.** Opens the help topic for the page you're on.
@@ -24,19 +24,11 @@ Read [Terms of service and your account](terms-and-risks.md) before you start. A
 
 ## Flow-only mode: what is hidden
 
-Labs Studio starts in **Flow-only mode**. It shows only what works end to end with Google Flow: Flow Image, Projects, Characters, Scenes, Webhook API, Detailed Log, Settings (Web Sessions tab) and Help.
-
-These pages and controls are hidden, not deleted:
+Labs Studio starts in **Flow-only mode**. It shows only what works end to end with Google Flow: Flow Image, Flow Video, Projects, Characters, Scenes, Webhook API, Detailed Log, Settings (Web Sessions tab) and Help.
 
 | Hidden | Why |
 |---|---|
-| Flow Video, Grok Imagen, OpenAI Image | They use paid API keys, not Flow. See [Flow Video, Grok and OpenAI pages](api-generators.md) |
-| The Gemini API provider on Flow Image | Needs a Gemini API key |
-| Workflow | Its nodes run the Gemini API or offline demo nodes, not Flow. See [Workflow editor](workflow.md) |
-| Video Editor, Image Upscaler, Video Cut | Local tools that need ffmpeg or Real-ESRGAN. See [Video Cut and Image Upscaler](video-tools.md) and [Video Editor](video-editor.md) |
-| Meta Vibes, Meta Muse, Google Vids, Google Pics, Course | Placeholder pages with nothing behind them yet |
-| Settings → API keys and Tools tabs | Only the hidden pages use them |
-| Character voices | Need a Gemini API key |
+| Settings → API keys tab | Nothing shown uses a key |
 
 To show everything, close Labs Studio and do **one** of these:
 
@@ -55,9 +47,7 @@ python run.py
 
 ## API keys
 
-The API pages need your own keys. Open **Settings → API keys** (shown once everything is switched on).
-
-![Settings, API keys tab](img/settings-api-keys.png)
+Open **Settings → API keys** (shown once everything is switched on).
 
 1. **Key box.** Paste a key and press **Save**. **Show** reveals what you typed, **Remove** deletes the saved key.
 2. **Status line.** Whether a key is saved, taken from an environment variable, or missing.

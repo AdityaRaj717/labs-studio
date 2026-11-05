@@ -14,9 +14,8 @@ SERVICE = "LabsStudio"
 
 # Provider id -> env vars checked (in order) when nothing is stored.
 ENV_VARS: dict[str, tuple[str, ...]] = {
-    "gemini": ("GEMINI_API_KEY", "GOOGLE_API_KEY"),
-    "openai": ("OPENAI_API_KEY",),
-    "xai": ("XAI_API_KEY",),
+    "fish": ("FISH_API_KEY",),
+    "stability": ("STABILITY_API_KEY",),
 }
 
 

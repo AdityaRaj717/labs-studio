@@ -15,11 +15,12 @@ import re
 import secrets
 import shutil
 import threading
+from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
-from src.gen.models import Job, JobStatus
+from src.gen.models import Job, JobStatus, Take
 
 log = logging.getLogger(__name__)
 
@@ -55,6 +56,26 @@ def job_to_row(job: Job) -> dict[str, Any]:
         "status": job.status.value,
         "outputs": [str(p) for p in job.outputs],
         "error": job.error,
+        "engine_key": job.engine_key,
+        "origin": job.origin,
+        "engine_job": job.engine_job,
+        "production_id": job.production_id,
+        "item_id": job.item_id,
+        "review": job.review,
+        "rating": job.rating,
+        "label": job.label,
+        "take": job.take,
+        "latest_take": job.latest_take,
+        "stale": job.stale,
+        "ref_labels": list(job.ref_labels),
+        "takes": [asdict(t) for t in job.takes],
+        "production_stage": job.production_stage,
+        "overrides": dict(job.overrides),
+        "flow_url": job.flow_url,
+        "video_mode": job.video_mode,
+        "source_url": job.source_url,
+        "start_frame": str(job.start_frame) if job.start_frame else "",
+        "end_frame": str(job.end_frame) if job.end_frame else "",
     }
 
 
@@ -63,7 +84,8 @@ def row_to_job(row: dict[str, Any], index: int) -> Job:
         status = JobStatus(row.get("status", "pending"))
     except ValueError:
         status = JobStatus.PENDING
-    if status in (JobStatus.QUEUED, JobStatus.RUNNING):
+    production_id = str(row.get("production_id", ""))
+    if status in (JobStatus.QUEUED, JobStatus.RUNNING) and not production_id:  # the mirror refreshes those
         status = JobStatus.STOPPED  # the app closed mid-batch
     return Job(
         str(row.get("prompt", "")), index=index,
@@ -72,11 +94,31 @@ def row_to_job(row: dict[str, Any], index: int) -> Job:
         progress=1.0 if status is JobStatus.DONE else 0.0,
         outputs=[Path(p) for p in row.get("outputs", [])],
         error=str(row.get("error", "")),
+        engine_key=str(row.get("engine_key", "")),
+        origin=str(row.get("origin", "")),
+        engine_job=str(row.get("engine_job", "")),
         character=str(row.get("character", "")),
         character_refs=[Path(p) for p in row.get("character_refs", [])],
         cast=[str(c) for c in row.get("cast", [])],
         scenes=[str(c) for c in row.get("scenes", [])],
         scene_refs=[Path(p) for p in row.get("scene_refs", [])],
+        production_id=production_id,
+        item_id=str(row.get("item_id", "")),
+        review=str(row.get("review", "")),
+        rating=max(0, min(5, int(row.get("rating", 0) or 0))),
+        label=str(row.get("label", "")),
+        take=int(row.get("take", 0)),
+        latest_take=int(row.get("latest_take", 0)),
+        stale=str(row.get("stale", "")),
+        ref_labels=[str(c) for c in row.get("ref_labels", [])],
+        takes=[Take.from_engine(t) for t in row.get("takes", [])],
+        production_stage=str(row.get("production_stage", "")),
+        overrides=dict(row.get("overrides") or {}),
+        flow_url=str(row.get("flow_url", "")),
+        video_mode=str(row.get("video_mode", "")),
+        source_url=str(row.get("source_url", "")),
+        start_frame=Path(row["start_frame"]) if row.get("start_frame") else None,
+        end_frame=Path(row["end_frame"]) if row.get("end_frame") else None,
     )
 
 

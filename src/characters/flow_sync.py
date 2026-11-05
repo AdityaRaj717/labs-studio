@@ -24,7 +24,7 @@ import threading
 from typing import Callable
 
 from src.characters.store import Character, CharacterStore
-from src.web.mcp_client import McpToolError
+from src.web.engine_client import EngineToolError
 
 log = logging.getLogger(__name__)
 
@@ -75,7 +75,7 @@ class FlowSync:
                 return self.call("flow_import_character",
                                  {"project_url": project_url, "from_project_url": source, "name": name},
                                  CREATE_TIMEOUT)
-            except McpToolError as exc:
+            except EngineToolError as exc:
                 log.warning("Could not import %r from %s (%s); creating it instead", name, source, exc)
         return None
 
@@ -123,14 +123,14 @@ class FlowSync:
         if verify:
             try:
                 self.verify(project_url)
-            except McpToolError as exc:
+            except EngineToolError as exc:
                 log.warning("Could not list the Flow characters of %s: %s", project_url, exc)
         out: dict = {"characters": {}, "scenes": {}, "errors": []}
         for kind, ids, key in (("character", character_ids, "characters"), ("scene", scene_ids, "scenes")):
             for entry_id in dict.fromkeys(ids):
                 try:
                     out[key][entry_id] = self.ensure(kind, entry_id, project_url)
-                except (SyncError, McpToolError) as exc:
+                except (SyncError, EngineToolError) as exc:
                     out["errors"].append(str(exc))
                     log.warning("Flow sync: %s", exc)
         return out
@@ -139,7 +139,7 @@ class FlowSync:
         """Flow names for a job, setting up what is missing. Raises on the first failure."""
         try:
             self.verify(project_url)  # once per session: catches entries deleted in Flow
-        except McpToolError as exc:
+        except EngineToolError as exc:
             log.warning("Could not list the Flow characters of %s: %s", project_url, exc)
         chars = [self.ensure("character", c, project_url) for c in dict.fromkeys(character_ids)]
         scenes = [self.ensure("scene", s, project_url) for s in dict.fromkeys(scene_ids)]

@@ -18,41 +18,27 @@ log = logging.getLogger(__name__)
 
 def register_pages(window) -> None:
     """Swap sidebar placeholders for real pages."""
-    from src.gen.gemini_image import GeminiImageProvider
-    from src.gen.gemini_video import GeminiVideoProvider
-    from src.gen.grok import GrokProvider
-    from src.gen.openai_image import OpenAIImageProvider
     from src.ui.generator.page import GeneratorPage
     from src.ui.pages.settings_page import SettingsPage
-    from src.ui.editor import editor_page
 
-    from src import features  # Phase 14b: Flow-only mode hides what does not work yet
     from src.gen.web_flow_image import WebFlowImageProvider  # Phase 11a
 
-    if features.shown("provider:gemini_image"):
-        window.register_page("flow_image", lambda: GeneratorPage(
-            "flow_image", GeminiImageProvider(), title=tr("nav_img"), banner=tr("gemini_banner"),
-            alternatives=[(WebFlowImageProvider(), tr("web_flow_banner"))]))
-    else:
-        window.register_page("flow_image", lambda: GeneratorPage(
-            "flow_image", WebFlowImageProvider(), title=tr("nav_img"), banner=tr("web_flow_banner")))
+    def image_page():
+        page = GeneratorPage("flow_image", WebFlowImageProvider(), title=tr("nav_img"), banner=tr("web_flow_banner"))
+
+        def animate(stills):  # S4-4: a still starts a new shot on the video page
+            window.page("flow_video").add_frame_shots(stills)
+            window.switch_page("flow_video")
+        page.animate_stills.connect(animate)
+        return page
+
+    window.register_page("flow_image", image_page)
+    from src.gen.web_flow_video import WebFlowVideoProvider
     window.register_page("flow_video", lambda: GeneratorPage(
-        "flow_video", GeminiVideoProvider(), title=tr("nav_video"), banner=tr("omni_banner")))
-    window.register_page("grok", lambda: GeneratorPage(
-        "grok", GrokProvider(), title=tr("nav_grok"), banner=tr("grok_banner")))
-    window.register_page("openai_image", lambda: GeneratorPage(
-        "openai_image", OpenAIImageProvider(), title=tr("nav_openai"), banner=tr("openai_banner")))
+        "flow_video", WebFlowVideoProvider(), title=tr("nav_video"), banner=tr("web_flow_video_banner")))
     window.register_page("settings", SettingsPage)
-    window.register_page("video_editor", editor_page)
-
-    from src.ui.tools.upscaler import UpscalerPage  # Phase 7
-    from src.ui.tools.video_cut import VideoCutPage  # Phase 7
-
-    window.register_page("video_cut", VideoCutPage)
-    window.register_page("upscaler", UpscalerPage)
-
-    from src.ui.workflow.page import WorkflowPage
-    window.register_page("workflow", WorkflowPage)
+    from src.ui.production.page import ProductionsPage  # S5-1
+    window.register_page("productions", lambda: ProductionsPage(window.switch_page))
 
     from src.ui.characters.page import CharactersPage  # Phase 6
     window.register_page("characters", CharactersPage)
@@ -62,10 +48,7 @@ def register_pages(window) -> None:
         from src.ui.projects.page import ProjectsPage
         window.register_page("projects", lambda: ProjectsPage(window.projects))
 
-    from src.gen.fake_provider import FakeProvider  # Phase 10
     from src.ui.webhook.page import WebhookPage  # Phase 10
-    window.register_page("demo", lambda: GeneratorPage(
-        "demo", FakeProvider(), title=tr("wh_demo_title"), banner=tr("wh_demo_banner")))
     window.register_page("webhook", lambda: WebhookPage(window.page, window.switch_page))
 
 
@@ -110,6 +93,30 @@ def main(argv: list[str] | None = None) -> int:
     window = MainWindow()
     window.attach_projects(store)
     register_pages(window)
+    from src.web.flow_mcp import flow_mcp
+    from src.web.engine_client import EngineClient
+    from src.web.run_mirror import RunMirror
+    # Only a page already built needs the row now; the others read it from the project.
+    window.run_mirror = RunMirror(
+        flow_mcp().data_dir, parent=window, client=EngineClient(flow_mcp().data_dir),
+        page_lookup=lambda project, key: window.pages.get(key) if project is store.active else None)
+    window.run_mirror.start(store)
+    from src.web.run_mirror import HealthWatch
+    window.health_watch = HealthWatch(window.run_mirror.client, parent=window)
+    window.health_watch.changed.connect(window.set_engine_health)
+    window.health_watch.start()
+    from src.ui.connection_chip import ConnectionChip
+
+    def open_web_sessions() -> None:
+        window.switch_page("settings")
+        settings_page = window.page("settings")
+        settings_page.tabs.setCurrentWidget(settings_page.web_tab)
+
+    window.chip = ConnectionChip(flow_mcp().call_tool, open_web_sessions, window.sidebar)
+    window.sidebar.footer.insertWidget(0, window.chip)
+    window.chip.set_collapsed(window.sidebar.collapsed)
+    from src.ui.pages.settings_page import push_keys_if_running
+    push_keys_if_running()
     if settings.get("webhook.autostart", False):  # Phase 10
         window.page("webhook").start_server()
     window.show()

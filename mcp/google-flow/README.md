@@ -41,6 +41,8 @@ pmcache` in this folder. Labs Studio starts the server itself and passes
 > `config/flow.config.example.json`; `FLOW_MCP_CONFIG` points at another file. An empty
 > `expectedAccount` accepts whichever Google account is signed in.
 
+> **Architecture note (Labs Studio fork).** One local engine (`src/engine`) owns Chrome, the queue, the ledger and the files; `src/index.js` is a thin shim that starts or joins it through `engine.json` in `FLOW_DATA_DIR`. To share the engine with the Labs Studio app, set `FLOW_DATA_DIR` to the app's folder (default `D:\glabs_web\flow-mcp`). Setup for Claude Code, Claude Desktop, Cursor and Codex, the Production prompt format and recovery steps: `help/en/mcp-agents.md`. Tests: `npm test` (offline). Some sections below describe the older single-process design.
+
 ## 📸 What It Does
 
 This MCP server connects your AI agent to **[Google Flow](https://labs.google/fx/tools/flow)** — Google's creative suite for image and video generation. Your agent can:
@@ -73,7 +75,6 @@ All through your **own Google account** — no API keys, no third-party tokens.
 
 - **15+ MCP tools** ready to use
 - **Smart job queue** — no parallel conflicts
-- **Auto-discover UI** — adapts to Flow changes
 - **Structured logging** for debugging
 - **Safe actions** — resilient click/fill logic
   </td>
@@ -172,7 +173,6 @@ google-flow-browser-mcp/
 │
 ├── 📂 config/
 │   ├── flow.config.example.json    # Configuration template
-│   └── selectors.map.json          # UI selectors (auto-populated)
 │
 ├── 📂 scripts/
 │   ├── start-browser.sh            # Launch Chrome + CDP
@@ -190,27 +190,18 @@ google-flow-browser-mcp/
 │   │   └── safe-actions.js         # Safe click, fill, detection
 │   │
 │   ├── 📁 tools/                   # All MCP tool implementations
-│   │   ├── flow-open.js            # Navigate to Flow
 │   │   ├── flow-status.js          # Connection status
-│   │   ├── generate-image.js       # Image generation
-│   │   ├── generate-video.js       # Video generation (setup only)
-│   │   ├── download-latest.js      # Download generated files
 │   │   ├── create-character.js     # List / create characters (people and places)
 │   │   ├── import-character.js     # Copy a character from another project
 │   │   ├── create-scene.js         # List / create scenes (places kept as characters)
 │   │   ├── open-tools-gallery.js   # Open tools gallery
 │   │   ├── grid-architect.js       # Batch shot generation
-│   │   ├── discover-ui.js          # UI discovery & mapping
 │   │   └── use-flow-tool.js        # Generic tool opener
-│   │
-│   ├── 📁 queue/                   # Job management
-│   │   └── job-queue.js            # Single-job queue
 │   │
 │   └── 📁 utils/                   # Helpers
 │       ├── config.js               # Config loader
 │       ├── logger.js               # Structured logging
 │       ├── errors.js               # Error codes & types
-│       ├── file-manager.js         # File download/save
 │       └── screenshots.js          # Screenshot capture
 │
 └── 📂 output/                      # Generated files land here
@@ -263,7 +254,6 @@ All tools are organized by function for easy discovery.
 | `flow_open_tools_gallery` | Open the tools gallery and browse available tools |
 | `flow_use_tool` | Open any Flow tool by name with optional parameters |
 | `flow_use_grid_architect` | Configure Grid Architect for batch shot generation with theme prompts, visual logic, and reference images |
-| `flow_discover_ui` | Discover and map all interactive elements (buttons, inputs, headings) on any Flow page |
 
 ### 📊 Queue & Monitoring
 
@@ -374,7 +364,7 @@ Verify that `expectedAccount` in `config/flow.config.json` matches the email log
 <details>
 <summary><strong>Flow UI changed and tools don't work</strong></summary>
 
-Run `flow_discover_ui` to re-map selectors. The `selectors.map.json` will auto-update with new UI element positions.
+Update the labels in `config/ui-contract.json`, then run `node src/tools/doctor.js` with Chrome attached to see which keys are missing.
 </details>
 
 ### Usage

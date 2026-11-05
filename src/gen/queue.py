@@ -9,13 +9,14 @@ from __future__ import annotations
 import logging
 import random
 import threading
+import time
 from collections import Counter, deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
 from src.gen.models import RETRYABLE_STATUSES, Job, JobStatus, OutputFile
-from src.gen.provider import Provider, ProviderError, RunContext, StopRequested
+from src.gen.provider import Provider, ProviderError, RunContext, StopRequested, shot_options
 
 log = logging.getLogger(__name__)
 
@@ -125,6 +126,19 @@ class JobQueue:
         with self._lock:
             return count_statuses(self._jobs.values())
 
+    def cancel(self, jobs: Iterable[Job]) -> list[Job]:
+        """Take queued ``jobs`` out of the run before they start; a running one finishes. Returns those taken."""
+        taken = []
+        with self._lock:
+            for job in jobs:
+                if job in self._pending:
+                    self._pending.remove(job)
+                    job.status = JobStatus.STOPPED
+                    taken.append(job)
+        for job in taken:
+            self.on_update(job)
+        return taken
+
     def forget(self, jobs: Iterable[Job]) -> None:
         with self._lock:
             for job in jobs:
@@ -195,18 +209,33 @@ class JobQueue:
             job.attempts += 1
             job.progress = 0.0
             job.error = ""
+            job.progress_source, job.stage, job.tiles = "", "", 1
+            job.started_at = time.time()  # an engine job replaces it with Flow's submit time
         self.on_update(job)
 
         def progress(p: float) -> None:
             job.progress = max(0.0, min(1.0, float(p)))
             self.on_update(job)
 
-        ctx = RunContext(progress=progress, should_stop=self._stop.is_set)
+        def partial(path: Path) -> None:
+            job.preview = path
+            self.on_update(job)
+
+        def note(source: str) -> None:
+            job.progress_source = source
+
+        def info(**fields) -> None:
+            for name, value in fields.items():
+                setattr(job, name, value)
+            self.on_update(job)
+
+        ctx = RunContext(progress=progress, should_stop=self._stop.is_set, partial=partial, note=note, info=info)
         try:
-            files = self.provider.generate(job, self.options, ctx)
+            files = self.provider.generate(job, shot_options(job, self.options), ctx)
             paths = self.saver(job, files)
             with self._lock:
                 job.outputs = paths
+                job.preview = None
                 job.progress = 1.0
                 job.status = JobStatus.DONE
         except StopRequested:

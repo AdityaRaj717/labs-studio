@@ -2,14 +2,15 @@ import { chromium } from 'playwright';
 import path from 'path';
 import fs from 'fs';
 import { logger } from '../utils/logger.js';
+import { locate } from '../flow/contract.js';
 import { get } from '../utils/config.js';
 import { FlowError, ErrorCodes } from '../utils/errors.js';
 import { launchChromeDirect, pickFlowPage, setPage, setContext, setConnected, setBrowser, isBrowserConnected } from './connect.js';
 
 const CDP_PORT = get('cdpPort', 9333);
-const FLOW_URL = get('flowUrl', 'https://labs.google/fx/tools/flow');
+const FLOW_URL = get('flowUrl', 'https://flow.google.com/');
 
-export async function launchKiaraProfile(headless = false) {
+export async function launchFlowChrome(headless = false) {
   if (isBrowserConnected()) {
     logger.info('Browser already connected, reusing');
     return { success: true, message: 'Already connected' };
@@ -36,21 +37,19 @@ export async function launchKiaraProfile(headless = false) {
   }
 }
 
-export async function navigateToFlow(page, toolPage) {
-  const targetUrl = toolPage === true
-    ? 'https://labs.google/fx/tools/flow'
-    : FLOW_URL;
-
-  logger.info('Navigating to Google Flow', { url: targetUrl });
-  await page.goto(targetUrl, { waitUntil: 'networkidle', timeout: 30000 });
-  await page.waitForTimeout(2000);
+export async function navigateToFlow(page) {
+  logger.info('Navigating to Google Flow', { url: FLOW_URL });
+  await page.goto(FLOW_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  // Signed out shows neither control, so a miss falls through to the URL check below.
+  await locate(page, 'account.open').or(locate(page, 'home.newProject')).first()
+    .waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
 
   const currentUrl = page.url();
   logger.info('Flow page loaded', { url: currentUrl.substring(0, 100) });
 
   if (currentUrl.includes('accounts.google.com')) {
     return { authenticated: false, url: currentUrl,
-      message: 'OAuth blocked — Google detects automation. Use Chrome direct+CDP launch method.' };
+      message: 'Google Flow wants you to sign in. Sign in by hand in the Chrome window.' };
   }
 
   return { authenticated: true, url: currentUrl };

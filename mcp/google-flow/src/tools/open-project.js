@@ -1,8 +1,9 @@
 import { logger } from '../utils/logger.js';
 import { getPage } from '../browser/connect.js';
-import { jobQueue } from '../queue/job-queue.js';
 import { FlowError, ErrorCodes } from '../utils/errors.js';
 import { takeScreenshot } from '../utils/screenshots.js';
+import { contract, locate } from '../flow/contract.js';
+import { waitForProjectCards } from '../navigation/project-navigator.js';
 
 // Open (or create) one Flow project and give it a title, for hosts that keep one Flow
 // project per project of their own (Labs Studio). Flow UI facts (Oct 2026):
@@ -11,11 +12,6 @@ import { takeScreenshot } from '../utils/screenshots.js';
 //  - a project that no longer exists redirects to /404?reason=project.
 
 const HOME = 'https://flow.google.com/';
-const UI = {
-  account: 'Account details',
-  newProject: 'New project',
-  title: 'Editable text',
-};
 const LOGIN_URLS = ['accounts.google.com', 'flow.google.com/about'];
 
 export function projectBase(url) {
@@ -31,7 +27,7 @@ function checkLogin(url) {
 
 // Wait until the page is a project (title box visible), a 404, or a sign-in page.
 async function landed(page, timeout = 30000) {
-  const title = page.getByRole('textbox', { name: UI.title }).first();
+  const title = locate(page, 'project.title').first();
   const end = Date.now() + timeout;
   while (Date.now() < end) {
     const url = page.url();
@@ -68,14 +64,14 @@ export async function gotoProject(page, url) {
 async function createProject(page) {
   await page.goto(HOME, { waitUntil: 'domcontentloaded', timeout: 60000 });
   checkLogin(page.url());
-  const account = page.getByRole('button', { name: UI.account }).first();
+  const account = locate(page, 'account.open').first();
   try {
     await account.waitFor({ state: 'visible', timeout: 15000 });
   } catch {
     checkLogin(page.url());
     throw new FlowError(ErrorCodes.NOT_LOGGED_IN, 'Google Flow is not signed in. Sign in by hand in the Chrome window.');
   }
-  const btn = page.getByRole('button', { name: UI.newProject }).first();
+  const btn = locate(page, 'home.newProject').first();
   try {
     await btn.waitFor({ state: 'visible', timeout: 15000 });
   } catch {
@@ -92,7 +88,7 @@ async function createProject(page) {
 }
 
 async function setTitle(page, name) {
-  const box = page.getByRole('textbox', { name: UI.title }).first();
+  const box = locate(page, 'project.title').first();
   const current = (await box.inputValue().catch(() => '')).trim();
   if (current === name) return current;
   await box.click();
@@ -114,10 +110,8 @@ async function setTitle(page, name) {
  * Returns { status, url, created, title }. PROJECT_NOT_FOUND when gone and not creating.
  */
 export async function handleOpenProject(args = {}) {
-  const job = jobQueue.createJob('open_project', { url: args.url, name: args.name });
   const page = getPage();
   try {
-    jobQueue.startJob(job.id);
     const create = args.create_if_missing !== false;
     let url = null;
     let created = false;
@@ -134,13 +128,10 @@ export async function handleOpenProject(args = {}) {
       logger.info('Created Flow project', { url });
     }
     const title = args.name ? await setTitle(page, String(args.name).trim())
-      : (await page.getByRole('textbox', { name: UI.title }).first().inputValue().catch(() => ''));
-    const result = { status: 'success', url, created, title };
-    jobQueue.completeJob(job.id, result);
-    return result;
+      : (await locate(page, 'project.title').first().inputValue().catch(() => ''));
+    return { status: 'success', url, created, title };
   } catch (err) {
     await takeScreenshot(page, 'open-project-error').catch(() => {});
-    jobQueue.failJob(job.id, err);
     throw err;
   }
 }
@@ -149,36 +140,32 @@ async function gotoHome(page) {
   await page.goto(HOME, { waitUntil: 'domcontentloaded', timeout: 60000 });
   checkLogin(page.url());
   try {
-    await page.getByRole('button', { name: UI.account }).first().waitFor({ state: 'visible', timeout: 15000 });
+    await locate(page, 'account.open').first().waitFor({ state: 'visible', timeout: 15000 });
   } catch {
     checkLogin(page.url());
     throw new FlowError(ErrorCodes.NOT_LOGGED_IN, 'Google Flow is not signed in. Sign in by hand in the Chrome window.');
   }
-  await page.waitForTimeout(1500);
+  await waitForProjectCards(page);
 }
 
 // Project cards on the home page: [{ title, url }] (newest first, as Flow lists them).
 async function readProjects(page) {
-  return page.evaluate(() => [...document.querySelectorAll('a[aria-label="Open project"][href*="/project/"]')].map((a) => {
+  const labels = { open: contract.keys['home.openProject'].name, del: contract.keys['home.deleteProject'].name };
+  return page.evaluate(({ open, del }) => [...document.querySelectorAll(`a[aria-label="${open}"][href*="/project/"]`)].map((a) => {
     let card = a.parentElement;
-    for (let i = 0; i < 4 && card && !card.querySelector('button[aria-label="Delete project"]'); i++) card = card.parentElement;
+    for (let i = 0; i < 4 && card && !card.querySelector(`button[aria-label="${del}"]`); i++) card = card.parentElement;
     const title = (card ? card.innerText : '').split('\n').map(s => s.trim())
       .filter(s => s && !['edit', 'delete'].includes(s))[0] || '';
     return { title, url: new URL(a.getAttribute('href'), location.origin).href };
-  }));
+  }), labels);
 }
 
 async function withJob(type, params, fn) {
-  const job = jobQueue.createJob(type, params);
   const page = getPage();
   try {
-    jobQueue.startJob(job.id);
-    const result = await fn(page);
-    jobQueue.completeJob(job.id, result);
-    return result;
+    return await fn(page);
   } catch (err) {
     await takeScreenshot(page, `${type}-error`).catch(() => {});
-    jobQueue.failJob(job.id, err);
     throw err;
   }
 }
@@ -212,19 +199,30 @@ export async function handleDeleteProject(args = {}) {
   }
   return withJob('delete_project', { url: base }, async (page) => {
     await gotoHome(page);
-    const href = new URL(base).pathname;
-    const link = page.locator(`a[aria-label="Open project"][href="${href}"]`).first();
-    if (!await link.count()) throw new FlowError(ErrorCodes.PROJECT_NOT_FOUND, `Flow project not found: ${base}`, { url: base });
-    let card = link.locator('xpath=..');
-    for (let i = 0; i < 4 && !(await card.getByRole('button', { name: 'Delete project' }).count()); i++) card = card.locator('xpath=..');
-    await card.hover();
-    await card.getByRole('button', { name: 'Delete project' }).first().click();
-    const dialog = page.getByRole('dialog').first();
-    await dialog.waitFor({ state: 'visible', timeout: 10000 });
-    await dialog.getByRole('button', { name: 'Delete project' }).click();
-    await page.waitForTimeout(2500);
-    const gone = !(await page.locator(`a[aria-label="Open project"][href="${href}"]`).count());
-    if (!gone) throw new FlowError(ErrorCodes.UNKNOWN_UI_CHANGE, 'Pressed Delete project but the project is still listed');
-    return { status: 'success', deleted: base };
+    return deleteFromHome(page, base);
   });
+}
+
+// The page is on Flow home. Cards hydrate after the New project button, so wait for this one.
+export async function deleteFromHome(page, base) {
+  await waitForProjectCards(page);
+  const link = locate(page, 'home.openProject').and(page.locator(`a[href="${new URL(base).pathname}"]`)).first();
+  try {
+    await link.waitFor({ state: 'attached', timeout: 10000 });
+  } catch {
+    throw new FlowError(ErrorCodes.PROJECT_NOT_FOUND, `Flow project not found: ${base}`, { url: base });
+  }
+  const deleteIn = (root) => locate(page, 'home.deleteProject', { root });
+  let card = link.locator('xpath=..');
+  for (let i = 0; i < 4 && !(await deleteIn(card).count()); i++) card = card.locator('xpath=..');
+  await card.hover();
+  await deleteIn(card).first().click();
+  await locate(page, 'delete.dialog').waitFor({ state: 'visible', timeout: 10000 });
+  await locate(page, 'delete.confirm').click();
+  try {
+    await link.waitFor({ state: 'detached', timeout: 15000 });
+  } catch {
+    throw new FlowError(ErrorCodes.UNKNOWN_UI_CHANGE, 'Pressed Delete project but the project is still listed');
+  }
+  return { status: 'success', deleted: base };
 }

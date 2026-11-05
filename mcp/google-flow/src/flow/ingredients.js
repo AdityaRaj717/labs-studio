@@ -1,0 +1,129 @@
+import path from 'path';
+import { beat, withRetry } from '../engine/pacer.js';
+import { get } from '../utils/config.js';
+import { createError, ErrorCodes } from '../utils/errors.js';
+import { closeOverlay, contract, locate } from './contract.js';
+
+const PICKER_MS = 10000;
+const CHOOSER_MS = 15000;
+const ATTACH_MS = 20000;
+const POLL_MS = 200;
+
+const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const option = (page, name, exact) => locate(page, 'picker.assetList').getByRole(contract.keys['picker.option'].role, { name, exact });
+export const chipCount = (page) => locate(page, 'project.chip.ingredient').count();
+
+// Spend gate: the chips that are ready must be exactly what the job asked for.
+export async function assertChips(page, expected) {
+  const ready = await locate(page, 'project.chip.ingredient').evaluateAll((els) => els.filter((el) => el.getAttribute('aria-busy') !== 'true').length);
+  if (ready !== expected) {
+    throw createError(ErrorCodes.UPLOAD_STALLED, `${ready} ingredients are ready, the job has ${expected}`, { ready, expected, next_action: 'Nothing was spent. Regenerate or retry the job.' });
+  }
+}
+
+// Chips clear after a job and on reload (Y0), so one still here is left from something else and must not reach this Shot.
+// Frames left by a job killed before Start stay filled, and their empty chip is what addFrame clicks. A frames job always starts clean.
+export async function clearChips(page, frames = false) {
+  if (!frames && await chipCount(page) === 0) return;
+  await page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 });
+  await locate(page, 'project.prompt').first().waitFor({ state: 'visible', timeout: PICKER_MS * 2 });
+}
+
+const emptyFrames = (page) => locate(page, 'project.chip.empty').count();
+
+async function openPicker(page, opener = 'project.addIngredients') {
+  await closeOverlay(page);
+  await locate(page, opener).click();
+  await locate(page, 'picker.upload').or(locate(page, 'picker.search')).first().waitFor({ timeout: PICKER_MS });
+}
+
+async function search(page, text) {
+  const box = locate(page, 'picker.search');
+  if (await box.isVisible()) {
+    await box.fill(text);
+    await beat(page, 1500);
+  }
+}
+
+// One ready chip more than before. Clicking an option can attach at once and remove Add to prompt, so that button is optional.
+async function attach(page, target, before, stalled, filled = chipCount) {
+  await target.click();
+  await beat(page);
+  const add = locate(page, 'picker.addToPrompt');
+  if (await filled(page) <= before && await add.isVisible()) await add.click();
+  const chips = locate(page, 'project.chip.ingredient');
+  for (const end = Date.now() + ATTACH_MS; Date.now() < end; await page.waitForTimeout(POLL_MS)) {
+    const busy = await chips.evaluateAll((els) => els.filter((el) => el.getAttribute('aria-busy') === 'true').length);
+    if (await filled(page) > before && !busy) {
+      await closeOverlay(page);
+      return;
+    }
+  }
+  await closeOverlay(page);
+  throw stalled;
+}
+
+async function attachFile(page, file, opener, filled = chipCount) {
+  const name = path.basename(file);
+  const stalled = createError(ErrorCodes.UPLOAD_STALLED, `The upload of ${name} never reached the prompt`, { file: name });
+  const before = await filled(page);
+  await openPicker(page, opener);
+  await search(page, name);
+  const listed = option(page, new RegExp(`^${escapeRegex(name)}`)).first();
+  if (!await listed.isVisible()) {
+    const chooser = page.waitForEvent('filechooser', { timeout: CHOOSER_MS });
+    await locate(page, 'picker.upload').click();
+    await (await chooser).setFiles(file);
+    const uploading = option(page, new RegExp(contract.picker.uploading));
+    const end = Date.now() + get('uploadTimeoutMs', 60000);
+    while (await uploading.count() > 0 || !await listed.isVisible()) {
+      if (Date.now() > end) {
+        await closeOverlay(page);
+        throw stalled;
+      }
+      await page.waitForTimeout(POLL_MS);
+    }
+  }
+  await attach(page, listed, before, stalled, filled);
+}
+
+async function attachNamed(page, name, project) {
+  const before = await chipCount(page);
+  await openPicker(page);
+  if (project) {
+    const switcher = locate(page, 'picker.selectProject');
+    if (!(await switcher.innerText()).includes(project)) {
+      await switcher.click();
+      const choice = locate(page, 'picker.projectList').getByRole(contract.keys['picker.option'].role, { name: project, exact: true });
+      if (!await choice.isVisible()) {
+        await closeOverlay(page);
+        throw createError(ErrorCodes.PROJECT_NOT_FOUND, `No Flow project "${project}" in the picker`, { project });
+      }
+      await choice.click();
+      await beat(page, 1500);
+    }
+  }
+  await locate(page, 'picker.tab.characters').click();
+  await search(page, name);
+  const target = option(page, name, true).first();
+  if (!await target.isVisible()) {
+    await search(page, '');
+    const characters = await locate(page, 'picker.assetList').getByRole(contract.keys['picker.option'].role).allInnerTexts();
+    await closeOverlay(page);
+    throw createError(ErrorCodes.INVALID_PARAMS, `No character or scene "${name}" in the Flow picker. Existing: ${characters.join(', ') || '(none)'}`, { name, project, characters, next_action: 'Create it with flow_create_character, or fix the name.' });
+  }
+  await attach(page, target, before, createError(ErrorCodes.UNKNOWN_UI_CHANGE, `"${name}" never reached the prompt`));
+}
+
+// A scene is a place kept as a character, so both come from the picker's Characters tab.
+export async function addIngredient(page, item) {
+  const { file, character, scene, project } = typeof item === 'string' ? { file: item } : item;
+  if (file) return withRetry(() => attachFile(page, file));
+  if (!character && !scene) throw createError(ErrorCodes.INVALID_PARAMS, 'An ingredient naming only a project has no asset to attach');
+  return attachNamed(page, character ?? scene, project);
+}
+
+// A frame chip stops being an empty chip once it holds its image.
+export function addFrame(page, file, which) {
+  return withRetry(() => attachFile(page, file, `project.chip.${which}`, async (p) => -await emptyFrames(p)));
+}

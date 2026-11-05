@@ -20,6 +20,13 @@ function getLogStream() {
   return logStream;
 }
 
+// For tests: Windows can't remove a temp dir while this file is open. A later log line reopens it.
+export function closeLog() {
+  const stream = logStream;
+  logStream = null;
+  return new Promise((resolve) => (stream ? stream.end(resolve) : resolve()));
+}
+
 function timestamp() {
   return new Date().toISOString();
 }

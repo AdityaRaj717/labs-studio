@@ -17,6 +17,6 @@ What Labs Studio does to keep usage close to a person working by hand. These mea
 - It runs one job at a time, waits a random gap between jobs, and stops at a daily cap ([Signing in to Google Flow](google-flow-sign-in.md)).
 - It uses one account per site.
 
-**The safe alternative** is the official APIs, which are made for automated use: the Gemini API (Flow Video page and the Gemini provider), the OpenAI API and the xAI API. They need your own keys and are billed per use. See [Flow Video, Grok and OpenAI pages](api-generators.md).
+**The safe alternative** is the official APIs, which are made for automated use. They need your own keys and are billed per use, and Labs Studio doesn't use them.
 
 Labs Studio is not made by, endorsed by, or connected to Google, OpenAI or xAI. Google Flow, Gemini, ChatGPT and Grok are trademarks of their owners.

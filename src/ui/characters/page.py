@@ -1,7 +1,7 @@
 """CharactersPage: list of saved characters on the left, the selected one's editor on the right.
 
 Phase 14b: the same page with ``kind="scene"`` is the Scenes page (reusable places:
-name, description, images, no voice). Both show where the entry is set up in
+name, description, images). Both show where the entry is set up in
 Google Flow and can set it up in the active project's Flow project.
 """
 
@@ -11,23 +11,23 @@ import logging
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QSize, Qt, QUrl, Signal
-from PySide6.QtGui import QDesktopServices, QIcon, QPixmap
+from PySide6.QtCore import QObject, QSize, Qt, Signal
+from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
-    QAbstractItemView, QComboBox, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
+    QAbstractItemView, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
     QListWidget, QListWidgetItem, QMessageBox, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget,
 )
 
 from src import features
 from src.characters.store import CharacterStore, default_store, scene_store
-from src.characters.voices import VOICES, preview_voice, voice_label
+from src.characters.voices import voice_label
 from src.gen.refmatch import IMAGE_EXTS
 from src.i18n import tr
+from src.ui.kit import header_row, intro_label, page_layout, set_icon
 
 log = logging.getLogger(__name__)
 
 THUMB = 96
-PREVIEW_TEXT = "Hello! This is how this voice sounds in Labs Studio."
 ROLE_ID = Qt.ItemDataRole.UserRole
 
 
@@ -40,7 +40,6 @@ def _thumb(path: Path, size: int = THUMB) -> QIcon:
 
 
 class _PreviewSignals(QObject):
-    done = Signal(str, str)  # (wav path, error)
     flow_done = Signal(str, str)  # (entry id, error) after a Flow setup
 
 
@@ -103,28 +102,22 @@ class CharactersPage(QWidget):
         prefix = "scene" if kind == "scene" else "char"
         self._k = lambda key: f"{prefix}_{key}"  # the kind's own string for "new", "empty"...
         flow_only = features.flow_only()
-        self._key_source = key_source
-        self._transport = transport
         self._current: str = ""
-        self._player = None
         self._signals = _PreviewSignals(self)
-        self._signals.done.connect(self._preview_done)
         self._signals.flow_done.connect(self._flow_done)
 
-        heading = QLabel(tr("nav_scenes" if kind == "scene" else "nav_characters"))
-        heading.setStyleSheet("font-size: 18px; font-weight: 600;")
-        intro = QLabel(tr("scene_intro" if kind == "scene" else "char_intro_flow" if flow_only else "char_intro"))
-        intro.setWordWrap(True)
-        intro.setObjectName("DemoBanner")
+        intro = intro_label(tr("scene_intro" if kind == "scene" else "char_intro_flow" if flow_only else "char_intro"))
 
         # Left: list + new/delete.
         self.list = QListWidget()
         self.list.setIconSize(QSize(40, 40))
-        self.list.setFixedWidth(260)
+        self.list.setFixedWidth(240)
         self.list.currentItemChanged.connect(lambda cur, _prev: self._select(cur.data(ROLE_ID) if cur else ""))
         self.btn_new = QPushButton(tr(self._k("new")))
+        set_icon(self.btn_new, "plus")
         self.btn_new.clicked.connect(lambda: self.new_character())
         self.btn_delete = QPushButton(tr("char_delete"))
+        set_icon(self.btn_delete, "trash")
         self.btn_delete.clicked.connect(lambda: self.delete_current())
         left = QVBoxLayout()
         left.addWidget(self.list, 1)
@@ -135,16 +128,6 @@ class CharactersPage(QWidget):
 
         # Right: editor.
         self.name_edit = QLineEdit()
-        self.voice_combo = QComboBox()
-        self.voice_combo.addItem(tr("char_voice_none"), "")
-        for name, _style in VOICES:
-            self.voice_combo.addItem(voice_label(name), name)
-        self.btn_preview = QPushButton(tr("char_preview"))
-        self.btn_preview.setToolTip(tr("char_preview_tip"))
-        self.btn_preview.clicked.connect(lambda: self.preview())
-        voice_row = QHBoxLayout()
-        voice_row.addWidget(self.voice_combo, 1)
-        voice_row.addWidget(self.btn_preview)
         self.notes_edit = QPlainTextEdit()
         self.notes_edit.setPlaceholderText(tr(
             "scene_notes_hint" if kind == "scene" else "char_notes_flow_hint" if flow_only else "char_notes_hint"))
@@ -152,56 +135,58 @@ class CharactersPage(QWidget):
         self.refs = RefList()
         self.refs.files_dropped.connect(self.add_images)
         self.btn_add_refs = QPushButton(tr("char_add_refs"))
+        set_icon(self.btn_add_refs, "plus")
         self.btn_add_refs.clicked.connect(lambda: self.add_images_dialog())
         self.btn_remove_refs = QPushButton(tr("char_remove_refs"))
+        set_icon(self.btn_remove_refs, "x")
         self.btn_remove_refs.clicked.connect(lambda: self.remove_selected_refs())
         self.btn_save = QPushButton(tr("char_save"))
         self.btn_save.setObjectName("PrimaryButton")
         self.btn_save.clicked.connect(lambda: self.save_current())
         self.status = QLabel("")
+        self.status.setObjectName("Hint")
         self.status.setWordWrap(True)
         self.flow_label = QLabel("")
         self.flow_label.setWordWrap(True)
         self.btn_flow = QPushButton(tr("char_flow_sync"))
         self.btn_flow.setToolTip(tr("char_flow_sync_tip"))
         self.btn_flow.clicked.connect(lambda: self.setup_in_flow())
-        flow_row = QHBoxLayout()
-        flow_row.addWidget(self.flow_label, 1)
-        flow_row.addWidget(self.btn_flow)
+        flow_row = QVBoxLayout()  # the label can run long: it gets its own line
+        flow_row.addWidget(self.flow_label)
+        flow_row.addWidget(self.btn_flow, 0, Qt.AlignmentFlag.AlignLeft)
 
         form = QFormLayout()
         form.addRow(tr("char_name"), self.name_edit)
-        # Voices need a Gemini key (TTS); places have none.
-        self.voice_row_shown = kind != "scene" and features.shown("characters:voice")
-        if self.voice_row_shown:
-            form.addRow(tr("char_voice"), voice_row)
-        else:
-            for w in (self.voice_combo, self.btn_preview):
-                w.setVisible(False)
         form.addRow(tr("scene_notes" if kind == "scene" else "char_notes"), self.notes_edit)
         form.addRow(tr("char_flow"), flow_row)
         ref_buttons = QHBoxLayout()
         ref_buttons.addWidget(self.btn_add_refs)
         ref_buttons.addWidget(self.btn_remove_refs)
-        ref_buttons.addStretch(1)
+        ref_buttons.addSpacing(8)
+        ref_buttons.addWidget(self.status, 1)
         ref_buttons.addWidget(self.btn_save)
         right = QVBoxLayout()
+        right.setContentsMargins(0, 0, 0, 0)
         right.addLayout(form)
-        right.addWidget(QLabel(tr("scene_refs" if kind == "scene" else "char_refs_flow" if flow_only else "char_refs")))
+        refs_title = QLabel(tr("scene_refs" if kind == "scene" else "char_refs_flow" if flow_only else "char_refs"))
+        refs_title.setObjectName("FieldHeading")
+        refs_title.setWordWrap(True)
+        right.addWidget(refs_title)
         right.addWidget(self.refs, 1)
         right.addLayout(ref_buttons)
-        right.addWidget(self.status)
         self.editor = QWidget()
         self.editor.setLayout(right)
         self.empty = QLabel(tr(self._k("empty")))
         self.empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.empty.setObjectName("Hint")
 
         body = QHBoxLayout()
         body.addLayout(left)
         body.addWidget(self.editor, 1)
         body.addWidget(self.empty, 1)
-        outer = QVBoxLayout(self)
-        outer.addWidget(heading)
+        body.setSpacing(16)
+        outer = page_layout(self)
+        outer.addLayout(header_row(tr("nav_scenes" if kind == "scene" else "nav_characters")))
         outer.addWidget(intro)
         outer.addLayout(body, 1)
 
@@ -237,8 +222,6 @@ class CharactersPage(QWidget):
         if not char:
             return
         self.name_edit.setText(char.name)
-        idx = self.voice_combo.findData(char.voice)
-        self.voice_combo.setCurrentIndex(max(idx, 0))
         self.notes_edit.setPlainText(char.notes)
         self._fill_refs()
         self._fill_flow()
@@ -296,8 +279,7 @@ class CharactersPage(QWidget):
         if other and other.id != self._current:
             self.status.setText(tr(self._k("name_taken"), name=name))
             return
-        self.store.update(self._current, name=name, notes=self.notes_edit.toPlainText(),
-                          voice=self.voice_combo.currentData() or "")
+        self.store.update(self._current, name=name, notes=self.notes_edit.toPlainText())
         self.reload(self._current)
         self.status.setText(tr("char_saved"))
         log.info(tr(self._k("saved_log"), name=name))
@@ -365,51 +347,3 @@ class CharactersPage(QWidget):
             log.info(tr("char_flow_done", name=char.name))
         if entry_id == self._current:
             self._fill_flow()
-
-    # ---- voice preview -------------------------------------------------
-    def _preview_path(self, voice: str) -> Path:
-        return self.store.root / "_previews" / f"{voice}.wav"
-
-    def preview(self) -> None:
-        voice = self.voice_combo.currentData() or ""
-        if not voice:
-            self.status.setText(tr("char_pick_voice"))
-            return
-        cached = self._preview_path(voice)
-        if cached.is_file():
-            self._play(cached)
-            return
-        self.btn_preview.setEnabled(False)
-        self.status.setText(tr("char_preview_running", voice=voice))
-
-        def work() -> None:
-            try:
-                wav = preview_voice(voice, PREVIEW_TEXT, self._key_source, self._transport)
-                cached.parent.mkdir(parents=True, exist_ok=True)
-                cached.write_bytes(wav)
-                self._signals.done.emit(str(cached), "")
-            except Exception as exc:  # noqa: BLE001 - shown to the user
-                self._signals.done.emit("", str(exc))
-
-        threading.Thread(target=work, name="voice-preview", daemon=True).start()
-
-    def _preview_done(self, path: str, error: str) -> None:
-        self.btn_preview.setEnabled(True)
-        if error:
-            self.status.setText(error)
-            log.error(tr("char_preview_failed", error=error))
-            return
-        self.status.setText("")
-        self._play(Path(path))
-
-    def _play(self, path: Path) -> None:
-        try:
-            from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
-
-            if self._player is None:
-                self._player = QMediaPlayer(self)
-                self._player.setAudioOutput(QAudioOutput(self._player))
-            self._player.setSource(QUrl.fromLocalFile(str(path)))
-            self._player.play()
-        except ImportError:
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))

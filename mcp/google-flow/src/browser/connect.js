@@ -6,6 +6,7 @@ import { logger } from '../utils/logger.js';
 import { get } from '../utils/config.js';
 import { FlowError, ErrorCodes } from '../utils/errors.js';
 import { takeScreenshot } from '../utils/screenshots.js';
+import { isFlowHost } from './host.js';
 
 let browser = null;
 let context = null;
@@ -50,14 +51,14 @@ async function launchNewBrowser(cdpPort, options = {}) {
 
 /**
  * Launch Chrome DIRECTLY (not via Playwright) to avoid automation detection
- * (navigator.webdriver=false). Creates temp user-data-dir with Profile 3 cookies,
- * launches Chrome via shell, then connects Playwright via CDP.
+ * (navigator.webdriver=false), on the dedicated persistent profile, then connects
+ * Playwright via CDP.
  */
 export async function launchChromeDirect(options = {}) {
   const chromePath = options.chromePath || get('chromePath', 'C:/Program Files/Google/Chrome/Application/chrome.exe');
   const cdpPort = options.cdpPort || get('cdpPort', 9333);
   const headless = options.headless ?? get('headless', false);
-  const profileDir = options.profileDir || get('chromeProfileDir', path.resolve(import.meta.dirname, '../../chrome-profile'));
+  const profileDir = options.profileDir || get('chromeProfileDir', 'D:/glabs_web/chrome-profile');
 
   if (isConnected && page) {
     logger.info('Already connected, reusing browser');
@@ -108,6 +109,7 @@ export async function launchChromeDirect(options = {}) {
 export async function closeBrowser() {
   if (browser) {
     try {
+      // Attached over CDP, so this only disconnects: Chrome and its tabs stay (issues.test.js).
       await browser.close();
     } catch (err) {
       logger.warn('Error closing browser', { error: err.message });
@@ -158,6 +160,5 @@ export function setContext(ctx) {
 // Prefer a tab already on Flow, so other tabs in the same Chrome are left alone.
 export function pickFlowPage(ctx) {
   const pages = ctx ? ctx.pages() : [];
-  const onFlow = (p) => p.url().startsWith('https://flow.google.com') || p.url().startsWith('https://labs.google');
-  return pages.find(onFlow) || pages[0] || null;
+  return pages.find((p) => isFlowHost(p.url())) || pages[0] || null;
 }

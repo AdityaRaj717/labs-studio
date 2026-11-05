@@ -1,0 +1,1 @@
+We open on Mara, a young beekeeper in a white veil, tending hives on a hillside orchard at sunset. Then she carries a jar of honey down to the village market, where she sets it on a wooden stall. Warm, photoreal, 16:9.

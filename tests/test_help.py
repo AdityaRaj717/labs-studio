@@ -41,7 +41,7 @@ def test_every_topic_file_is_in_the_readme(topics):
 def test_required_topics_exist(topics):
     ids = {t.id for t in topics}
     for tid in ("getting-started", "google-flow-sign-in", "flow-image", "projects", "characters-and-scenes",
-                "api-generators", "video-tools", "video-editor", "workflow", "webhook-api", "mcp-agents",
+                "webhook-api", "mcp-agents",
                 "troubleshooting", "terms-and-risks"):
         assert tid in ids, tid
 
@@ -161,7 +161,7 @@ def test_page_topics_exist(topics):
     ids = {t.id for t in topics}
     for key, tid in PAGE_TOPICS.items():
         assert tid in ids, (key, tid)
-        assert key in NAV_KEYS or key == "demo", key
+        assert key in NAV_KEYS, key
 
 
 def test_load_topics_falls_back_to_english(tmp_path):
@@ -250,9 +250,24 @@ def test_help_buttons_open_their_topic(qapp, tmp_path, monkeypatch):
             btn.click()
             assert window.current_key == "help"
             assert window.page("help").current.id == PAGE_TOPICS[key]
-        assert not hasattr(window.page("meta_vibes"), "help_button")  # placeholder pages have none
     finally:
         for p in window.pages.values():
             if callable(getattr(p, "shutdown", None)):
                 p.shutdown()
         window.close()
+
+
+def test_help_links_are_underlined(qapp):
+    from src.ui.help.page import HelpPage
+
+    page = HelpPage("en")
+    block, anchors = page.view.document().begin(), []
+    while block.isValid():
+        it = block.begin()
+        while not it.atEnd():
+            fmt = it.fragment().charFormat()
+            if fmt.isAnchor() and fmt.anchorHref():
+                anchors.append(fmt.fontUnderline())
+            it += 1
+        block = block.next()
+    assert anchors and all(anchors)

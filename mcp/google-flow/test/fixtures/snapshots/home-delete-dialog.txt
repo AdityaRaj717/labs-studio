@@ -1,0 +1,5 @@
+- dialog "Are you sure you want to delete this project?":
+  - heading "Are you sure you want to delete this project?" [level=2]
+  - paragraph: All your clips, ingredients, and prompts will be permanently deleted.
+  - button "Cancel"
+  - button "Delete project"
